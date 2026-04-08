@@ -1,0 +1,20 @@
+
+cargo-features = ["profile-rustflags", "trim-paths"]
+
+[package]
+name = "sample-manager"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tao = { version = "0.35.0" }
+wry = "0.55.0"
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+opt-level = "z"
+panic = "abort"
+strip = true
+trim-paths = "all"
+rustflags = ["-Cdebuginfo=0", "-Zthreads=8"]
