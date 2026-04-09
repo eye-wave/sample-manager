@@ -3,6 +3,8 @@ use std::{rc::Rc, sync::Arc};
 use tao::window::Window;
 use wry::{WebView, WebViewBuilder};
 
+use crate::http::request_handler;
+
 use super::event::{EventRunner, EventSystem};
 
 pub struct App {
@@ -20,13 +22,14 @@ impl App {
             .with_title("My app")
             .with_inner_size(tao::dpi::LogicalSize::new(800.0, 600.0))
             .build(event_runner.inner())
-            .expect("Failed to build window");
+            .unwrap();
+
+        const PROTOCOL: &str = "sampols";
 
         let webview = WebViewBuilder::new()
-            .with_html("<h1>Hello</h1>")
-            .with_ipc_handler(move |req| {
-                event_handle.receive(req).ok();
-            })
+            .with_custom_protocol(PROTOCOL.into(), request_handler)
+            .with_ipc_handler(move |req| event_handle.receive(req))
+            .with_url(PROTOCOL.to_string() + "://_/app.html")
             .with_devtools(cfg!(debug_assertions));
 
         let _webview = finish_webview(&window, webview);

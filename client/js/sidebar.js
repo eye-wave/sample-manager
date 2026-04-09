@@ -1,0 +1,36 @@
+(async () => {
+  const sidebar = document.querySelector(".sidebar-scroll");
+  if (!sidebar) return;
+
+  const response = (await invoke("search_path", "/home/eyewave/Music")).split(
+    "\n",
+  );
+
+  const SIDEBAR_FOLDER = (isFolder, name, count) => `<div class="tree-section">
+    <div class="tree-label">
+      ${isFolder ? '<span class="tree-arrow">▶</span>' : ""}
+      <span class="tree-icon">${isFolder ? "📂" : "🎵"}</span>
+      <span class="tree-name">${name}</span>
+      ${isFolder ? `<span class="tree-count">${count}</span>` : ""}
+    </div>
+  </div>`;
+
+  function createItem(parent, line) {
+    const isDir = line.charAt(0) === "1";
+    const [name, count] = line.slice(1).split(":");
+
+    parent.insertAdjacentHTML(
+      "beforeend",
+      SIDEBAR_FOLDER(isDir, name, count ?? "?"),
+    );
+
+    if (isDir) {
+      parent.insertAdjacentHTML(
+        "beforeend",
+        '<div class="tree-children"></div>',
+      );
+    }
+  }
+
+  response.forEach((i) => createItem(sidebar, i));
+})();

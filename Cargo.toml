@@ -7,6 +7,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+rust-embed = "8.11.0"
 tao = { version = "0.35.0" }
 wry = "0.55.0"
 
