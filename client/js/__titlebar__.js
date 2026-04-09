@@ -1,6 +1,5 @@
 titlebar_handle.addEventListener("mousedown", () => {
-  console.log("Poggers");
-  window.ipc.postMessage("drag");
+  invoke("drag");
 });
 
 function minimize() {

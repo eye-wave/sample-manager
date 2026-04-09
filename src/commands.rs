@@ -22,7 +22,7 @@ pub(super) trait IPCCommand: Send + Sync {
 
         let _fn_name = parts.next()?;
         let id_str = parts.next()?;
-        let payload = parts.next()?;
+        let payload = parts.next().unwrap_or("");
 
         let id = id_str.parse::<u32>().ok()?;
         Some((id, payload))

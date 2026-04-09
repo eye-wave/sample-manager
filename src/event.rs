@@ -33,10 +33,10 @@ impl EventSystem {
                 continue;
             }
 
-            if let Some((call_id, body)) = cmd.strip_name(body) {
-                if let Some(bytes) = cmd.respond(body, &window_handle) {
-                    self.send(call_id, bytes).ok();
-                }
+            if let Some((call_id, body)) = cmd.strip_name(body)
+                && let Some(bytes) = cmd.respond(body, &window_handle)
+            {
+                self.send(call_id, bytes).ok();
             }
         }
     }

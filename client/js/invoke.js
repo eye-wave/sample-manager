@@ -7,7 +7,7 @@
       const callId = nextId++;
       pending.set(callId, { resolve, reject });
 
-      window.ipc.postMessage(`${id}:${callId}:${payload}`);
+      window.ipc.postMessage(`${id}:${callId}:${payload ?? ""}`);
     });
   };
 
