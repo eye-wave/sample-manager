@@ -8,7 +8,6 @@ use crate::http::request_handler;
 use super::event::{EventRunner, EventSystem};
 
 pub struct App {
-    window: Window,
     _webview: WebView,
     runner: EventRunner,
 }
@@ -20,22 +19,25 @@ impl App {
 
         let window = tao::window::WindowBuilder::new()
             .with_title("My app")
+            .with_decorations(false)
             .with_inner_size(tao::dpi::LogicalSize::new(800.0, 600.0))
             .build(event_runner.inner())
             .unwrap();
 
         const PROTOCOL: &str = "sampols";
 
+        let window_handle = Arc::new(window);
+        let window_handle_cloned = window_handle.clone();
+
         let webview = WebViewBuilder::new()
             .with_custom_protocol(PROTOCOL.into(), request_handler)
-            .with_ipc_handler(move |req| event_handle.receive(req))
+            .with_ipc_handler(move |req| event_handle.receive(req, window_handle_cloned.clone()))
             .with_url(PROTOCOL.to_string() + "://_/app.html")
             .with_devtools(cfg!(debug_assertions));
 
-        let _webview = finish_webview(&window, webview);
+        let _webview = finish_webview(window_handle.clone(), webview);
 
         App {
-            window,
             _webview,
             runner: event_runner,
         }
@@ -44,13 +46,12 @@ impl App {
     pub fn run(self) {
         let webview = Rc::new(self._webview);
 
-        self.window.set_visible(true);
         self.runner.run(&webview);
     }
 }
 
 #[cfg(target_os = "linux")]
-fn finish_webview(window: &Window, webview: WebViewBuilder<'_>) -> wry::WebView {
+fn finish_webview(window: Arc<Window>, webview: WebViewBuilder<'_>) -> wry::WebView {
     use tao::platform::unix::WindowExtUnix;
     use wry::WebViewBuilderExtUnix;
 
@@ -59,6 +60,6 @@ fn finish_webview(window: &Window, webview: WebViewBuilder<'_>) -> wry::WebView 
 }
 
 #[cfg(not(target_os = "linux"))]
-fn finish_webview(window: &Window, webview: WebViewBuilder<'_>) -> wry::WebView {
-    webview.build(window).expect("Failed to build WebView")
+fn finish_webview(window: Arc<Window>, webview: WebViewBuilder<'_>) -> wry::WebView {
+    webview.build(&window).expect("Failed to build WebView")
 }

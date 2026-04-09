@@ -2,6 +2,7 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  font-family: inherit;
 }
 html,
 body {
@@ -15,6 +16,32 @@ body {
   font-size: 13px;
   display: flex;
   flex-direction: column;
+}
+#titlebar_handle {
+  flex: 1;
+}
+#titlebar {
+  display: flex;
+  background-color: var(--bg-base);
+}
+.btn-group {
+  display: flex;
+  background: var(--bg-panel);
+  border-radius: 4px;
+  margin: 2px;
+}
+.btn-group button {
+  font-weight: 600;
+  outline: none;
+  border: 0;
+  border-radius: 4px;
+  background: var(--bg-panel);
+  color: var(--accent);
+  width: 16px;
+}
+.btn-group button:hover {
+  background: var(--bg-hover);
+  color: var(--accent-dim);
 }
 .app {
   display: flex;

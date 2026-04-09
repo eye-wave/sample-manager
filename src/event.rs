@@ -1,33 +1,9 @@
-use std::{borrow::Cow, rc::Rc};
+use std::{borrow::Cow, rc::Rc, sync::Arc};
 
-use tao::event_loop::EventLoopBuilder;
+use tao::{event_loop::EventLoopBuilder, window::Window};
 use wry::WebView;
 
-mod fs;
-
-pub(super) trait IPCCommand: Send + Sync {
-    fn name(&self) -> &'static str;
-    fn respond(&self, req: &str) -> Option<Cow<'static, [u8]>>;
-
-    fn is_this(&self, req: &str) -> bool {
-        req.starts_with(self.name())
-    }
-
-    fn strip_name<'a>(&self, req: &'a str) -> (u32, &'a str) {
-        let num: String = req
-            .chars()
-            .skip(self.name().len() + 1)
-            .take_while(|c| c.is_ascii_digit())
-            .collect();
-
-        let call_id: u32 = num.parse().unwrap_or(0);
-        let idx = self.name().len() + num.len() + 2;
-
-        (call_id, &req[idx..])
-    }
-}
-
-static IPC_COMMANDS: &[&dyn IPCCommand] = &[&fs::SearchPath];
+use crate::commands::commands_iter;
 
 #[derive(Clone)]
 pub struct EventSystem {
@@ -49,18 +25,18 @@ impl EventSystem {
         (EventRunner { event_loop }, Self { event_loop: proxy })
     }
 
-    pub fn receive(&self, req: wry::http::Request<String>) {
+    pub fn receive(&self, req: wry::http::Request<String>, window_handle: Arc<Window>) {
         let body = req.body();
 
-        for cmd in IPC_COMMANDS {
+        for cmd in commands_iter() {
             if !cmd.is_this(body) {
                 continue;
             }
 
-            let (call_id, body) = cmd.strip_name(body);
-
-            if let Some(bytes) = cmd.respond(body) {
-                self.send(call_id, bytes).ok();
+            if let Some((call_id, body)) = cmd.strip_name(body) {
+                if let Some(bytes) = cmd.respond(body, &window_handle) {
+                    self.send(call_id, bytes).ok();
+                }
             }
         }
     }

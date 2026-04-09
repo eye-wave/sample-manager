@@ -6,6 +6,7 @@
 
     <link rel="stylesheet" href="/css/__app__.css" />
     <script src="/js/__app__.js" defer></script>
+    <script src="/js/__titlebar__.js" defer></script>
 
     <link rel="stylesheet" href="/css/theme.css" />
     <link rel="stylesheet" href="/css/styles.css" />
@@ -19,6 +20,15 @@
     <script src="/js/browse.js" defer></script>
   </head>
   <body>
+    <div id="titlebar">
+      <div id="titlebar_handle"></div>
+      <div class="btn-group">
+        <button onclick="minimize()">m</button>
+        <button onclick="maximize()">M</button>
+        <button onclick="closeWindow()">X</button>
+      </div>
+    </div>
+
     <div class="app">
       <!-- Top bar -->
       <div class="topbar">
