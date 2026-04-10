@@ -2,7 +2,9 @@
   const sidebar = document.querySelector(".sidebar-scroll");
   if (!sidebar) return;
 
-  const response = (await invoke("search_path", "B:\\Sampols")).split("\n");
+  const response = (await invoke("search_path", "/home/eyewave/Music")).split(
+    "\n",
+  );
 
   const SIDEBAR_FOLDER = (isFolder, name, count) => `<div class="tree-section">
     <div class="tree-label">
@@ -31,4 +33,10 @@
   }
 
   response.forEach((i) => createItem(sidebar, i));
+
+  const btn = document.querySelector(".add-folder");
+  btn.onclick = async () => {
+    const folder = await invoke("open_folder");
+    console.log(folder);
+  };
 })();

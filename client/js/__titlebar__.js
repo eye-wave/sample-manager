@@ -1,13 +1,13 @@
 titlebar_handle.addEventListener("mousedown", () => {
-  invoke("drag");
+  invoke("drag_window");
 });
 
 function minimize() {
-  invoke("minimize");
+  invoke("minimize_window");
 }
 function maximize() {
-  invoke("maximize");
+  invoke("maximize_window");
 }
 function closeWindow() {
-  invoke("closeWindow");
+  invoke("close_window");
 }

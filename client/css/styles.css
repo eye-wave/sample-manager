@@ -507,3 +507,19 @@ canvas#waveCanvas {
   height: 12px;
   background: var(--border);
 }
+
+.add-folder {
+  width: 100%;
+  background: var(--bg-surface);
+  border: 1px dashed var(--border);
+  color: var(--text-muted);
+  border-radius: var(--radius);
+  padding: 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.add-folder:hover {
+  border: 1px dashed var(--accent-dim);
+  color: var(--accent-dim);
+}

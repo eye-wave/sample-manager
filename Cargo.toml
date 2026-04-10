@@ -7,8 +7,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+paste = "1.0.15"
 rust-embed = "8.11.0"
 tao = { version = "0.35.0" }
+tinyfiledialogs = "3.9.1"
 wry = "0.55.0"
 
 [profile.release]

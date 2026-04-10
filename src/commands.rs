@@ -14,7 +14,9 @@ pub(super) trait IPCCommand: Send + Sync {
     ) -> Option<Cow<'static, [u8]>>;
 
     fn is_this(&self, req: &str) -> bool {
-        req.starts_with(self.name())
+        req.split_once(':')
+            .map(|(cmd, _)| cmd == self.name())
+            .unwrap_or(req == self.name())
     }
 
     fn strip_name<'a>(&self, req: &'a str) -> Option<(u32, &'a str)> {
@@ -39,24 +41,29 @@ pub fn commands_iter<'a>() -> impl Iterator<Item = &'a dyn IPCCommand> {
 macro_rules! ipc_commands {
     (
         $table:ident = [
-            $( $struct:ident => $name:literal => $fn:path ),* $(,)?
+            $( $fn:ident ),* $(,)?
         ]
     ) => {
-        pub(super) static $table: &[&dyn IPCCommand] = &[ $( &$struct ),* ];
+        paste::paste! {
+            pub(super) static $table: &[&dyn $crate::commands::IPCCommand] = &[ $( &[<$fn:camel>] ),* ];
 
-        $(
-            pub struct $struct;
-            impl IPCCommand for $struct {
-                fn name(&self) -> &'static str { $name }
+            $(
+                pub struct [<$fn:camel>];
 
-                fn respond(
-                    &self,
-                    req: &str,
-                    window_handle: &Arc<tao::window::Window>,
-                ) -> Option<std::borrow::Cow<'static, [u8]>> {
-                    $fn(req, window_handle)
+                impl $crate::commands::IPCCommand for [<$fn:camel>] {
+                    fn name(&self) -> &'static str {
+                        stringify!($fn)
+                    }
+
+                    fn respond(
+                        &self,
+                        req: &str,
+                        window_handle: &Arc<tao::window::Window>,
+                    ) -> Option<std::borrow::Cow<'static, [u8]>> {
+                        $fn(req, window_handle)
+                    }
                 }
-            }
-        )*
+            )*
+        }
     };
 }

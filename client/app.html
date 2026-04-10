@@ -1,8 +1,6 @@
-<!doctype html>
-<html lang="en">
+<html>
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <link rel="stylesheet" href="/css/__app__.css" />
 
@@ -24,9 +22,57 @@
     <div id="titlebar">
       <div id="titlebar_handle"></div>
       <div class="btn-group">
-        <button onclick="minimize()">m</button>
-        <button onclick="maximize()">M</button>
-        <button onclick="closeWindow()">X</button>
+        <button onclick="minimize()">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M3 11H13"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
+        <button onclick="maximize()">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <rect
+              x="3"
+              y="3"
+              width="10"
+              height="10"
+              rx="1"
+              stroke="currentColor"
+              stroke-width="2"
+            />
+          </svg>
+        </button>
+        <button onclick="closeWindow()">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M4 4L12 12M12 4L4 12"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -98,20 +144,7 @@
           <div class="sidebar-header">File Tree</div>
           <div class="sidebar-scroll"></div>
           <div style="padding: 8px; border-top: 1px solid var(--border)">
-            <button
-              style="
-                width: 100%;
-                background: var(--bg-surface);
-                border: 1px dashed var(--border);
-                color: var(--text-muted);
-                border-radius: var(--radius);
-                padding: 6px;
-                font-size: 11px;
-                cursor: pointer;
-              "
-            >
-              + Add Folder
-            </button>
+            <button class="add-folder">+ Add Folder</button>
           </div>
         </div>
 

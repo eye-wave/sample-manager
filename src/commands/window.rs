@@ -1,4 +1,3 @@
-use crate::commands::IPCCommand;
 use crate::ipc_commands;
 use std::sync::Arc;
 
@@ -35,9 +34,9 @@ fn drag_window(
 
 ipc_commands! {
     IPC_WINDOW = [
-        CloseWindow    => "closeWindow" => close_window,
-        MinimizeWindow => "minimize"    => minimize_window,
-        MaximizeWindow => "maximize"    => maximize_window,
-        DragWindow     => "drag"        => drag_window,
+        close_window,
+        minimize_window,
+        maximize_window,
+        drag_window,
     ]
 }

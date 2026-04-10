@@ -1,7 +1,12 @@
-use crate::commands::IPCCommand;
 use crate::ipc_commands;
 use std::borrow::Cow;
 use std::sync::Arc;
+
+fn open_folder(_r: &str, _w: &Arc<tao::window::Window>) -> Option<std::borrow::Cow<'static, [u8]>> {
+    let folder = tinyfiledialogs::select_folder_dialog("Select folder", "");
+
+    folder.map(|f| Cow::Owned(f.into_bytes()))
+}
 
 fn search_path(
     path: &str,
@@ -29,6 +34,7 @@ fn search_path(
 
 ipc_commands! {
     IPC_FS = [
-        SearchPath => "search_path" => search_path,
+        search_path,
+        open_folder,
     ]
 }
