@@ -12,7 +12,6 @@
   };
 
   function res(callId, response) {
-    console.log(callId, response);
     const pendingCall = pending.get(callId);
     if (pendingCall) {
       pendingCall.resolve(response);

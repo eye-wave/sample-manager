@@ -57,7 +57,7 @@ fn add_sample_folder(
         cfg.tracked_dirs.insert(path.into());
     });
 
-    None
+    Some(Cow::Borrowed(b"Ok"))
 }
 
 fn get_sample_folders(

@@ -6,6 +6,10 @@
     "\n",
   );
 
+  const folders = await invoke("get_sample_folders").then((res) =>
+    res.split("\n").filter(Boolean),
+  );
+
   const SIDEBAR_FOLDER = (isFolder, name, count) => `<div class="tree-section">
     <div class="tree-label">
       ${isFolder ? '<span class="tree-arrow">▶</span>' : ""}
@@ -37,6 +41,8 @@
   const btn = document.querySelector(".add-folder");
   btn.onclick = async () => {
     const folder = await invoke("open_folder");
-    console.log(folder);
+    const isOk = await invoke("add_sample_folder", folder);
+
+    console.log(isOk);
   };
 })();
