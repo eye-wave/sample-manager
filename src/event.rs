@@ -1,13 +1,15 @@
-use std::{borrow::Cow, rc::Rc, sync::Arc};
+use std::borrow::Cow;
+use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 
 use tao::{event_loop::EventLoopBuilder, window::Window};
 use wry::WebView;
 
-use crate::commands::commands_iter;
+use crate::{commands::commands_iter, state::AppState};
 
-#[derive(Clone)]
 pub struct EventSystem {
     event_loop: EventLoopProxy,
+    app_state: Arc<RwLock<AppState>>,
 }
 
 pub type EventLoop = tao::event_loop::EventLoop<LoopEvent>;
@@ -22,7 +24,13 @@ impl EventSystem {
         let event_loop = EventLoopBuilder::<LoopEvent>::with_user_event().build();
         let proxy = event_loop.create_proxy();
 
-        (EventRunner { event_loop }, Self { event_loop: proxy })
+        (
+            EventRunner { event_loop },
+            Self {
+                event_loop: proxy,
+                app_state: Arc::new(RwLock::new(AppState::default())),
+            },
+        )
     }
 
     pub fn receive(&self, req: wry::http::Request<String>, window_handle: Arc<Window>) {
@@ -34,7 +42,7 @@ impl EventSystem {
             }
 
             if let Some((call_id, body)) = cmd.strip_name(body)
-                && let Some(bytes) = cmd.respond(body, &window_handle)
+                && let Some(bytes) = cmd.respond(body, &window_handle, self.app_state.clone())
             {
                 self.send(call_id, bytes).ok();
             }

@@ -7,10 +7,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+dirs = "6.0.0"
 paste = "1.0.15"
 rust-embed = "8.11.0"
+serde = { version = "1.0.228", features = ["derive"] }
 tao = { version = "0.35.0" }
 tinyfiledialogs = "3.9.1"
+toml = "1.1.2"
 wry = "0.55.0"
 
 [profile.release]
@@ -21,3 +24,6 @@ panic = "abort"
 strip = true
 trim-paths = "all"
 rustflags = ["-Cdebuginfo=0", "-Zthreads=8"]
+
+[build-dependencies]
+grass = "0.13.4"

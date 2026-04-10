@@ -1,6 +1,7 @@
-use std::{borrow::Cow, sync::Arc};
+use std::borrow::Cow;
+use std::sync::{Arc, RwLock};
 
-use crate::commands::fs::IPC_FS;
+use crate::{commands::fs::IPC_FS, state::AppState};
 
 mod fs;
 mod window;
@@ -11,6 +12,7 @@ pub(super) trait IPCCommand: Send + Sync {
         &self,
         req: &str,
         window_handle: &Arc<tao::window::Window>,
+        state: Arc<RwLock<AppState>>,
     ) -> Option<Cow<'static, [u8]>>;
 
     fn is_this(&self, req: &str) -> bool {
@@ -59,8 +61,9 @@ macro_rules! ipc_commands {
                         &self,
                         req: &str,
                         window_handle: &Arc<tao::window::Window>,
+                        state: Arc<std::sync::RwLock<$crate::state::AppState>>,
                     ) -> Option<std::borrow::Cow<'static, [u8]>> {
-                        $fn(req, window_handle)
+                        $fn(req, window_handle, state)
                     }
                 }
             )*
