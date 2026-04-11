@@ -1,6 +1,6 @@
-use std::borrow::Cow;
 use std::sync::{Arc, RwLock};
 
+use crate::commands::IPCResponse;
 use crate::ipc_commands;
 use crate::state::AppState;
 
@@ -9,10 +9,9 @@ fn open_folder(
     _w: &Arc<tao::window::Window>,
     _s: Arc<RwLock<AppState>>,
 ) -> Option<std::borrow::Cow<'static, [u8]>> {
-    println!("Doopa");
     let folder = tinyfiledialogs::select_folder_dialog("Select folder", "");
 
-    folder.map(|f| Cow::Owned(f.into_bytes()))
+    folder.finish()
 }
 
 fn search_path(
@@ -36,7 +35,7 @@ fn search_path(
     if files.is_empty() {
         None
     } else {
-        Some(Cow::Owned(files.join("\n").into_bytes()))
+        files.join("\n").finish()
     }
 }
 
@@ -58,7 +57,7 @@ fn add_sample_folder(
         cfg.tracked_dirs.insert(path.into());
     });
 
-    Some(Cow::Borrowed(b"Ok"))
+    b"Ok".finish()
 }
 
 fn get_sample_folders(
@@ -69,13 +68,11 @@ fn get_sample_folders(
     let guard = state.read().ok()?;
     let cfg = guard.get_config();
 
-    let content = cfg
-        .tracked_dirs
+    cfg.tracked_dirs
         .iter()
         .map(|d| d.to_string_lossy().to_string() + "\n")
-        .collect::<String>();
-
-    Some(Cow::Owned(content.into_bytes()))
+        .collect::<String>()
+        .finish()
 }
 
 ipc_commands! {

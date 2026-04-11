@@ -1,12 +1,11 @@
 use std::borrow::Cow;
 use std::sync::{Arc, RwLock};
 
-use crate::{commands::fs::IPC_FS, state::AppState};
+use crate::state::AppState;
 
-mod fs;
-mod window;
+mod bytes;
 
-pub(super) trait IPCCommand: Send + Sync {
+pub trait IPCCommand: Send + Sync {
     fn name(&self) -> &'static str;
     fn respond(
         &self,
@@ -14,59 +13,22 @@ pub(super) trait IPCCommand: Send + Sync {
         window_handle: &Arc<tao::window::Window>,
         state: Arc<RwLock<AppState>>,
     ) -> Option<Cow<'static, [u8]>>;
+}
 
-    fn is_this(&self, req: &str) -> bool {
-        req.split_once(':')
-            .map(|(cmd, _)| cmd == self.name())
-            .unwrap_or(req == self.name())
-    }
+pub type IPCRequestBody<'a> = (&'a str, u32, &'a str);
 
-    fn strip_name<'a>(&self, req: &'a str) -> Option<(u32, &'a str)> {
-        let mut parts = req.splitn(3, ':');
+pub trait IPCResponse {
+    fn finish(self) -> Option<Cow<'static, [u8]>>;
+}
 
-        let _fn_name = parts.next()?;
-        let id_str = parts.next()?;
-        let payload = parts.next().unwrap_or("");
-
-        let id = id_str.parse::<u32>().ok()?;
-        Some((id, payload))
+impl<T: bytes::IntoBytes> IPCResponse for T {
+    fn finish(self) -> Option<Cow<'static, [u8]>> {
+        Some(self.into_bytes())
     }
 }
 
-pub fn commands_iter<'a>() -> impl Iterator<Item = &'a dyn IPCCommand> {
-    use crate::commands::window::IPC_WINDOW;
-
-    IPC_WINDOW.iter().chain(IPC_FS.iter()).copied()
-}
-
-#[macro_export]
-macro_rules! ipc_commands {
-    (
-        $table:ident = [
-            $( $fn:ident ),* $(,)?
-        ]
-    ) => {
-        paste::paste! {
-            pub(super) static $table: &[&dyn $crate::commands::IPCCommand] = &[ $( &[<$fn:camel>] ),* ];
-
-            $(
-                pub struct [<$fn:camel>];
-
-                impl $crate::commands::IPCCommand for [<$fn:camel>] {
-                    fn name(&self) -> &'static str {
-                        stringify!($fn)
-                    }
-
-                    fn respond(
-                        &self,
-                        req: &str,
-                        window_handle: &Arc<tao::window::Window>,
-                        state: Arc<std::sync::RwLock<$crate::state::AppState>>,
-                    ) -> Option<std::borrow::Cow<'static, [u8]>> {
-                        $fn(req, window_handle, state)
-                    }
-                }
-            )*
-        }
-    };
+impl<T: bytes::IntoBytes> IPCResponse for Option<T> {
+    fn finish(self) -> Option<Cow<'static, [u8]>> {
+        self.map(|s| s.into_bytes())
+    }
 }

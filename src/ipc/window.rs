@@ -42,5 +42,6 @@ ipc_commands! {
         minimize_window,
         maximize_window,
         drag_window,
+
     ]
 }

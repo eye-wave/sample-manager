@@ -40,10 +40,13 @@
   const btn = document.querySelector(".add-folder");
   console.log(btn);
   btn.addEventListener("click", async () => {
-    console.log("Doopa");
     const folder = await invoke("open_folder");
+    console.log("got folder:", folder);
+
     const isOk = await invoke("add_sample_folder", folder);
 
-    console.log(isOk);
+    if (!isOk === "Ok") {
+      console.warn("Something went wrong");
+    }
   });
 })();

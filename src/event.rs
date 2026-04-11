@@ -1,15 +1,19 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 
 use tao::{event_loop::EventLoopBuilder, window::Window};
 use wry::WebView;
 
-use crate::{commands::commands_iter, state::AppState};
+use crate::commands::IPCCommand;
+use crate::ipc::{commands_iter, ipc_strip_name};
+use crate::state::AppState;
 
 pub struct EventSystem {
     event_loop: EventLoopProxy,
     app_state: Arc<RwLock<AppState>>,
+    ipc_commands: HashMap<&'static str, &'static dyn IPCCommand>,
 }
 
 pub type EventLoop = tao::event_loop::EventLoop<LoopEvent>;
@@ -29,6 +33,7 @@ impl EventSystem {
             Self {
                 event_loop: proxy,
                 app_state: Arc::new(RwLock::new(AppState::default())),
+                ipc_commands: commands_iter().map(|cmd| (cmd.name(), cmd)).collect(),
             },
         )
     }
@@ -36,17 +41,13 @@ impl EventSystem {
     pub fn receive(&self, req: wry::http::Request<String>, window_handle: Arc<Window>) {
         let body = req.body();
 
-        for cmd in commands_iter() {
-            if !cmd.is_this(body) {
-                continue;
-            }
-
-            if let Some((call_id, body)) = cmd.strip_name(body) {
-                if let Some(bytes) = cmd.respond(body, &window_handle, self.app_state.clone()) {
-                    self.send(call_id, bytes).ok();
-                } else {
-                    self.send_empty(call_id).ok();
-                }
+        if let Some((fn_name, call_id, payload)) = ipc_strip_name(body)
+            && let Some(cmd) = self.ipc_commands.get(fn_name)
+        {
+            if let Some(bytes) = cmd.respond(payload, &window_handle, Arc::clone(&self.app_state)) {
+                self.send(call_id, bytes).ok();
+            } else {
+                self.send_empty(call_id).ok();
             }
         }
     }

@@ -5,6 +5,7 @@ use crate::{state::AppState, window::App};
 mod commands;
 mod event;
 mod http;
+mod ipc;
 mod state;
 mod window;
 

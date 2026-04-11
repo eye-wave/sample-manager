@@ -25,4 +25,11 @@
 
   window.invoke = inv;
   window._r = res;
+
+  const toLog = (args) =>
+    args.reduce((str, n) => str + `${n} `, "").slice(0, -1);
+
+  console.log = (...args) => inv("log", "L" + toLog(args));
+  console.warn = (...args) => inv("log", "W" + toLog(args));
+  console.error = (...args) => inv("log", "E" + toLog(args));
 })();
