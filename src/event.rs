@@ -41,10 +41,12 @@ impl EventSystem {
                 continue;
             }
 
-            if let Some((call_id, body)) = cmd.strip_name(body)
-                && let Some(bytes) = cmd.respond(body, &window_handle, self.app_state.clone())
-            {
-                self.send(call_id, bytes).ok();
+            if let Some((call_id, body)) = cmd.strip_name(body) {
+                if let Some(bytes) = cmd.respond(body, &window_handle, self.app_state.clone()) {
+                    self.send(call_id, bytes).ok();
+                } else {
+                    self.send_empty(call_id).ok();
+                }
             }
         }
     }
@@ -54,6 +56,14 @@ impl EventSystem {
         message: Cow<'static, [u8]>,
     ) -> Result<(), tao::event_loop::EventLoopClosed<LoopEvent>> {
         self.event_loop.send_event(LoopEvent::JS(call_id, message))
+    }
+
+    pub fn send_empty(
+        &self,
+        call_id: u32,
+    ) -> Result<(), tao::event_loop::EventLoopClosed<LoopEvent>> {
+        self.event_loop
+            .send_event(LoopEvent::JS(call_id, Cow::Borrowed(&[])))
     }
 }
 

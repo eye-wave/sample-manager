@@ -9,6 +9,7 @@ fn open_folder(
     _w: &Arc<tao::window::Window>,
     _s: Arc<RwLock<AppState>>,
 ) -> Option<std::borrow::Cow<'static, [u8]>> {
+    println!("Doopa");
     let folder = tinyfiledialogs::select_folder_dialog("Select folder", "");
 
     folder.map(|f| Cow::Owned(f.into_bytes()))

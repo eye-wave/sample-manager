@@ -1,6 +1,5 @@
 (async () => {
   const sidebar = document.querySelector(".sidebar-scroll");
-  if (!sidebar) return;
 
   const response = (await invoke("search_path", "/home/eyewave/Music")).split(
     "\n",
@@ -36,13 +35,15 @@
     }
   }
 
-  response.forEach((i) => createItem(sidebar, i));
+  // response.forEach((i) => createItem(sidebar, i));
 
   const btn = document.querySelector(".add-folder");
-  btn.onclick = async () => {
+  console.log(btn);
+  btn.addEventListener("click", async () => {
+    console.log("Doopa");
     const folder = await invoke("open_folder");
     const isOk = await invoke("add_sample_folder", folder);
 
     console.log(isOk);
-  };
+  });
 })();

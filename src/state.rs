@@ -1,4 +1,4 @@
-use std::{collections::HashSet, path::PathBuf};
+use std::{collections::HashSet, fs, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -29,6 +29,11 @@ impl Default for AppState {
 }
 
 impl AppState {
+    pub fn create_dirs(&self) {
+        fs::create_dir(&self._cache_path).ok();
+        fs::create_dir(&self._config_path).ok();
+    }
+
     pub fn update_config<F: FnMut(&mut AppConfig)>(&mut self, mut cb: F) {
         cb(&mut self.app_config);
 
