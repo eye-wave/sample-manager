@@ -20,7 +20,7 @@ fn log(
     }
     .unwrap_or("");
 
-    println!("[WEB] {ansi}{message}{RESET}");
+    println!("[🌐WEB] {ansi}{message}{RESET}");
 
     None
 }

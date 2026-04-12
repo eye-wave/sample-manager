@@ -14,7 +14,7 @@ fn open_folder(
     folder.finish()
 }
 
-fn search_path(
+fn read_dir(
     path: &str,
     _w: &Arc<tao::window::Window>,
     _s: Arc<RwLock<AppState>>,
@@ -48,7 +48,7 @@ fn add_sample_folder(
     _w: &Arc<tao::window::Window>,
     state: Arc<RwLock<AppState>>,
 ) -> Option<std::borrow::Cow<'static, [u8]>> {
-    if can_read_dir(path) {
+    if !can_read_dir(path) {
         return None;
     }
 
@@ -77,7 +77,7 @@ fn get_sample_folders(
 
 ipc_commands! {
     IPC_FS = [
-        search_path,
+        read_dir,
         open_folder,
         add_sample_folder,
         get_sample_folders

@@ -28,11 +28,14 @@ impl EventSystem {
         let event_loop = EventLoopBuilder::<LoopEvent>::with_user_event().build();
         let proxy = event_loop.create_proxy();
 
+        let mut app_state = AppState::default();
+        app_state.load().ok();
+
         (
             EventRunner { event_loop },
             Self {
                 event_loop: proxy,
-                app_state: Arc::new(RwLock::new(AppState::default())),
+                app_state: Arc::new(RwLock::new(app_state)),
                 ipc_commands: commands_iter().map(|cmd| (cmd.name(), cmd)).collect(),
             },
         )

@@ -29,9 +29,18 @@ impl Default for AppState {
 }
 
 impl AppState {
+    pub fn load(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let conf = fs::read(self.config_file())?;
+        let conf: AppConfig = toml::from_slice(&conf)?;
+
+        self.app_config = conf;
+
+        Ok(())
+    }
+
     pub fn create_dirs(&self) {
-        fs::create_dir(&self._cache_path).ok();
-        fs::create_dir(&self._config_path).ok();
+        fs::create_dir_all(&self._cache_path).ok();
+        fs::create_dir_all(&self._config_path).ok();
     }
 
     pub fn update_config<F: FnMut(&mut AppConfig)>(&mut self, mut cb: F) {

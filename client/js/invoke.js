@@ -26,10 +26,26 @@
   window.invoke = inv;
   window._r = res;
 
+  /// DEV start
+  const toStr = (i) => {
+    const type = typeof i;
+    if (type === "string") return i;
+    if (type === "number") return `${i}`;
+    if (type === "boolean") return i ? "true" : "false";
+    if (type === "object") {
+      const name = i.constructor.name;
+      const json = JSON.stringify(i, null, 2);
+      const jsonHidden = json === "{}" ? "" : json;
+
+      return `\x1b[90m[${name}]\x1b[0m${jsonHidden}`;
+    }
+  };
+
   const toLog = (args) =>
-    args.reduce((str, n) => str + `${n} `, "").slice(0, -1);
+    args.reduce((str, n) => str + toStr(n) + " ", "").slice(0, -1);
 
   console.log = (...args) => inv("log", "L" + toLog(args));
   console.warn = (...args) => inv("log", "W" + toLog(args));
   console.error = (...args) => inv("log", "E" + toLog(args));
+  /// DEV end
 })();
