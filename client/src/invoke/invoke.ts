@@ -7,7 +7,7 @@
       pending.set(callId, { resolve, reject });
 
       // @ts-expect-error
-      window?.ipc?.postMessage(`${id}:${callId}:${payload ?? ""}`);
+      ipc?.postMessage(`${id}:${callId}:${payload ?? ""}`);
     });
   };
 

@@ -2,6 +2,7 @@ use crate::commands::{IPCCommand, IPCRequestBody};
 
 mod fs;
 mod logger;
+mod samples;
 mod window;
 
 pub(super) fn ipc_strip_name<'a>(req: &'a str) -> Option<IPCRequestBody<'a>> {
@@ -18,12 +19,14 @@ pub(super) fn ipc_strip_name<'a>(req: &'a str) -> Option<IPCRequestBody<'a>> {
 pub fn commands_iter<'a>() -> impl Iterator<Item = &'a dyn IPCCommand> {
     use crate::ipc::fs::IPC_FS;
     use crate::ipc::logger::IPC_LOGGER;
+    use crate::ipc::samples::IPC_SAMPLES;
     use crate::ipc::window::IPC_WINDOW;
 
     IPC_WINDOW
         .iter()
         .chain(IPC_FS.iter())
         .chain(IPC_LOGGER.iter())
+        .chain(IPC_SAMPLES.iter())
         .copied()
 }
 
