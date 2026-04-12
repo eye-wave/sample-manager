@@ -9,7 +9,9 @@ export function renderNode(parent: HTMLElement, node: VFSNode): void {
     '<div class="tree-children" style="display:none"></div>',
   );
 
-  const section = parent.lastElementChild!.previousElementSibling!;
+  const section = parent.lastElementChild?.previousElementSibling;
+  if (!section) return;
+
   node.bind(section);
   node.updateCount();
 
@@ -25,13 +27,15 @@ export function renderNode(parent: HTMLElement, node: VFSNode): void {
   if (node.children.length > 0) {
     node.loaded = true;
     for (const child of node.children) {
-      if (typeof child === "string") {
-        node.childrenEl!.insertAdjacentHTML(
-          "beforeend",
-          SIDEBAR_ITEM(false, child.split(/[\\/]/).at(-1) ?? child),
-        );
-      } else {
-        renderNode(node.childrenEl!, child);
+      if (node.childrenEl) {
+        if (typeof child === "string") {
+          node.childrenEl.insertAdjacentHTML(
+            "beforeend",
+            SIDEBAR_ITEM(false, child.split(/[\\/]/).at(-1) ?? child),
+          );
+        } else {
+          renderNode(node.childrenEl, child);
+        }
       }
     }
   }

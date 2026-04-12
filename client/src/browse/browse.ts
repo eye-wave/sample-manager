@@ -21,7 +21,7 @@ const LIST_ITEM = ({ name, bpm, liked, tags }: Sample) =>
     <div class="item-tags">${tagEl(tags)}</div>
   </div>`;
 
-const samples: Sample[] = Array.from({ length: 15 }, (_, i) => ({
+const samples: Sample[] = Array.from({ length: 15 }, () => ({
   name: "Lorem ipsum",
   bpm: Math.random() > 0.8 ? 100 : null,
   liked: Math.random() > 0.6,

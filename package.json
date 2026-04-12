@@ -4,7 +4,7 @@
     "client"
   ],
   "scripts": {
-    "dev": "concurrently \"bun run --filter client dev\" \"cargo watch -x run\"",
+    "dev": "concurrently \"bun run --filter client dev\" \"cargo watch -x run -i client\"",
     "build": "bun run --filter client build && cargo build --release",
     "format": "biome format --write && cargo fmt",
     "lint": "cargo clippy && biome lint --write"

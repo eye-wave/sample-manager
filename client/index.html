@@ -1,4 +1,4 @@
-<html>
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="stylesheet" href="/styles/__app__.scss" />
@@ -14,7 +14,7 @@
     <div id="titlebar">
       <div id="titlebar_handle"></div>
       <div class="btn-group">
-        <button id="btn_minimize">
+        <button id="btn_minimize" type="button">
           <svg
             width="16"
             height="16"
@@ -30,7 +30,7 @@
             />
           </svg>
         </button>
-        <button id="btn_maximize">
+        <button id="btn_maximize" type="button">
           <svg
             width="16"
             height="16"
@@ -49,7 +49,7 @@
             />
           </svg>
         </button>
-        <button id="btn_closeWindow">
+        <button id="btn_closeWindow" type="button">
           <svg
             width="16"
             height="16"
@@ -89,7 +89,7 @@
           <input type="text" placeholder="Search samples, tags, packs…" />
         </div>
 
-        <button class="topbar-btn">Settings</button>
+        <button class="topbar-btn" type="button">Settings</button>
       </div>
 
       <div class="main">
@@ -136,7 +136,7 @@
           <div class="sidebar-header">File Tree</div>
           <div id="sidebar" class="sidebar-scroll"></div>
           <div style="padding: 8px; border-top: 1px solid var(--border)">
-            <button id="add_folder">+ Add Folder</button>
+            <button id="add_folder" type="button">+ Add Folder</button>
           </div>
         </div>
 
@@ -160,7 +160,7 @@
           <div class="preview-tags">
             <span class="preview-tag x">EDM ×</span>
             <span class="preview-tag x">VOCALS ×</span>
-            <button class="add-tag">+ tag</button>
+            <button class="add-tag" type="button">+ tag</button>
           </div>
         </div>
         <div class="preview-body">
@@ -172,8 +172,7 @@
           </div>
         </div>
         <div class="preview-controls">
-          <button class="play-btn" id="playBtn">▶</button>
-          <button class="play-btn" id="playBtn">▶</button>
+          <button class="play-btn" type="button" id="playBtn">▶</button>
         </div>
       </div>
 

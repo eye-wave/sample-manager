@@ -3,6 +3,7 @@ declare const playBtn: HTMLButtonElement;
 
 (() => {
   const canvas = waveCanvas;
+  // biome-ignore lint/style/noNonNullAssertion: trust
   const wrap = canvas.parentElement!;
 
   function draw() {
@@ -35,7 +36,7 @@ declare const playBtn: HTMLButtonElement;
       const a = amp(i);
       const h = a * (mid * 1.7);
       const progress = x / W;
-      let color;
+      let color: string;
       if (progress < playhead) {
         const t = progress / playhead;
         const r = Math.round(91 + (196 - 91) * t);

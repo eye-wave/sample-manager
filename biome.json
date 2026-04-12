@@ -1,11 +1,12 @@
 {
+  "$schema": "https://biomejs.dev/schemas/2.4.11/schema.json",
   "vcs": {
     "enabled": false,
     "clientKind": "git",
     "useIgnoreFile": false
   },
   "files": {
-    "includes": ["**", "!!**/dist"]
+    "includes": ["**", "!!**/dist", "!!**/target"]
   },
   "formatter": {
     "enabled": true,
@@ -17,7 +18,9 @@
     "enabled": true,
     "rules": {
       "recommended": true,
-      "a11y": "off",
+      "a11y": {
+        "noSvgWithoutTitle": "off"
+      },
       "style": {
         "useTemplate": "off"
       }

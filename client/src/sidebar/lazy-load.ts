@@ -1,19 +1,21 @@
 import { renderNode } from "./render";
 import { SIDEBAR_ITEM } from "./template";
-import { VFSNode, type VFSChild } from "./vfs";
+import { type VFSChild, VFSNode } from "./vfs";
 
 export async function loadNode(node: VFSNode): Promise<void> {
   if (node.loaded) return;
   node.loaded = true;
 
-  const children: VFSChild[] = await invoke("read_dir", node.path).then((res) =>
+  console.log("trying to read", node.path());
+
+  const children: VFSChild[] = await invoke("read_dir", node.path()).then((res) =>
     res
       .split("\n")
       .filter(Boolean)
       .map((line): VFSChild => {
         const isDir = line.charAt(0) === "1";
         const path = line.slice(1);
-        return isDir ? new VFSNode(path) : path;
+        return isDir ? VFSNode.child(path) : path;
       }),
   );
 
