@@ -24,6 +24,3 @@ panic = "abort"
 strip = true
 trim-paths = "all"
 rustflags = ["-Cdebuginfo=0", "-Zthreads=8"]
-
-[build-dependencies]
-grass = "0.13.4"

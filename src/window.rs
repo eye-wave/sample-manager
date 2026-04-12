@@ -3,8 +3,6 @@ use std::{rc::Rc, sync::Arc};
 use tao::window::Window;
 use wry::{WebView, WebViewBuilder};
 
-use crate::http::request_handler;
-
 use super::event::{EventRunner, EventSystem};
 
 pub struct App {
@@ -24,16 +22,24 @@ impl App {
             .build(event_runner.inner())
             .unwrap();
 
-        const PROTOCOL: &str = "sampols";
-
         let window_handle = Arc::new(window);
         let window_handle_cloned = window_handle.clone();
 
-        let webview = WebViewBuilder::new()
-            .with_custom_protocol(PROTOCOL.into(), request_handler)
-            .with_ipc_handler(move |req| event_handle.receive(req, window_handle_cloned.clone()))
-            .with_url(PROTOCOL.to_string() + "://_/app.html")
-            .with_devtools(cfg!(debug_assertions));
+        let webview = if cfg!(debug_assertions) {
+            WebViewBuilder::new()
+                .with_url("http://localhost:5173/app")
+                .with_devtools(cfg!(debug_assertions))
+        } else {
+            use crate::http::request_handler;
+
+            const PROTOCOL: &str = "sampols";
+
+            WebViewBuilder::new()
+                .with_custom_protocol(PROTOCOL.into(), request_handler)
+                .with_url(PROTOCOL.to_string() + "://_/index.html")
+                .with_devtools(true)
+        }
+        .with_ipc_handler(move |req| event_handle.receive(req, window_handle_cloned.clone()));
 
         let _webview = finish_webview(window_handle.clone(), webview);
 

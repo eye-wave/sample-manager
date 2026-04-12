@@ -1,17 +1,17 @@
 (() => {
   const pending = new Map();
   let nextId = 1;
-
-  const inv = (id, payload) => {
-    return new Promise((resolve, reject) => {
+  const inv = (id: string, payload: string) => {
+    return new Promise<string>((resolve, reject) => {
       const callId = nextId++;
       pending.set(callId, { resolve, reject });
 
-      window.ipc.postMessage(`${id}:${callId}:${payload ?? ""}`);
+      // @ts-expect-error
+      window?.ipc?.postMessage(`${id}:${callId}:${payload ?? ""}`);
     });
   };
 
-  function res(callId, response) {
+  function res(callId: number, response: string) {
     const pendingCall = pending.get(callId);
     if (pendingCall) {
       pendingCall.resolve(response);
@@ -27,13 +27,13 @@
   window._r = res;
 
   /// DEV start
-  const toStr = (i) => {
+  const toStr = <T>(i: T) => {
     const type = typeof i;
     if (type === "string") return i;
     if (type === "number") return `${i}`;
     if (type === "boolean") return i ? "true" : "false";
     if (type === "object") {
-      const name = i.constructor.name;
+      const name = i?.constructor.name;
       const json = JSON.stringify(i, null, 2);
       const jsonHidden = json === "{}" ? "" : json;
 
@@ -41,8 +41,8 @@
     }
   };
 
-  const toLog = (args) =>
-    args.reduce((str, n) => str + toStr(n) + " ", "").slice(0, -1);
+  const toLog = (args: unknown[]) =>
+    args.reduce((str: string, n: unknown) => str + toStr(n) + " ", "").slice(0, -1);
 
   console.log = (...args) => inv("log", "L" + toLog(args));
   console.warn = (...args) => inv("log", "W" + toLog(args));

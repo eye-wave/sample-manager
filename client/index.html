@@ -1,28 +1,20 @@
 <html>
   <head>
     <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/styles/__app__.scss" />
 
-    <link rel="stylesheet" href="/css/__app__.css" />
+    <script src="/src/main.ts" type="module"></script>
 
-    <script src="/js/invoke.js" defer></script>
-
-    <script src="/js/__app__.js" defer></script>
-    <script src="/js/__titlebar__.js" defer></script>
-
-    <link rel="stylesheet" href="/css/theme.css" />
-    <link rel="stylesheet" href="/css/styles.css" />
+    <link rel="stylesheet" href="/styles/theme.scss" />
+    <link rel="stylesheet" href="/styles/styles.scss" />
 
     <title>SampleVault — Audio Sample Manager</title>
-
-    <script src="/js/waveform.js" defer></script>
-    <script src="/js/sidebar.js" defer></script>
-    <script src="/js/browse.js" defer></script>
   </head>
   <body>
     <div id="titlebar">
       <div id="titlebar_handle"></div>
       <div class="btn-group">
-        <button onclick="minimize()">
+        <button id="btn_minimize">
           <svg
             width="16"
             height="16"
@@ -38,7 +30,7 @@
             />
           </svg>
         </button>
-        <button onclick="maximize()">
+        <button id="btn_maximize">
           <svg
             width="16"
             height="16"
@@ -57,7 +49,7 @@
             />
           </svg>
         </button>
-        <button onclick="closeWindow()">
+        <button id="btn_closeWindow">
           <svg
             width="16"
             height="16"
@@ -142,9 +134,9 @@
           </div>
           <div class="sidebar-divider"></div>
           <div class="sidebar-header">File Tree</div>
-          <div class="sidebar-scroll"></div>
+          <div id="sidebar" class="sidebar-scroll"></div>
           <div style="padding: 8px; border-top: 1px solid var(--border)">
-            <button class="add-folder">+ Add Folder</button>
+            <button id="add_folder">+ Add Folder</button>
           </div>
         </div>
 
@@ -156,7 +148,7 @@
             <div class="list-col" style="text-align: right">BPM</div>
             <div class="list-col" style="padding-left: 8px">Tags</div>
           </div>
-          <div class="list-scroll"></div>
+          <div id="list_scroll" class="list-scroll"></div>
         </div>
       </div>
 

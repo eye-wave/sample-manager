@@ -1,2 +1,4 @@
 /target
-/client/css
+
+node_modules/
+dist/
