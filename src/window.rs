@@ -18,7 +18,7 @@ impl App {
         let window = tao::window::WindowBuilder::new()
             .with_title("My app")
             .with_decorations(false)
-            .with_inner_size(tao::dpi::LogicalSize::new(800.0, 600.0))
+            .with_inner_size(tao::dpi::LogicalSize::new(920.0, 720.0))
             .build(event_runner.inner())
             .unwrap();
 
@@ -28,7 +28,7 @@ impl App {
         let webview = if cfg!(debug_assertions) {
             WebViewBuilder::new()
                 .with_url("http://localhost:5173/app")
-                .with_devtools(cfg!(debug_assertions))
+                .with_devtools(true)
         } else {
             use crate::http::request_handler;
 
@@ -37,7 +37,6 @@ impl App {
             WebViewBuilder::new()
                 .with_custom_protocol(PROTOCOL.into(), request_handler)
                 .with_url(PROTOCOL.to_string() + "://_/index.html")
-                .with_devtools(true)
         }
         .with_ipc_handler(move |req| event_handle.receive(req, window_handle_cloned.clone()));
 

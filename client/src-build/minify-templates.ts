@@ -8,20 +8,23 @@ export default function htmlTemplateMinifyPlugin() {
 
       let result = code;
 
-      // strip DEV blocks
-      if (process.env.NODE_ENV === "production") {
+      const isProd = import.meta.env?.PROD ?? process.env.NODE_ENV === "production";
+
+      // strip blocks correctly
+      if (isProd) {
         result = result.replace(/\/\/\/\s*DEV start[\s\S]*?\/\/\/\s*DEV end/g, "");
+      } else {
+        result = result.replace(/\/\/\/\s*BUILD start[\s\S]*?\/\/\/\s*BUILD end/g, "");
       }
 
       // minify /* HTML */ templates
       const regex = /\/\*\s*HTML\s*\*\/\s*`([\s\S]*?)`/g;
 
-      let match: RegExpMatchArray | null;
+      let match: RegExpExecArray | null;
       // biome-ignore lint/suspicious/noAssignInExpressions: trust
       while ((match = regex.exec(result))) {
         const fullMatch = match[0];
         const templateContent = match[1];
-
         if (!templateContent) continue;
 
         const expressions: string[] = [];

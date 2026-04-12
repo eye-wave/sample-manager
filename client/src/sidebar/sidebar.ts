@@ -1,5 +1,6 @@
+import { parseVFS } from "./parse";
 import { renderNode } from "./render";
-import { type VFSChild, VFSNode } from "./vfs";
+import { NodeType, type VFSChild, VFSNode } from "./vfs";
 
 declare const sidebar: HTMLDivElement;
 declare const add_folder: HTMLButtonElement;
@@ -14,14 +15,7 @@ for (const folder of folders) {
   const node = VFSNode.root(folder);
 
   const children: VFSChild[] = await invoke("read_dir", folder).then((res) =>
-    res
-      .split("\n")
-      .filter(Boolean)
-      .map((line): VFSChild => {
-        const isDir = line.charAt(0) === "1";
-        const path = line.slice(1);
-        return isDir ? VFSNode.child(path) : path;
-      }),
+    res.split("\n").filter(Boolean).map(parseVFS),
   );
 
   node.extend(children);
@@ -29,7 +23,7 @@ for (const folder of folders) {
 }
 
 for (const child of root.children) {
-  if (typeof child !== "string") {
+  if (child.nodeType === NodeType) {
     renderNode(sidebar, child);
   }
 }

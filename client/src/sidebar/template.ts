@@ -1,14 +1,18 @@
-const folderArrow = (isFolder: boolean) =>
-  isFolder ? '<span class="tree-arrow">▶</span>' : "";
+export const FOLDER_CLOSED = "📁";
+export const FOLDER_OPEN = "📂";
 
-const folderEl = (isFolder: boolean) => (isFolder ? `<span class="tree-count"></span>` : "");
-
-export const SIDEBAR_ITEM = (isFolder: boolean, name: string) =>
-  /* HTML */ ` <div class="tree-section">
+export const SIDEBAR_FOLDER = (name: string) =>
+  /* HTML */ `<div class="tree-section">
     <div class="tree-label">
-      ${folderArrow(isFolder)}
-      <span class="tree-icon">${isFolder ? "📂" : "🎵"}</span>
+      <span class="tree-arrow">▶</span>
+      <span class="tree-icon"></span>
       <span class="tree-name">${name}</span>
-      ${folderEl(isFolder)}
+      <span class="tree-count"></span>
     </div>
   </div>`;
+
+const ICON_OTHER = 255;
+const itemIcons: Record<number, string> = { 1: "♪", 2: "🎹", 3: "🛠️", [ICON_OTHER]: "📄" };
+
+export const SIDEBAR_ITEM = (name: string, ftype: number) =>
+  `<div class="tree-section item">${itemIcons[ftype] ?? itemIcons[ICON_OTHER]} ${name}</div>`;

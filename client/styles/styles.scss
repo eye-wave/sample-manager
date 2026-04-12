@@ -1,16 +1,3 @@
-@mixin custom-scrollbar {
-  &::-webkit-scrollbar {
-    width: 4px;
-  }
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: var(--bg-hover);
-    border-radius: 4px;
-  }
-}
-
 * {
   box-sizing: border-box;
   margin: 0;
@@ -193,7 +180,6 @@ body {
     flex: 1;
     overflow-y: auto;
     padding-bottom: 8px;
-    @include custom-scrollbar;
   }
 
   &-divider {
@@ -205,7 +191,21 @@ body {
 
 .tree {
   &-section {
+    color: var(--text-secondary);
     margin-bottom: 4px;
+    transition: background 0.1s;
+
+    &.item {
+      margin: 0;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: grab;
+    }
+
+    &:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
   }
 
   &-label {
@@ -213,15 +213,8 @@ body {
     align-items: center;
     gap: 6px;
     padding: 5px 14px;
-    color: var(--text-secondary);
     cursor: pointer;
-    transition: background 0.1s;
     user-select: none;
-
-    &:hover {
-      background: var(--bg-hover);
-      color: var(--text-primary);
-    }
 
     &.active {
       background: var(--accent-glow);
@@ -323,7 +316,6 @@ body {
   &-scroll {
     flex: 1;
     overflow-y: auto;
-    @include custom-scrollbar;
   }
 
   &-item {

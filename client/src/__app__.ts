@@ -1,4 +1,6 @@
+/// BUILD start
 window.addEventListener("contextmenu", (e) => e.preventDefault());
+/// BUILD end
 
 declare const titlebar_handle: HTMLDivElement;
 declare const btn_minimize: HTMLButtonElement;
