@@ -1,11 +1,23 @@
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 
 use crate::state::AppState;
+
+pub const SAMPLE_EXTENSIONS: &[&str] = &[
+    "aac", "aiff", "caf", "flac", "mid", "midi", "mp2", "mp3", "mp4", "mpeg", "ogg", "opus", "wav",
+    "wv",
+];
+
+fn is_sample_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .map(|ext| SAMPLE_EXTENSIONS.binary_search(&ext).is_ok())
+        .unwrap_or(false)
+}
 
 pub struct FsSample {
     pub path: PathBuf,
@@ -14,7 +26,7 @@ pub struct FsSample {
 
 impl FsSample {
     pub fn new(path: PathBuf) -> Self {
-        let stripped = path
+        let search_str = path
             .to_string_lossy()
             .chars()
             .map(|c| if c.is_alphanumeric() { c } else { ' ' })
@@ -25,17 +37,15 @@ impl FsSample {
             .to_lowercase();
 
         Self {
-            path: path.clone(),
-            search_str: Arc::from(stripped),
+            path,
+            search_str: Arc::from(search_str),
         }
     }
 
-    pub fn score(&self, query: &str, matcher: &SkimMatcherV2) -> i16 {
-        let score = matcher
+    pub fn score(&self, query: &str, matcher: &SkimMatcherV2) -> i64 {
+        matcher
             .fuzzy_match(&self.search_str, query)
-            .unwrap_or(i16::MIN as i64);
-
-        score as i16
+            .unwrap_or(i64::MIN)
     }
 }
 
@@ -57,9 +67,8 @@ pub fn process_directories(
 
             if file_path.is_dir() {
                 stack.push(file_path);
-            } else {
-                let sample = FsSample::new(file_path);
-                sample_registry.push(sample);
+            } else if is_sample_file(&file_path) {
+                sample_registry.push(FsSample::new(file_path));
             }
         }
     }

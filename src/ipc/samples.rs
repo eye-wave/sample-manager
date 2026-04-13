@@ -4,12 +4,11 @@ use std::fs;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use rayon::prelude::*;
 
-use crate::commands::{IPCBody, IPCResponse};
+use crate::ipc::{IPCBody, IPCResponse};
 use crate::ipc_commands;
 use crate::state::samples::process_directories;
 
-/// Adds a sample folder to app state
-fn add_sample_folder(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
+fn add_sample_folder(body: IPCBody) -> Option<Cow<'static, [u8]>> {
     let path = body.req.as_ref();
 
     if fs::read_dir(path).is_err() {
@@ -24,8 +23,7 @@ fn add_sample_folder(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
     b"Ok".finish()
 }
 
-/// Returns folders with samples added to app state
-fn get_sample_folders(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
+fn get_sample_folders(body: IPCBody) -> Option<Cow<'static, [u8]>> {
     let guard = body.app_state.read().ok()?;
     let cfg = guard.get_config();
 
@@ -36,8 +34,7 @@ fn get_sample_folders(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> 
         .finish()
 }
 
-/// Start a job that looks over the file system
-fn start_sample_scan(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
+fn start_sample_scan(body: IPCBody) -> Option<Cow<'static, [u8]>> {
     let thread_state = body.app_state.clone();
     let dirs = body
         .app_state
@@ -59,8 +56,7 @@ fn start_sample_scan(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
     Some(Cow::Borrowed(b"Ok"))
 }
 
-/// Search for a sample with a query
-pub fn search_for_sample(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
+fn search_for_sample(body: IPCBody) -> Option<Cow<'static, [u8]>> {
     let query = body.req.to_lowercase();
 
     let guard = body.app_state.read().ok()?;
@@ -73,12 +69,12 @@ pub fn search_for_sample(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]
         .map(|s| (s, s.score(&query, &matcher)))
         .collect();
 
-    scored.sort_by_key(|a| std::cmp::Reverse(a.1));
+    scored.sort_by_key(|&(_, score)| std::cmp::Reverse(score));
 
-    let found = &scored[..10.min(scored.len())];
+    let found = &scored[..100.min(scored.len())];
     let files = found
         .iter()
-        .map(|f| f.0.path.to_string_lossy())
+        .map(|(f, _)| f.path.to_string_lossy())
         .collect::<Vec<_>>()
         .join("\n");
 

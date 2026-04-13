@@ -7,15 +7,8 @@ use std::sync::{Arc, RwLock};
 use tao::{event_loop::EventLoopBuilder, window::Window};
 use wry::WebView;
 
-use crate::commands::{IPCBody, IPCCommand};
-use crate::ipc::{commands_iter, ipc_strip_name};
+use crate::ipc::{IPCBody, IPCCommand, IPCMessage, commands_iter, ipc_strip_name};
 use crate::state::AppState;
-
-#[derive(Debug)]
-pub struct IPCMessage {
-    pub id: &'static str,
-    pub payload: String,
-}
 
 pub struct EventSystem {
     webview_tx: Sender<IPCMessage>,
@@ -79,6 +72,7 @@ impl EventSystem {
             }
         }
     }
+
     pub fn send(
         &self,
         call_id: u32,
@@ -96,6 +90,10 @@ impl EventSystem {
     }
 }
 
+fn escape_for_template_literal(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('`', "\\`")
+}
+
 impl EventRunner {
     pub(super) fn inner(&self) -> &EventLoop {
         &self.event_loop
@@ -111,8 +109,8 @@ impl EventRunner {
             *control_flow = ControlFlow::Wait;
 
             while let Ok(msg) = self.webview_rx.try_recv() {
-                let code = format!("_s('{}',`{}`)", msg.id, msg.payload.replace("`", "\\`"));
-
+                let payload = escape_for_template_literal(&msg.payload);
+                let code = format!("_s('{}',`{}`)", msg.id, payload);
                 webview.evaluate_script(&code).ok();
             }
 
@@ -123,9 +121,9 @@ impl EventRunner {
             }
 
             if let Event::UserEvent(LoopEvent::JS(call_id, bytes)) = event {
-                let payload = unsafe { str::from_utf8_unchecked(&bytes) };
-                let code = format!("_r({call_id},`{}`)", payload.replace("`", "\\`"));
-
+                let payload_str = unsafe { str::from_utf8_unchecked(&bytes) };
+                let payload = escape_for_template_literal(payload_str);
+                let code = format!("_r({call_id},`{}`)", payload);
                 webview.evaluate_script(&code).ok();
             }
         });

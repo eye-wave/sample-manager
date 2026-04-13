@@ -1,5 +1,4 @@
-use crate::commands::IPCBody;
-use crate::event::IPCMessage;
+use crate::ipc::{IPCBody, IPCMessage};
 use crate::ipc_commands;
 
 fn decode_audio(path: &str, downsample_factor: usize) -> Option<Vec<f32>> {
@@ -59,9 +58,10 @@ fn decode_audio(path: &str, downsample_factor: usize) -> Option<Vec<f32>> {
     Some(output)
 }
 
-pub fn encode_sample(x: f32) -> u8 {
+fn encode_sample(x: f32) -> u8 {
     let x = x.clamp(-1.0, 1.0);
 
+    // Skip 92 (backslash).
     let i = (((x + 1.0) * 0.5) * 92.0).round() as u8;
 
     let mut v = i + 32;
@@ -75,10 +75,7 @@ pub fn encode_sample(x: f32) -> u8 {
 fn read_audio_file(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
     std::thread::spawn(move || {
         if let Some(samples) = decode_audio(body.req.as_ref(), 4) {
-            let data = samples
-                .iter()
-                .map(|&s| encode_sample(s))
-                .collect::<Vec<_>>();
+            let data: Vec<u8> = samples.iter().map(|&s| encode_sample(s)).collect();
 
             let payload = unsafe { str::from_utf8_unchecked(&data) }.to_string();
 

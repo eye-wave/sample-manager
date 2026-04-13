@@ -1,4 +1,5 @@
-use crate::{commands::IPCBody, ipc_commands};
+use crate::ipc::IPCBody;
+use crate::ipc_commands;
 
 fn close_window(_body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
     std::process::exit(0);
@@ -28,6 +29,5 @@ ipc_commands! {
         minimize_window,
         maximize_window,
         drag_window,
-
     ]
 }
