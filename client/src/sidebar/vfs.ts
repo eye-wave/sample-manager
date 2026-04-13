@@ -1,3 +1,4 @@
+import { basename } from "../helpers";
 import { FOLDER_CLOSED, FOLDER_OPEN } from "./template";
 
 export const FileType = 0 as const;
@@ -18,7 +19,7 @@ export class VFSFile implements VFSCNodeType {
   ) {}
 
   public basename(): string {
-    return this.name.split(/[\\/]/).at(-1) ?? this.name;
+    return basename(this.name);
   }
 }
 

@@ -1,34 +1,40 @@
+import { basename } from "../helpers";
+import { BrowseRow } from "./row";
+
 declare const list_scroll: HTMLDivElement;
+declare const search: HTMLInputElement;
 
-type Sample = {
-  name: string;
-  bpm: number | null;
-  liked: boolean;
-  tags: string[];
+const POOL_SIZE = 100;
+
+const pool: BrowseRow[] = Array.from({ length: POOL_SIZE }, () => new BrowseRow());
+const fragment = document.createDocumentFragment();
+
+pool.forEach((item) => {
+  fragment.appendChild(item.el);
+});
+
+list_scroll.appendChild(fragment);
+
+search.oninput = async () => {
+  const query = search.value;
+
+  if (query.length === 0) {
+    pool.forEach((item) => {
+      item.hide();
+    });
+
+    return;
+  }
+
+  const text = await invoke("search_for_sample", query);
+  const lines = text.split("\n").filter(Boolean);
+
+  for (let i = 0; i < POOL_SIZE; i++) {
+    if (i < lines.length) {
+      // biome-ignore lint/style/noNonNullAssertion: checked before
+      pool[i]?.update(basename(lines[i]!), null, false, []);
+    } else {
+      pool[i]?.hide();
+    }
+  }
 };
-
-const tagEl = (tags: string[] = []) =>
-  tags.map((t) => `<span class="tag">${t}</span>`).join("");
-
-const LIST_ITEM = ({ name, bpm, liked, tags }: Sample) =>
-  /* HTML */ `<div class="list-item">
-    <div class="item-name">
-      <span class="item-fav ${liked ? "liked" : ""}">${liked ? "♥" : "♡"}</span
-      ><span class="item-label">${name}</span>
-    </div>
-    <div class="item-type">${bpm ? "Loop" : "One-shot"}</div>
-    <div class="item-bpm">${bpm || "-"}</div>
-    <div class="item-tags">${tagEl(tags)}</div>
-  </div>`;
-
-const samples: Sample[] = Array.from({ length: 15 }, () => ({
-  name: "Lorem ipsum",
-  bpm: Math.random() > 0.8 ? 100 : null,
-  liked: Math.random() > 0.6,
-  tags: ["EDM"],
-}));
-
-list_scroll.insertAdjacentHTML(
-  "beforeend",
-  samples.map((sample) => LIST_ITEM(sample)).join(""),
-);

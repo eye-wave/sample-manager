@@ -1,11 +1,17 @@
-use std::{collections::HashSet, fs, path::PathBuf};
+use std::{collections::HashSet, fs, path::PathBuf, sync::Arc};
 
 use serde::{Deserialize, Serialize};
+
+use crate::state::samples::FsSample;
+
+pub mod samples;
 
 pub struct AppState {
     _config_path: PathBuf,
     _cache_path: PathBuf,
     app_config: AppConfig,
+
+    pub sample_registry: Arc<[FsSample]>,
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -24,6 +30,7 @@ impl Default for AppState {
             _config_path,
             _cache_path,
             app_config: AppConfig::default(),
+            sample_registry: Arc::new([]),
         }
     }
 }

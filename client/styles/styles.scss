@@ -200,6 +200,18 @@ body {
       font-size: 12px;
       font-weight: 600;
       cursor: grab;
+      word-break: break-all;
+      position: relative;
+
+      &::before{
+        inset: 0;
+        content: "";
+        position: absolute;
+        width: 100%;
+        background: currentColor;
+        opacity: 30%;
+        height: 1px;
+      }
     }
 
     &:hover {
