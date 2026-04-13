@@ -28,7 +28,6 @@
   const listeners = new Map<string, Set<CB>>();
 
   function send(id: string, payload: string) {
-    console.log("received id", id);
     const set = listeners.get(id);
     if (!set) return;
 

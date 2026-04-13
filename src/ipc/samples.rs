@@ -50,7 +50,6 @@ fn start_sample_scan(body: IPCBody) -> Option<Cow<'static, [u8]>> {
 
     std::thread::spawn(move || {
         process_directories(dirs, thread_state).ok();
-        println!("Finished scan");
     });
 
     Some(Cow::Borrowed(b"Ok"))

@@ -46,9 +46,11 @@ export class BrowseRow {
       this.path && onSelect?.(this.path);
     };
 
-    this.favEl.onclick = () => {
+    this.favEl.onclick = (e) => {
       this.setLiked(!this.isLiked);
       onLike?.();
+
+      e.stopPropagation();
     };
   }
 
