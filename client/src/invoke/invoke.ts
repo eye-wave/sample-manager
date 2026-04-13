@@ -23,8 +23,32 @@
     }
   }
 
+  type CB = (payload: string) => void;
+
+  const listeners = new Map<string, Set<CB>>();
+
+  function send(id: string, payload: string) {
+    console.log("received id", id);
+    const set = listeners.get(id);
+    if (!set) return;
+
+    for (const cb of set) {
+      cb(payload);
+    }
+  }
+
+  function listen(id: string, callback: CB) {
+    if (!listeners.has(id)) {
+      listeners.set(id, new Set());
+    }
+    listeners.get(id)?.add(callback);
+  }
+
   window.invoke = inv;
+  window.listen = listen;
+
   window._r = res;
+  window._s = send;
 
   /// DEV start
   const toStr = <T>(i: T) => {

@@ -1,16 +1,10 @@
 use std::path::Path;
-use std::sync::{Arc, RwLock};
 
-use crate::commands::IPCResponse;
+use crate::commands::{IPCBody, IPCResponse};
 use crate::ipc_commands;
-use crate::state::AppState;
 
 /// Opens OS folder dialog
-fn open_folder(
-    _r: &str,
-    _w: &Arc<tao::window::Window>,
-    _s: Arc<RwLock<AppState>>,
-) -> Option<std::borrow::Cow<'static, [u8]>> {
+fn open_folder(_body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
     let folder = tinyfiledialogs::select_folder_dialog("Select folder", "");
 
     folder.finish()
@@ -51,11 +45,8 @@ fn get_path_type(path: &Path) -> u8 {
 }
 
 /// Reads items inside a directory
-fn read_dir(
-    path: &str,
-    _w: &Arc<tao::window::Window>,
-    _s: Arc<RwLock<AppState>>,
-) -> Option<std::borrow::Cow<'static, [u8]>> {
+fn read_dir(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
+    let path = body.req.as_ref();
     let mut files: Vec<_> = std::fs::read_dir(path)
         .ok()?
         .filter_map(Result::ok)

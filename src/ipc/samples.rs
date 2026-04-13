@@ -1,26 +1,22 @@
 use std::borrow::Cow;
 use std::fs;
-use std::sync::{Arc, RwLock};
 
 use fuzzy_matcher::skim::SkimMatcherV2;
 use rayon::prelude::*;
 
-use crate::commands::IPCResponse;
+use crate::commands::{IPCBody, IPCResponse};
 use crate::ipc_commands;
-use crate::state::AppState;
 use crate::state::samples::process_directories;
 
 /// Adds a sample folder to app state
-fn add_sample_folder(
-    path: &str,
-    _w: &Arc<tao::window::Window>,
-    state: Arc<RwLock<AppState>>,
-) -> Option<std::borrow::Cow<'static, [u8]>> {
+fn add_sample_folder(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
+    let path = body.req.as_ref();
+
     if fs::read_dir(path).is_err() {
         return None;
     }
 
-    let mut guard = state.write().ok()?;
+    let mut guard = body.app_state.write().ok()?;
     guard.update_config(|cfg| {
         cfg.tracked_dirs.insert(path.into());
     });
@@ -29,12 +25,8 @@ fn add_sample_folder(
 }
 
 /// Returns folders with samples added to app state
-fn get_sample_folders(
-    _r: &str,
-    _w: &Arc<tao::window::Window>,
-    state: Arc<RwLock<AppState>>,
-) -> Option<std::borrow::Cow<'static, [u8]>> {
-    let guard = state.read().ok()?;
+fn get_sample_folders(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
+    let guard = body.app_state.read().ok()?;
     let cfg = guard.get_config();
 
     cfg.tracked_dirs
@@ -45,13 +37,15 @@ fn get_sample_folders(
 }
 
 /// Start a job that looks over the file system
-fn start_sample_scan(
-    _r: &str,
-    _w: &Arc<tao::window::Window>,
-    state: Arc<RwLock<AppState>>,
-) -> Option<std::borrow::Cow<'static, [u8]>> {
-    let thread_state = state.clone();
-    let dirs = state.read().ok()?.get_config().tracked_dirs.clone();
+fn start_sample_scan(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
+    let thread_state = body.app_state.clone();
+    let dirs = body
+        .app_state
+        .read()
+        .ok()?
+        .get_config()
+        .tracked_dirs
+        .clone();
 
     if dirs.is_empty() {
         return None;
@@ -66,14 +60,10 @@ fn start_sample_scan(
 }
 
 /// Search for a sample with a query
-pub fn search_for_sample(
-    query: &str,
-    _w: &Arc<tao::window::Window>,
-    state: Arc<RwLock<AppState>>,
-) -> Option<std::borrow::Cow<'static, [u8]>> {
-    let query = query.to_lowercase();
+pub fn search_for_sample(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
+    let query = body.req.to_lowercase();
 
-    let guard = state.read().ok()?;
+    let guard = body.app_state.read().ok()?;
     let registry = guard.sample_registry.clone();
 
     let matcher = SkimMatcherV2::default().smart_case();

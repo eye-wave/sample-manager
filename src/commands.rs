@@ -1,18 +1,22 @@
 use std::borrow::Cow;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, mpsc};
 
+use crate::event::IPCMessage;
 use crate::state::AppState;
 
 mod bytes;
 
+#[derive(Clone)]
+pub struct IPCBody {
+    pub req: Arc<str>,
+    pub window_handle: Arc<tao::window::Window>,
+    pub app_state: Arc<RwLock<AppState>>,
+    pub webview_sender: mpsc::Sender<IPCMessage>,
+}
+
 pub trait IPCCommand: Send + Sync {
     fn name(&self) -> &'static str;
-    fn respond(
-        &self,
-        req: &str,
-        window_handle: &Arc<tao::window::Window>,
-        state: Arc<RwLock<AppState>>,
-    ) -> Option<Cow<'static, [u8]>>;
+    fn respond(&self, body: IPCBody) -> Option<Cow<'static, [u8]>>;
 }
 
 pub type IPCRequestBody<'a> = (&'a str, u32, &'a str);

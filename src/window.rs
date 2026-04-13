@@ -1,4 +1,5 @@
-use std::{rc::Rc, sync::Arc};
+use std::rc::Rc;
+use std::sync::Arc;
 
 use tao::window::Window;
 use wry::{WebView, WebViewBuilder};
@@ -49,9 +50,7 @@ impl App {
     }
 
     pub fn run(self) {
-        let webview = Rc::new(self._webview);
-
-        self.runner.run(&webview);
+        self.runner.run(&Rc::new(self._webview));
     }
 }
 

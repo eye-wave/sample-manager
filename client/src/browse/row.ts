@@ -9,7 +9,10 @@ export class BrowseRow {
 
   tagsEl: HTMLElement;
 
-  constructor() {
+  private isLiked = false;
+  private path: string | null = null;
+
+  constructor(onSelect?: (path: string) => void, onLike?: () => void) {
     this.el = document.createElement("div");
     this.el.className = "list-item hidden";
 
@@ -38,11 +41,29 @@ export class BrowseRow {
 
     this.favEl.appendChild(this.favElText);
     this.hide();
+
+    this.el.onclick = () => {
+      this.path && onSelect?.(this.path);
+    };
+
+    this.favEl.onclick = () => {
+      this.setLiked(!this.isLiked);
+      onLike?.();
+    };
+  }
+
+  private setLiked(liked: boolean) {
+    this.favElText.nodeValue = liked ? "♥" : "♡";
+    this.favEl.className = `item-fav ${liked ? "liked" : ""}`;
+    this.isLiked = liked;
+  }
+
+  setPath(path: string) {
+    this.path = path;
   }
 
   update(name: string, bpm: number | null, liked: boolean, tags: string[] = []) {
-    this.favElText.nodeValue = liked ? "♥" : "♡";
-    this.favEl.className = `item-fav ${liked ? "liked" : ""}`;
+    this.setLiked(liked);
     this.labelEl.nodeValue = name;
     this.typeEl.nodeValue = bpm ? "Loop" : "One-shot";
     this.bpmEl.nodeValue = bpm ? String(bpm) : "-";

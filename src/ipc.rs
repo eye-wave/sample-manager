@@ -3,6 +3,7 @@ use crate::commands::{IPCCommand, IPCRequestBody};
 mod fs;
 mod logger;
 mod samples;
+mod waveform;
 mod window;
 
 pub(super) fn ipc_strip_name<'a>(req: &'a str) -> Option<IPCRequestBody<'a>> {
@@ -20,6 +21,7 @@ pub fn commands_iter<'a>() -> impl Iterator<Item = &'a dyn IPCCommand> {
     use crate::ipc::fs::IPC_FS;
     use crate::ipc::logger::IPC_LOGGER;
     use crate::ipc::samples::IPC_SAMPLES;
+    use crate::ipc::waveform::IPC_WAVEFORM;
     use crate::ipc::window::IPC_WINDOW;
 
     IPC_WINDOW
@@ -27,6 +29,7 @@ pub fn commands_iter<'a>() -> impl Iterator<Item = &'a dyn IPCCommand> {
         .chain(IPC_FS.iter())
         .chain(IPC_LOGGER.iter())
         .chain(IPC_SAMPLES.iter())
+        .chain(IPC_WAVEFORM.iter())
         .copied()
 }
 
@@ -50,11 +53,9 @@ macro_rules! ipc_commands {
 
                     fn respond(
                         &self,
-                        req: &str,
-                        window_handle: &Arc<tao::window::Window>,
-                        state: Arc<std::sync::RwLock<$crate::state::AppState>>,
+                        body: $crate::commands::IPCBody
                     ) -> Option<std::borrow::Cow<'static, [u8]>> {
-                        $fn(req, window_handle, state)
+                        $fn(body)
                     }
                 }
             )*

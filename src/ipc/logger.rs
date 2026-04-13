@@ -1,14 +1,8 @@
-use std::sync::{Arc, RwLock};
+use crate::{commands::IPCBody, ipc_commands};
 
-use crate::{ipc_commands, state::AppState};
-
-fn log(
-    req: &str,
-    _w: &Arc<tao::window::Window>,
-    _s: Arc<RwLock<AppState>>,
-) -> Option<std::borrow::Cow<'static, [u8]>> {
-    let mode = req.as_bytes().first().map(|&b| b as char)?;
-    let message = &req[1..];
+fn log(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
+    let mode = body.req.as_bytes().first().map(|&b| b as char)?;
+    let message = &body.req[1..];
 
     const RESET: &str = "\x1b[0m";
 

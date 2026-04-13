@@ -1,37 +1,23 @@
-use crate::{ipc_commands, state::AppState};
-use std::sync::{Arc, RwLock};
+use crate::{commands::IPCBody, ipc_commands};
 
-fn close_window(
-    _req: &str,
-    _w: &Arc<tao::window::Window>,
-    _s: Arc<RwLock<AppState>>,
-) -> Option<std::borrow::Cow<'static, [u8]>> {
+fn close_window(_body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
     std::process::exit(0);
 }
 
-fn minimize_window(
-    _req: &str,
-    w: &Arc<tao::window::Window>,
-    _s: Arc<RwLock<AppState>>,
-) -> Option<std::borrow::Cow<'static, [u8]>> {
+fn minimize_window(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
+    let w = body.window_handle.as_ref();
     w.set_minimized(true);
     None
 }
 
-fn maximize_window(
-    _req: &str,
-    w: &Arc<tao::window::Window>,
-    _s: Arc<RwLock<AppState>>,
-) -> Option<std::borrow::Cow<'static, [u8]>> {
+fn maximize_window(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
+    let w = body.window_handle.as_ref();
     w.set_maximized(!w.is_maximized());
     None
 }
 
-fn drag_window(
-    _req: &str,
-    w: &Arc<tao::window::Window>,
-    _s: Arc<RwLock<AppState>>,
-) -> Option<std::borrow::Cow<'static, [u8]>> {
+fn drag_window(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
+    let w = body.window_handle.as_ref();
     w.drag_window().ok();
     None
 }

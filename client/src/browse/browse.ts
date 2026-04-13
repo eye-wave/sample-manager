@@ -6,7 +6,11 @@ declare const search: HTMLInputElement;
 
 const POOL_SIZE = 100;
 
-const pool: BrowseRow[] = Array.from({ length: POOL_SIZE }, () => new BrowseRow());
+function onSelect(file: string) {
+  invoke("read_audio_file", file);
+}
+
+const pool: BrowseRow[] = Array.from({ length: POOL_SIZE }, () => new BrowseRow(onSelect));
 const fragment = document.createDocumentFragment();
 
 pool.forEach((item) => {
@@ -32,7 +36,10 @@ search.oninput = async () => {
   for (let i = 0; i < POOL_SIZE; i++) {
     if (i < lines.length) {
       // biome-ignore lint/style/noNonNullAssertion: checked before
-      pool[i]?.update(basename(lines[i]!), null, false, []);
+      const path = lines[i]!;
+
+      pool[i]?.update(basename(path), null, false, []);
+      pool[i]?.setPath(path);
     } else {
       pool[i]?.hide();
     }

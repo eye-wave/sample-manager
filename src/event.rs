@@ -1,19 +1,32 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, RwLock};
 
 use tao::{event_loop::EventLoopBuilder, window::Window};
 use wry::WebView;
 
-use crate::commands::IPCCommand;
+use crate::commands::{IPCBody, IPCCommand};
 use crate::ipc::{commands_iter, ipc_strip_name};
 use crate::state::AppState;
 
+#[derive(Debug)]
+pub struct IPCMessage {
+    pub id: &'static str,
+    pub payload: String,
+}
+
 pub struct EventSystem {
+    webview_tx: Sender<IPCMessage>,
     event_loop: EventLoopProxy,
     app_state: Arc<RwLock<AppState>>,
     ipc_commands: HashMap<&'static str, &'static dyn IPCCommand>,
+}
+
+pub struct EventRunner {
+    webview_rx: Receiver<IPCMessage>,
+    event_loop: EventLoop,
 }
 
 pub type EventLoop = tao::event_loop::EventLoop<LoopEvent>;
@@ -25,6 +38,8 @@ pub(super) enum LoopEvent {
 
 impl EventSystem {
     pub fn build() -> (EventRunner, Self) {
+        let (tx, rx) = mpsc::channel();
+
         let event_loop = EventLoopBuilder::<LoopEvent>::with_user_event().build();
         let proxy = event_loop.create_proxy();
 
@@ -32,8 +47,12 @@ impl EventSystem {
         app_state.load().ok();
 
         (
-            EventRunner { event_loop },
+            EventRunner {
+                event_loop,
+                webview_rx: rx,
+            },
             Self {
+                webview_tx: tx,
                 event_loop: proxy,
                 app_state: Arc::new(RwLock::new(app_state)),
                 ipc_commands: commands_iter().map(|cmd| (cmd.name(), cmd)).collect(),
@@ -47,7 +66,13 @@ impl EventSystem {
         if let Some((fn_name, call_id, payload)) = ipc_strip_name(body)
             && let Some(cmd) = self.ipc_commands.get(fn_name)
         {
-            if let Some(bytes) = cmd.respond(payload, &window_handle, Arc::clone(&self.app_state)) {
+            let body = IPCBody {
+                webview_sender: self.webview_tx.clone(),
+                req: Arc::from(payload),
+                window_handle: window_handle.clone(),
+                app_state: self.app_state.clone(),
+            };
+            if let Some(bytes) = cmd.respond(body) {
                 self.send(call_id, bytes).ok();
             } else {
                 self.send_empty(call_id).ok();
@@ -71,10 +96,6 @@ impl EventSystem {
     }
 }
 
-pub struct EventRunner {
-    event_loop: EventLoop,
-}
-
 impl EventRunner {
     pub(super) fn inner(&self) -> &EventLoop {
         &self.event_loop
@@ -88,6 +109,12 @@ impl EventRunner {
 
         self.event_loop.run(move |event, _, control_flow| {
             *control_flow = ControlFlow::Wait;
+
+            while let Ok(msg) = self.webview_rx.try_recv() {
+                let code = format!("_s('{}',`{}`)", msg.id, msg.payload.replace("`", "\\`"));
+
+                webview.evaluate_script(&code).ok();
+            }
 
             if let Event::WindowEvent { event, .. } = &event
                 && event == &WindowEvent::CloseRequested
