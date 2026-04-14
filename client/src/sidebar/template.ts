@@ -15,4 +15,4 @@ const ICON_OTHER = 255;
 const itemIcons: Record<number, string> = { 1: "♪", 2: "🎹", 3: "🛠️", [ICON_OTHER]: "📄" };
 
 export const SIDEBAR_ITEM = (name: string, ftype: number) =>
-  `<div class="tree-section item">${itemIcons[ftype] ?? itemIcons[ICON_OTHER]} ${name}</div>`;
+  /* HTML */ `<div class="tree-section item">${itemIcons[ftype] ?? itemIcons[ICON_OTHER]} ${name}</div>`;

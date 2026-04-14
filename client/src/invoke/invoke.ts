@@ -1,13 +1,11 @@
 (() => {
   const pending = new Map();
   let nextId = 1;
-  const inv = (id: string, payload: string) => {
+  const inv = (id: string, payload?: string) => {
     return new Promise<string>((resolve, reject) => {
       const callId = nextId++;
       pending.set(callId, { resolve, reject });
-
-      // @ts-expect-error
-      ipc?.postMessage(`${id}:${callId}:${payload ?? ""}`);
+      ipc.postMessage(`${id}:${callId}:${payload ?? ""}`);
     });
   };
 

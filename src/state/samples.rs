@@ -22,6 +22,7 @@ fn is_sample_file(path: &Path) -> bool {
 pub struct FsSample {
     pub path: PathBuf,
     search_str: Arc<str>,
+    tags: Vec<Arc<str>>,
 }
 
 impl FsSample {
@@ -39,10 +40,19 @@ impl FsSample {
         Self {
             path,
             search_str: Arc::from(search_str),
+            tags: vec![],
         }
     }
 
-    pub fn score(&self, query: &str, matcher: &SkimMatcherV2) -> i64 {
+    pub fn score(&self, query: &str, tags: &[&str], matcher: &SkimMatcherV2) -> i64 {
+        let has_all = tags
+            .iter()
+            .all(|t| self.tags.iter().any(|tag| *t == tag.as_ref()));
+
+        if !has_all {
+            return 0;
+        }
+
         matcher
             .fuzzy_match(&self.search_str, query)
             .unwrap_or(i64::MIN)

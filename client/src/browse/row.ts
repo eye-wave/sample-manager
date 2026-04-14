@@ -73,7 +73,9 @@ export class BrowseRow {
     const newTags = tags.join(",");
     if (this.tagsEl.dataset.tags !== newTags) {
       this.tagsEl.dataset.tags = newTags;
-      this.tagsEl.innerHTML = tags.map((t) => `<span class="tag">${t}</span>`).join("");
+      this.tagsEl.innerHTML = tags
+        .map((t) => /* HTML */ `<span class="tag">${t}</span>`)
+        .join("");
     }
 
     this.el.style.display = "";

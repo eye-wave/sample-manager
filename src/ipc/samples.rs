@@ -56,7 +56,12 @@ fn start_sample_scan(body: IPCBody) -> Option<Cow<'static, [u8]>> {
 }
 
 fn search_for_sample(body: IPCBody) -> Option<Cow<'static, [u8]>> {
-    let query = body.req.to_lowercase();
+    let tokens = body.req.to_lowercase();
+    let tokens = tokens.split(",").map(|t| t.trim()).collect::<Vec<_>>();
+
+    let (tags, query) = tokens.split_at(tokens.len().saturating_sub(1));
+
+    let query = query.first().unwrap_or(&"");
 
     let guard = body.app_state.read().ok()?;
     let registry = guard.sample_registry.clone();
@@ -65,7 +70,7 @@ fn search_for_sample(body: IPCBody) -> Option<Cow<'static, [u8]>> {
 
     let mut scored: Vec<_> = registry
         .par_iter()
-        .map(|s| (s, s.score(&query, &matcher)))
+        .map(|s| (s, s.score(query, tags, &matcher)))
         .collect();
 
     scored.sort_by_key(|&(_, score)| std::cmp::Reverse(score));

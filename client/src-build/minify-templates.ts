@@ -38,7 +38,12 @@ export default function htmlTemplateMinifyPlugin() {
         const minified = await import("html-minifier-terser").then((m) =>
           m.minify(html, {
             collapseWhitespace: true,
+            collapseInlineTagWhitespace: true,
             removeComments: true,
+            sortAttributes: true,
+            sortClassName: true,
+            removeAttributeQuotes: true,
+            collapseBooleanAttributes: true,
           }),
         );
 

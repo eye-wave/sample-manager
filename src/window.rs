@@ -31,13 +31,14 @@ impl App {
                 .with_url("http://localhost:5173/app")
                 .with_devtools(true)
         } else {
-            use crate::http::request_handler;
+            use crate::http::html_handler;
 
             const PROTOCOL: &str = "sampols";
 
             WebViewBuilder::new()
-                .with_custom_protocol(PROTOCOL.into(), request_handler)
-                .with_url(PROTOCOL.to_string() + "://_/index.html")
+                .with_custom_protocol(PROTOCOL.into(), html_handler)
+                .with_url(PROTOCOL.to_string() + "://_")
+                .with_devtools(true)
         }
         .with_ipc_handler(move |req| event_handle.receive(req, window_handle_cloned.clone()));
 

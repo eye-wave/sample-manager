@@ -5,15 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && bun run pack",
+    "pack": "bun run src-build/final-minify.ts",
     "preview": "vite preview"
   },
   "devDependencies": {
     "@types/html-minifier-terser": "^7.0.2",
+    "@types/node": "^25.6.0",
     "html-minifier-terser": "^7.2.0",
     "sass-embedded": "^1.99.0",
     "typescript": "~6.0.2",
     "vite": "^8.0.8",
-    "vite-plugin-minify": "^2.1.0"
+    "vite-plugin-html-inject": "^1.1.2",
+    "vite-plugin-singlefile": "^2.3.2"
   }
 }

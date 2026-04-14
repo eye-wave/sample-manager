@@ -6,7 +6,7 @@ export function renderNode(parent: HTMLElement, node: VFSNode): void {
   parent.insertAdjacentHTML("beforeend", SIDEBAR_FOLDER(node.displayName));
   parent.insertAdjacentHTML(
     "beforeend",
-    '<div class="tree-children" style="display:none"></div>',
+    /* HTML */ `<div class="tree-children" style="display:none"></div>`,
   );
 
   const section = parent.lastElementChild?.previousElementSibling;

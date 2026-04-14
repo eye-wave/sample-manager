@@ -116,13 +116,21 @@ body {
     flex-shrink: 0;
   }
 
+  #search_tags {
+    display: flex;
+    overflow: hidden;
+    max-width: 120px;
+  }
+
   input {
+    display: block;
     background: none;
     border: none;
     outline: none;
     color: var(--text-primary);
     font-size: 12px;
-    width: 100%;
+    min-width: 80px;
+    flex:1;
 
     &::placeholder {
       color: var(--text-muted);
@@ -134,8 +142,8 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: var(--accent-dim);
-  color: #c5caff;
+  background: var(--tag-bg);
+  color: var(--tag-text);
   font-size: 11px;
   padding: 2px 7px;
   border-radius: 4px;
