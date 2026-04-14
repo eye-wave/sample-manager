@@ -1,8 +1,10 @@
-use std::rc::Rc;
 use std::sync::Arc;
+use std::{path::Path, rc::Rc};
 
 use tao::window::Window;
 use wry::{WebView, WebViewBuilder};
+
+use crate::http::thumbnail_handler;
 
 use super::event::{EventRunner, EventSystem};
 
@@ -15,6 +17,11 @@ impl App {
     pub fn build() -> Self {
         let (event_runner, event_system) = EventSystem::build();
         let event_handle = Arc::new(event_system);
+
+        let cache_path: Arc<Path> = {
+            let guard = event_handle.app_state.read().unwrap();
+            Arc::from(guard.cache_path.as_ref())
+        };
 
         let window = tao::window::WindowBuilder::new()
             .with_title("My app")
@@ -33,13 +40,16 @@ impl App {
         } else {
             use crate::http::html_handler;
 
-            const PROTOCOL: &str = "sampols";
+            let protocol = "sampols".to_string();
 
             WebViewBuilder::new()
-                .with_custom_protocol(PROTOCOL.into(), html_handler)
-                .with_url(PROTOCOL.to_string() + "://_")
+                .with_custom_protocol(protocol.clone(), html_handler)
+                .with_url(protocol + "://_")
                 .with_devtools(true)
         }
+        .with_custom_protocol("athumb".to_string(), move |_, req| {
+            thumbnail_handler(cache_path.clone(), req)
+        })
         .with_ipc_handler(move |req| event_handle.receive(req, window_handle_cloned.clone()));
 
         let _webview = finish_webview(window_handle.clone(), webview);

@@ -13,7 +13,7 @@ use crate::state::AppState;
 pub struct EventSystem {
     webview_tx: Sender<IPCMessage>,
     event_loop: EventLoopProxy,
-    app_state: Arc<RwLock<AppState>>,
+    pub app_state: Arc<RwLock<AppState>>,
     ipc_commands: HashMap<&'static str, &'static dyn IPCCommand>,
 }
 

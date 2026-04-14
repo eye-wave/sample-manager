@@ -8,10 +8,10 @@ pub mod samples;
 
 pub struct AppState {
     _config_path: PathBuf,
-    _cache_path: PathBuf,
-    app_config: AppConfig,
-
+    pub cache_path: PathBuf,
     pub sample_registry: Arc<[FsSample]>,
+
+    app_config: AppConfig,
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -24,11 +24,11 @@ impl Default for AppState {
         const APP_NAME: &str = "SampleVault";
 
         let _config_path = dirs::config_local_dir().unwrap().join(APP_NAME);
-        let _cache_path = dirs::cache_dir().unwrap().join(APP_NAME);
+        let cache_path = dirs::cache_dir().unwrap().join(APP_NAME);
 
         Self {
             _config_path,
-            _cache_path,
+            cache_path,
             app_config: AppConfig::default(),
             sample_registry: Arc::new([]),
         }
@@ -46,7 +46,7 @@ impl AppState {
     }
 
     pub fn create_dirs(&self) {
-        fs::create_dir_all(&self._cache_path).ok();
+        fs::create_dir_all(&self.cache_path).ok();
         fs::create_dir_all(&self._config_path).ok();
     }
 

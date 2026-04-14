@@ -498,23 +498,14 @@ body {
   }
 }
 
-.wave-area {
-  flex: 1;
-  position: relative;
-  display: flex;
-  align-items: center;
-  padding: 0 8px;
-  overflow: hidden;
-}
-
-.wave-canvas-wrap {
+#waveform {
   width: 100%;
-  height: 72px;
-  position: relative;
-}
-
-canvas#waveCanvas {
-  display: block;
+  height: 80px;
+  background: linear-gradient(var(--wave-a),var(--wave-b));
+  mask-mode: luminance;
+  mask-image: linear-gradient( #000);
+  mask-size: 100% 80px;
+  mask-position: center;
 }
 
 .playhead {

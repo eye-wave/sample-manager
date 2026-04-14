@@ -1,7 +1,11 @@
+use ahash::AHasher;
+use std::hash::{Hash, Hasher};
+use std::path::{Path, PathBuf};
+
 use crate::ipc::{IPCBody, IPCMessage};
 use crate::ipc_commands;
 
-fn decode_audio(path: &str, downsample_factor: usize) -> Option<Vec<f32>> {
+fn decode_audio(path: &str, downsample_factor: usize) -> Option<Vec<u8>> {
     use std::io::Read;
     use std::process::{Command, Stdio};
 
@@ -10,7 +14,7 @@ fn decode_audio(path: &str, downsample_factor: usize) -> Option<Vec<f32>> {
         .arg(path)
         .args([
             "-f",
-            "f32le",
+            "u8",
             "-ac",
             "1",
             "-hide_banner",
@@ -23,66 +27,150 @@ fn decode_audio(path: &str, downsample_factor: usize) -> Option<Vec<f32>> {
         .spawn()
         .ok()?;
 
-    let mut stdout = child.stdout.take()?;
     let mut raw_bytes = Vec::new();
+    child.stdout.take()?.read_to_end(&mut raw_bytes).ok()?;
 
-    stdout.read_to_end(&mut raw_bytes).ok()?;
-
-    let status = child.wait().ok()?;
-    if !status.success() {
+    if !child.wait().ok()?.success() {
         return None;
     }
 
-    if raw_bytes.len() < std::mem::size_of::<f32>() {
+    if raw_bytes.is_empty() {
         return None;
     }
 
-    let samples: &[f32] = bytemuck::cast_slice(&raw_bytes);
+    let mut output = Vec::with_capacity(raw_bytes.len() / downsample_factor);
 
-    if samples.is_empty() {
-        return None;
-    }
-
-    let peak = samples
-        .iter()
-        .map(|s| s.abs())
-        .fold(0.0_f32, f32::max)
-        .max(1e-8);
-
-    let mut output = Vec::with_capacity(samples.len() / downsample_factor);
-
-    for i in (0..samples.len()).step_by(downsample_factor) {
-        output.push(samples[i] / peak);
+    for i in (0..raw_bytes.len()).step_by(downsample_factor) {
+        output.push(raw_bytes[i]);
     }
 
     Some(output)
 }
 
-fn encode_sample(x: f32) -> u8 {
-    let x = x.clamp(-1.0, 1.0);
-
-    // Skip 92 (backslash).
-    let i = (((x + 1.0) * 0.5) * 92.0).round() as u8;
-
-    let mut v = i + 32;
-    if v >= 92 {
-        v += 1;
+pub fn draw_waveform(outpath: &Path, samples: &[u8], width: u32) -> bool {
+    if samples.is_empty() || width < 1 {
+        return false;
     }
 
-    v
+    let slice_size = samples.len() / width as usize;
+    if slice_size == 0 {
+        return false;
+    }
+
+    let mut max_value = 0u8;
+
+    for x in 0..width {
+        let start_idx = x as usize * slice_size;
+        let end_idx = (start_idx + slice_size).min(samples.len());
+
+        let slice = stack_col(&samples[start_idx..end_idx]);
+
+        let mut local_max = 0u8;
+        for item in &slice {
+            if *item > local_max {
+                local_max = *item;
+            }
+        }
+
+        if local_max > max_value {
+            max_value = local_max;
+        }
+    }
+
+    let norm = ((max_value as f32) * 0.6) / 256.0;
+    let inv_norm = if norm != 0.0 { 1.0 / norm } else { 0.0 };
+
+    let bg_color = image::Rgb::from([0, 0, 0]);
+    let mut img = image::ImageBuffer::from_fn(width, 256, |_, _| bg_color);
+
+    for x in 0..width {
+        let start_idx = x as usize * slice_size;
+        let end_idx = (start_idx + slice_size).min(samples.len());
+
+        let slice = stack_col(&samples[start_idx..end_idx]);
+
+        for (y, s) in slice.iter().enumerate() {
+            let shade = (*s as f32 * inv_norm) as u8;
+            let color = image::Rgb::from([shade, shade, shade]);
+
+            img.put_pixel(x, y as u32, color);
+        }
+    }
+
+    img.save(outpath).is_ok()
+}
+
+fn stack_col(samples: &[u8]) -> [u8; 256] {
+    let half: i32 = 128;
+    let size: usize = 256;
+
+    let mut diff = [0i32; 257];
+
+    for &x in samples {
+        let x = x as i32;
+
+        if x > half {
+            let len = x - half;
+            diff[half as usize] += 1;
+            diff[(half + len) as usize] -= 1;
+        } else if x < half {
+            let len = half - x;
+            diff[(half - len + 1) as usize] += 1;
+            diff[(half + 1) as usize] -= 1;
+        }
+    }
+
+    let mut slice = [0u8; 256];
+    let mut cur: i32 = 0;
+
+    for i in 0..size {
+        cur += diff[i];
+        slice[i] = cur.min(255) as u8;
+    }
+
+    slice
+}
+
+fn hash_path(path: &str) -> u64 {
+    let mut hasher = AHasher::default();
+    path.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn thumbnail_path(hashed: u64, cache_path: &Path) -> PathBuf {
+    let basename = hashed.to_string() + ".webp";
+    cache_path.join(basename)
+}
+
+fn thumbnail_uri(hashed: u64) -> String {
+    format!("athumb://_/{hashed}.webp")
 }
 
 fn read_audio_file(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
     std::thread::spawn(move || {
-        if let Some(samples) = decode_audio(body.req.as_ref(), 4) {
-            let data: Vec<u8> = samples.iter().map(|&s| encode_sample(s)).collect();
+        let path = body.req.as_ref();
+        let guard = body.app_state.read().unwrap();
 
-            let payload = unsafe { str::from_utf8_unchecked(&data) }.to_string();
+        let hashed = hash_path(path);
+        let thumb_path = thumbnail_path(hashed, &guard.cache_path);
+        let uri = thumbnail_uri(hashed);
 
+        if thumb_path.exists() {
             body.webview_sender
                 .send(IPCMessage {
                     id: "read_audio",
-                    payload,
+                    payload: uri.clone(),
+                })
+                .ok();
+        }
+
+        if let Some(samples) = decode_audio(path, 3)
+            && draw_waveform(&thumb_path, &samples, 512)
+        {
+            body.webview_sender
+                .send(IPCMessage {
+                    id: "read_audio",
+                    payload: uri,
                 })
                 .ok();
         }
