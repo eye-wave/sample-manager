@@ -1,12 +1,14 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="stylesheet" href="/styles/__app__.scss" />
 
     <script src="/src/main.ts" type="module"></script>
 
-    <link rel="stylesheet" href="/styles/theme.scss" />
-    <link rel="stylesheet" href="/styles/styles.scss" />
+    <link rel='stylesheet' href="/styles/__app__.scss" />
+
+    <link rel='stylesheet' href="/styles/theme.scss" />
+    <link rel='stylesheet' href="/styles/settings.scss" />
+    <link rel='stylesheet' href="/styles/styles.scss" />
 
     <title>SampleVault — Audio Sample Manager</title>
   </head>
@@ -38,7 +40,51 @@
           <input id="search" placeholder="Search samples, tags, packs…" />
         </div>
 
-        <button class="topbar-btn">Settings</button>
+        <button id="conf_btn" class="topbar-btn"><load src="assets/icons/settings.svg" />Settings</button>
+
+        <dialog id="conf_dial">
+          <div class="dialog-shell">
+            <div class="dialog" role="dialog" aria-labelledby="settings-title">
+              <div class="dialog__header">
+                <p class="dialog__title" id="settings-title">
+                  <span class="dialog__title-icon">
+                    <load src="assets/icons/settings.svg" />
+                  </span>
+                  Settings
+                </p>
+                <button id="dialog_close" class="dialog__close-btn" aria-label="Close">
+                  <load src="assets/icons/close.svg" />
+                </button>
+              </div>
+
+              <nav class="dialog__nav" aria-label="Settings sections">
+                <button class="dialog__nav-tab dialog__nav-tab--active">General</button>
+                <button class="dialog__nav-tab">Appearance</button>
+                <button class="dialog__nav-tab">Notifications</button>
+              </nav>
+
+              <div class="dialog__body">
+                <p class="section-label">Preferences</p>
+
+                <div class="field">
+                  <div class="field__left">
+                    <span class="field__label">Accent colour</span>
+                  </div>
+                  <div class="color-row">
+                    <input type="color" class="color-swatch" value="#ffb7c5" id="color-pick" />
+                    <input type="text" class="color-hex" value="#ffb7c5" id="color-hex" style="width:80px;" />
+                  </div>
+                </div>
+              </div>
+
+              <div class="dialog__footer">
+                <button id="conf_reset" class="btn btn--ghost">Reset to defaults</button>
+                <button id="conf_save" class="btn btn--primary">Save changes</button>
+              </div>
+            </div>
+          </div>
+        </dialog>
+
       </div>
 
       <div class="main">

@@ -84,6 +84,8 @@ body {
   }
 
   &-btn {
+    display: flex;
+    gap: 4px;
     background: var(--bg-surface);
     border: 1px solid var(--border);
     color: var(--text-secondary);
