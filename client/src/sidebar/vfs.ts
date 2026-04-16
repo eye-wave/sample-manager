@@ -53,7 +53,7 @@ class VFSVisual {
   updateCount(count: number | null = null) {
     if (this.countEl) {
       const c = count;
-      this.countEl.nodeValue = c !== null ? String(c) : "";
+      this.countEl.nodeValue = c !== null ? (c as unknown as string) : "";
     }
   }
 
@@ -88,13 +88,13 @@ export class VFSNode implements VFSCNodeType {
   // since there is no parent to walk up to.
   static root(absolutePath: string): VFSNode {
     const node = new VFSNode(absolutePath);
-    node.displayName = absolutePath.split(/[\\/]/).filter(Boolean).at(-1) ?? absolutePath;
+    node.displayName = basename(absolutePath);
 
     return node;
   }
 
   static child(segment: string): VFSNode {
-    const name = segment.split(/[\\/]/).filter(Boolean).at(-1) ?? segment;
+    const name = basename(segment);
 
     const node = new VFSNode(name);
     node.displayName = name;

@@ -10,14 +10,17 @@ const root = VFSNode.root("__root__");
 invoke("start_sample_scan");
 
 const folders: string[] = await invoke("get_sample_folders").then((res) =>
-  res.split("\n").filter(Boolean),
+  res.split("\n").filter((e) => e),
 );
 
 for (const folder of folders) {
   const node = VFSNode.root(folder);
 
   const children: VFSChild[] = await invoke("read_dir", folder).then((res) =>
-    res.split("\n").filter(Boolean).map(parseVFS),
+    res
+      .split("\n")
+      .filter((e) => e)
+      .map(parseVFS),
   );
 
   node.extend(children);

@@ -1,5 +1,5 @@
 export function basename(name: string) {
-  return name.split(/[\\/]/).at(-1) ?? name;
+  return name.split(/[\\/]/).pop() ?? name;
 }
 
 export function escapeHTML(str: string) {

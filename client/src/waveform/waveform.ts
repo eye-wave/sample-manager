@@ -2,10 +2,10 @@ declare const playBtn: HTMLButtonElement;
 declare const waveform: HTMLImageElement;
 
 let playing = false;
-playBtn.addEventListener("click", function () {
+playBtn.onclick = () => {
   playing = !playing;
-  this.textContent = playing ? "⏸" : "▶";
-});
+  playBtn.textContent = playing ? "⏸" : "▶";
+};
 
 listen("read_audio", (uri) => {
   waveform.style.maskImage = `url(${uri})`;

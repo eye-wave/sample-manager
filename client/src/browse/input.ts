@@ -48,7 +48,7 @@ export class TagInput {
         this.tags.reduce((q, t) => q + t + ",", "") + query,
       );
 
-      const lines = text.split("\n").filter(Boolean);
+      const lines = text.split("\n").filter((e) => e);
 
       for (let i = 0; i < POOL_SIZE; i++) {
         if (i < lines.length) {

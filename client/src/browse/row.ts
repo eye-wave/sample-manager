@@ -68,7 +68,7 @@ export class BrowseRow {
     this.setLiked(liked);
     this.labelEl.nodeValue = name;
     this.typeEl.nodeValue = bpm ? "Loop" : "One-shot";
-    this.bpmEl.nodeValue = bpm ? String(bpm) : "-";
+    this.bpmEl.nodeValue = bpm ? (bpm as unknown as string) : "-";
 
     const newTags = tags.join(",");
     if (this.tagsEl.dataset.tags !== newTags) {

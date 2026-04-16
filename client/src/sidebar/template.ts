@@ -11,8 +11,10 @@ export const SIDEBAR_FOLDER = (name: string) =>
     </div>
   </div>`;
 
-const ICON_OTHER = 255;
-const itemIcons: Record<number, string> = { 1: "♪", 2: "🎹", 3: "🛠️", [ICON_OTHER]: "📄" };
+const ICON_OTHER = 254;
+
+const itemIcons: Record<number, string> = ["♪", "🎹", "🛠️"];
+itemIcons[ICON_OTHER] = "📄";
 
 export const SIDEBAR_ITEM = (name: string, ftype: number) =>
-  /* HTML */ `<div class="tree-section item">${itemIcons[ftype] ?? itemIcons[ICON_OTHER]} ${name}</div>`;
+  /* HTML */ `<div class="tree-section item">${itemIcons[ftype - 1] ?? itemIcons[ICON_OTHER]} ${name}</div>`;

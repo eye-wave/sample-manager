@@ -8,7 +8,10 @@ export async function loadNode(node: VFSNode): Promise<void> {
   node.loaded = true;
 
   const children: VFSChild[] = await invoke("read_dir", node.path()).then((res) =>
-    res.split("\n").filter(Boolean).map(parseVFS),
+    res
+      .split("\n")
+      .filter((e) => e)
+      .map(parseVFS),
   );
 
   node.extend(children);
