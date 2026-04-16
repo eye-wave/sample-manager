@@ -16,6 +16,8 @@ async function main() {
 
   output = renameCssVariables(output);
 
+  output = output.replace("\n/*$vite$:1*/", "").replace(" crossorigin type=module", "");
+
   await writeFile("dist/index.html", output);
 }
 
