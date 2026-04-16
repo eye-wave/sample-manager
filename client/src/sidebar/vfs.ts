@@ -10,146 +10,152 @@ export interface VFSCNodeType {
   readonly nodeType: number;
 }
 
-export class VFSFile implements VFSCNodeType {
-  readonly nodeType = FileType;
+type VFSFile = {
+  nodeType: typeof FileType;
+  name: string;
+  ftype: number;
+};
 
-  constructor(
-    public name: string,
-    public ftype: number,
-  ) {}
+type VFSVisual = ReturnType<typeof createVisualNode>;
+const createVisualNode = (section: Element) => {
+  const labelEl = section.querySelector<HTMLElement>(".tree-label");
+  const childrenEl = section.nextElementSibling as HTMLElement | null;
 
-  public basename(): string {
-    return basename(this.name);
-  }
-}
+  const arrowClassList = section.querySelector(".tree-arrow")?.classList ?? null;
 
-class VFSVisual {
-  labelEl: HTMLElement | null = null;
-  countEl: Text | null = null;
-  iconEl: Text | null = null;
+  const countSpan = section.querySelector<HTMLElement>(".tree-count");
+  const countEl = countSpan ? document.createTextNode("") : null;
+  if (countSpan && countEl) countSpan.appendChild(countEl);
 
-  childrenEl: HTMLElement | null = null;
-  arrowClassList: DOMTokenList | null = null;
+  const iconSpan = section.querySelector<HTMLElement>(".tree-icon");
+  const iconEl = iconSpan ? document.createTextNode(FOLDER_CLOSED) : null;
+  if (iconSpan && iconEl) iconSpan.appendChild(iconEl);
 
-  constructor(section: Element) {
-    this.labelEl = section.querySelector<HTMLElement>(".tree-label");
-    this.childrenEl = section.nextElementSibling as HTMLElement | null;
+  return {
+    labelEl,
+    childrenEl,
+    arrowClassList,
+    countEl,
+    iconEl,
 
-    this.arrowClassList = section.querySelector(".tree-arrow")?.classList ?? null;
+    updateCount(count: number | null = null) {
+      if (countEl) countEl.nodeValue = count != null ? String(count) : "";
+    },
 
-    const countSpan = section.querySelector<HTMLElement>(".tree-count");
-    if (countSpan) {
-      this.countEl = document.createTextNode("");
-      countSpan.appendChild(this.countEl);
-    }
+    toggle() {
+      arrowClassList?.toggle("open");
 
-    const iconSpan = section.querySelector<HTMLElement>(".tree-icon");
-    if (iconSpan) {
-      this.iconEl = document.createTextNode(FOLDER_CLOSED);
-      iconSpan.appendChild(this.iconEl);
-    }
-  }
+      const open = arrowClassList?.contains("open");
 
-  updateCount(count: number | null = null) {
-    if (this.countEl) {
-      const c = count;
-      this.countEl.nodeValue = c !== null ? (c as unknown as string) : "";
-    }
-  }
+      if (iconEl) iconEl.nodeValue = open ? FOLDER_OPEN : FOLDER_CLOSED;
+      if (childrenEl) {
+        childrenEl.style.display = open ? "block" : "none";
+      }
+    },
+  };
+};
 
-  toggle() {
-    this.arrowClassList?.toggle("open");
+export type VFSNode = {
+  nodeType: typeof NodeType;
+  name: string;
+  parent: null | VFSNode;
+  visual: null | VFSVisual;
+  loaded: boolean;
+  displayName: string;
+  children: VFSChild[];
+  //
+  path: () => string;
+  count: () => null | number;
+  add: (child: VFSChild) => void;
+  extend: (children: VFSChild[]) => void;
+  bind: (section: Element) => void;
+  updateCount: () => void;
+  propagateCount: () => void;
+  toggle: () => void;
+};
 
-    const isToggledOn = this.arrowClassList?.contains("open");
+export const VFSNode = {
+  root(path: string) {
+    const n = createNode(path);
+    n.displayName = basename(path);
+    return n;
+  },
 
-    if (this.iconEl) this.iconEl.nodeValue = isToggledOn ? FOLDER_OPEN : FOLDER_CLOSED;
-    if (this.childrenEl) this.childrenEl.style.display = isToggledOn ? "block" : "none";
-  }
-}
-
-export class VFSNode implements VFSCNodeType {
-  readonly nodeType = NodeType;
-
-  private name: string;
-  private parent: VFSNode | null = null;
-
-  public visual: VFSVisual | null = null;
-
-  public loaded: boolean = false;
-  public displayName: string = "";
-  public children: VFSChild[] = [];
-
-  // Use VFSNode.root() for top-level folders, VFSNode.child() for read_dir entries.
-  private constructor(name: string) {
-    this.name = name;
-  }
-
-  // Preserves the full absolute path as the name — path() returns it as-is
-  // since there is no parent to walk up to.
-  static root(absolutePath: string): VFSNode {
-    const node = new VFSNode(absolutePath);
-    node.displayName = basename(absolutePath);
-
-    return node;
-  }
-
-  static child(segment: string): VFSNode {
+  child(segment: string) {
     const name = basename(segment);
+    const n = createNode(name);
+    n.displayName = name;
+    return n;
+  },
 
-    const node = new VFSNode(name);
-    node.displayName = name;
+  file(name: string, ftype: number): VFSFile {
+    return { nodeType: FileType, name, ftype };
+  },
+};
 
-    return node;
-  }
+const createNode = (name: string): VFSNode => {
+  const node: VFSNode = {
+    nodeType: NodeType,
+    name,
+    parent: null,
+    visual: null,
+    loaded: false,
+    displayName: "",
+    children: [],
 
-  path(): string {
-    if (this.parent === null || this.parent.parent === null) {
-      return this.name;
-    }
-    const parts: string[] = [];
+    path() {
+      if (!node?.parent?.parent) return node.name;
 
-    let node: VFSNode = this;
-    while (node.parent !== null && node.parent.parent !== null) {
-      parts.unshift(node.name);
-      node = node.parent;
-    }
-    return node.name + "/" + parts.join("/");
-  }
+      const parts: string[] = [];
+      let n = node;
 
-  count(): number | null {
-    const total = this.children.reduce((sum, c) => {
-      if (c.nodeType === FileType) return sum + 1;
-      return sum + (c.count() ?? FileType);
-    }, 0);
-    return this.loaded && total === 0 ? 0 : total === 0 ? null : total;
-  }
+      while (n.parent?.parent) {
+        parts.unshift(n.name);
+        n = n.parent;
+      }
 
-  add(child: VFSChild) {
-    if (child.nodeType === NodeType) child.parent = this;
-    this.children.push(child);
-  }
+      return n.name + "/" + parts.join("/");
+    },
 
-  extend(children: VFSChild[]) {
-    for (const child of children) this.add(child);
-  }
+    count() {
+      const total = node.children.reduce(
+        (s: number, c: VFSChild) =>
+          c.nodeType === FileType ? s + 1 : s + (c.count() ?? FileType),
+        0,
+      );
 
-  bind(section: Element) {
-    this.visual = new VFSVisual(section);
-  }
+      return node.loaded && total === 0 ? 0 : total === 0 ? null : total;
+    },
 
-  updateCount() {
-    this.visual?.updateCount(this.count());
-  }
+    add(child) {
+      if (child.nodeType === NodeType) child.parent = node;
+      node.children.push(child);
+    },
 
-  propagateCount() {
-    let node: VFSNode = this;
-    while (node.parent !== null) {
-      node = node.parent;
-      node.updateCount();
-    }
-  }
+    extend(children) {
+      for (const c of children) node.add(c);
+    },
 
-  toggle() {
-    this.visual?.toggle();
-  }
-}
+    bind(section: Element) {
+      node.visual = createVisualNode(section);
+    },
+
+    updateCount() {
+      node.visual?.updateCount(node.count());
+    },
+
+    propagateCount() {
+      let n = node;
+      while (n.parent) {
+        n = n.parent;
+        n.updateCount();
+      }
+    },
+
+    toggle() {
+      node.visual?.toggle();
+    },
+  };
+
+  return node;
+};

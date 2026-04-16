@@ -1,87 +1,78 @@
-export class BrowseRow {
-  el: HTMLElement;
+export type BrowseRow = ReturnType<typeof BrowseRow>;
+export const BrowseRow = (onSelect?: (p: string) => void, onLike?: () => void) => {
+  const el = document.createElement("div");
+  el.className = "list-item hidden";
 
-  private favElText: Text;
-  private favEl: HTMLElement;
-  private labelEl: Text;
-  private typeEl: Text;
-  private bpmEl: Text;
+  el.innerHTML = /* HTML */ `
+    <div class="item-name">
+      <span class="item-fav"></span>
+      <span class="item-label"></span>
+    </div>
+    <div class="item-type"></div>
+    <div class="item-bpm"></div>
+    <div class="item-tags"></div>
+  `;
 
-  tagsEl: HTMLElement;
+  const favElText = document.createTextNode("");
+  const labelEl = document.createTextNode("");
+  const typeEl = document.createTextNode("");
+  const bpmEl = document.createTextNode("");
 
-  private isLiked = false;
-  private path: string | null = null;
+  const favEl = el.querySelector(".item-fav") as HTMLSpanElement;
+  const tagsEl = el.querySelector(".item-tags") as HTMLDivElement;
 
-  constructor(onSelect?: (path: string) => void, onLike?: () => void) {
-    this.el = document.createElement("div");
-    this.el.className = "list-item hidden";
+  el.querySelector(".item-label")?.appendChild(labelEl);
+  el.querySelector(".item-type")?.appendChild(typeEl);
+  el.querySelector(".item-bpm")?.appendChild(bpmEl);
 
-    this.el.innerHTML = /* HTML */ `
-      <div class="item-name">
-        <span class="item-fav"></span><span class="item-label"></span>
-      </div>
-      <div class="item-type"></div>
-      <div class="item-bpm"></div>
-      <div class="item-tags"></div>
-    `;
+  favEl?.appendChild(favElText);
 
-    this.favElText = document.createTextNode("");
-    this.labelEl = document.createTextNode("");
-    this.typeEl = document.createTextNode("");
-    this.bpmEl = document.createTextNode("");
+  let isLiked = false;
+  let path: string | null = null;
 
-    // biome-ignore-start lint/style/noNonNullAssertion: this can't fail
-    this.favEl = this.el.querySelector(".item-fav")!;
-    this.el.querySelector(".item-label")!.appendChild(this.labelEl);
-    this.el.querySelector(".item-type")!.appendChild(this.typeEl);
-    this.el.querySelector(".item-bpm")!.appendChild(this.bpmEl);
+  const setLiked = (liked: boolean) => {
+    favElText.nodeValue = liked ? "♥" : "♡";
+    if (favEl) favEl.className = `item-fav ${liked ? "liked" : ""}`;
+    isLiked = liked;
+  };
 
-    this.tagsEl = this.el.querySelector(".item-tags")!;
-    // biome-ignore-end lint/style/noNonNullAssertion: this can't fail
+  const setPath = (p: string) => (path = p);
 
-    this.favEl.appendChild(this.favElText);
-    this.hide();
+  const update = (name: string, bpm: number | null, liked: boolean, tags: string[] = []) => {
+    setLiked(liked);
 
-    this.el.onclick = () => {
-      this.path && onSelect?.(this.path);
-    };
+    labelEl.nodeValue = name;
+    typeEl.nodeValue = bpm ? "Loop" : "One-shot";
+    bpmEl.nodeValue = bpm ? String(bpm) : "-";
 
-    this.favEl.onclick = (e) => {
-      this.setLiked(!this.isLiked);
-      onLike?.();
-
-      e.stopPropagation();
-    };
-  }
-
-  private setLiked(liked: boolean) {
-    this.favElText.nodeValue = liked ? "♥" : "♡";
-    this.favEl.className = `item-fav ${liked ? "liked" : ""}`;
-    this.isLiked = liked;
-  }
-
-  setPath(path: string) {
-    this.path = path;
-  }
-
-  update(name: string, bpm: number | null, liked: boolean, tags: string[] = []) {
-    this.setLiked(liked);
-    this.labelEl.nodeValue = name;
-    this.typeEl.nodeValue = bpm ? "Loop" : "One-shot";
-    this.bpmEl.nodeValue = bpm ? (bpm as unknown as string) : "-";
-
-    const newTags = tags.join(",");
-    if (this.tagsEl.dataset.tags !== newTags) {
-      this.tagsEl.dataset.tags = newTags;
-      this.tagsEl.innerHTML = tags
-        .map((t) => /* HTML */ `<span class="tag">${t}</span>`)
-        .join("");
+    const joined = tags.join(",");
+    if (tagsEl.dataset.tags !== joined) {
+      tagsEl.dataset.tags = joined;
+      tagsEl.innerHTML = tags.map((t) => /* HTML */ `<span class="tag">${t}</span>`).join("");
     }
 
-    this.el.style.display = "";
-  }
+    el.style.display = "";
+  };
 
-  hide() {
-    this.el.style.display = "none";
-  }
-}
+  const hide = () => {
+    el.style.display = "none";
+  };
+
+  el.onclick = () => path && onSelect?.(path);
+
+  favEl.onclick = (e) => {
+    setLiked(!isLiked);
+    onLike?.();
+    e.stopPropagation();
+  };
+
+  hide();
+
+  return {
+    el,
+    update,
+    hide,
+    setPath,
+    setLiked,
+  };
+};

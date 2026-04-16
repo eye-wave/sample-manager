@@ -11,10 +11,10 @@ function onSelect(file: string) {
   invoke("read_audio_file", file);
 }
 
-const pool: BrowseRow[] = Array.from({ length: POOL_SIZE }, () => new BrowseRow(onSelect));
+const pool: BrowseRow[] = Array.from({ length: POOL_SIZE }, () => BrowseRow(onSelect));
 const fragment = document.createDocumentFragment();
 
-new TagInput(search, search_tags, pool);
+TagInput(search, search_tags, pool);
 
 pool.forEach((item) => {
   fragment.appendChild(item.el);

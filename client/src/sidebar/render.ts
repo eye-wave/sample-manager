@@ -1,3 +1,4 @@
+import { basename } from "../helpers";
 import { loadNode } from "./lazy-load";
 import { SIDEBAR_FOLDER, SIDEBAR_ITEM } from "./template";
 import { FileType, type VFSNode } from "./vfs";
@@ -31,7 +32,7 @@ export function renderNode(parent: HTMLElement, node: VFSNode): void {
         if (child.nodeType === FileType) {
           node.visual.childrenEl.insertAdjacentHTML(
             "beforeend",
-            SIDEBAR_ITEM(child.basename(), child.ftype),
+            SIDEBAR_ITEM(basename(child.name), child.ftype),
           );
         } else {
           renderNode(node.visual.childrenEl, child);

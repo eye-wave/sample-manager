@@ -1,3 +1,4 @@
+import { basename } from "../helpers";
 import { parseVFS } from "./parse";
 import { renderNode } from "./render";
 import { SIDEBAR_ITEM } from "./template";
@@ -23,7 +24,7 @@ export async function loadNode(node: VFSNode): Promise<void> {
       if (child.nodeType === FileType) {
         node.visual.childrenEl.insertAdjacentHTML(
           "beforeend",
-          SIDEBAR_ITEM(child.basename(), child.ftype),
+          SIDEBAR_ITEM(basename(child.name), child.ftype),
         );
       } else {
         renderNode(node.visual.childrenEl, child);
