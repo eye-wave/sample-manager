@@ -36,20 +36,15 @@ fn get_sample_folders(body: IPCBody) -> Option<Cow<'static, [u8]>> {
 
 fn start_sample_scan(body: IPCBody) -> Option<Cow<'static, [u8]>> {
     let thread_state = body.app_state.clone();
-    let dirs = body
-        .app_state
-        .read()
-        .ok()?
-        .get_config()
-        .tracked_dirs
-        .clone();
+    let guard = body.app_state.read().ok()?;
+    let dirs = guard.get_config().tracked_dirs.clone();
 
     if dirs.is_empty() {
         return None;
     }
 
     std::thread::spawn(move || {
-        process_directories(dirs, thread_state).ok();
+        process_directories(dirs, thread_state, body.webview_sender).ok();
     });
 
     Some(Cow::Borrowed(b"Ok"))

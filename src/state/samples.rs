@@ -1,10 +1,12 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::Sender;
 use std::sync::{Arc, RwLock};
 
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 
+use crate::ipc::IPCMessage;
 use crate::state::AppState;
 use crate::state::samples::tagger::tag_string;
 
@@ -73,11 +75,27 @@ impl FsSample {
 pub fn process_directories(
     dirs: HashSet<PathBuf>,
     app_state: Arc<RwLock<AppState>>,
+    sender: Sender<IPCMessage>,
 ) -> Result<(), ()> {
+    use std::time::{Duration, Instant};
+
     let mut sample_registry = Vec::<FsSample>::new();
     let mut stack: Vec<PathBuf> = dirs.into_iter().collect();
 
+    let mut time = Instant::now();
+
     while let Some(current_dir) = stack.pop() {
+        if time.elapsed() >= Duration::from_millis(398) {
+            sender
+                .send(IPCMessage {
+                    id: "s_tick",
+                    payload: sample_registry.len().to_string(),
+                })
+                .ok();
+
+            time = Instant::now();
+        }
+
         let entries = match std::fs::read_dir(&current_dir) {
             Ok(e) => e,
             Err(_) => continue,
@@ -93,6 +111,13 @@ pub fn process_directories(
             }
         }
     }
+
+    sender
+        .send(IPCMessage {
+            id: "s_tick",
+            payload: sample_registry.len().to_string(),
+        })
+        .ok();
 
     println!("SCAN DONE!");
 

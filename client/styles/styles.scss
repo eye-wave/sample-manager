@@ -484,16 +484,6 @@ body {
   mask-position: center;
 }
 
-.playhead {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--accent);
-  left: 28%;
-  pointer-events: none;
-}
-
 .play-btn {
   width: 36px;
   height: 36px;

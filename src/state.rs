@@ -1,4 +1,6 @@
-use std::{collections::HashSet, fs, path::PathBuf, sync::Arc};
+use std::collections::HashSet;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
@@ -28,16 +30,18 @@ impl Default for AppState {
 
         Self {
             _config_path,
+
             cache_path,
-            app_config: AppConfig::default(),
             sample_registry: Arc::new([]),
+
+            app_config: AppConfig::default(),
         }
     }
 }
 
 impl AppState {
     pub fn load(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let conf = fs::read(self.config_file())?;
+        let conf = std::fs::read(self.config_file())?;
         let conf: AppConfig = toml::from_slice(&conf)?;
 
         self.app_config = conf;
@@ -46,8 +50,8 @@ impl AppState {
     }
 
     pub fn create_dirs(&self) {
-        fs::create_dir_all(&self.cache_path).ok();
-        fs::create_dir_all(&self._config_path).ok();
+        std::fs::create_dir_all(&self.cache_path).ok();
+        std::fs::create_dir_all(&self._config_path).ok();
     }
 
     pub fn update_config<F: FnMut(&mut AppConfig)>(&mut self, mut cb: F) {

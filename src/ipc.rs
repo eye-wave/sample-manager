@@ -49,7 +49,6 @@ pub struct IPCBody {
     pub webview_sender: mpsc::Sender<IPCMessage>,
 }
 
-#[derive(Debug)]
 pub struct IPCMessage {
     pub id: &'static str,
     pub payload: String,

@@ -1794,6 +1794,7 @@ version = "0.1.0"
 dependencies = [
  "ahash",
  "aho-corasick",
+ "base64",
  "bytemuck",
  "dirs",
  "fuzzy-matcher",

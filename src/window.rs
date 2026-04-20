@@ -4,8 +4,6 @@ use std::{path::Path, rc::Rc};
 use tao::window::Window;
 use wry::{WebView, WebViewBuilder};
 
-use crate::http::thumbnail_handler;
-
 use super::event::{EventRunner, EventSystem};
 
 pub struct App {
@@ -48,7 +46,7 @@ impl App {
                 .with_devtools(true)
         }
         .with_custom_protocol("athumb".to_string(), move |_, req| {
-            thumbnail_handler(cache_path.clone(), req)
+            crate::http::thumbnail_handler(cache_path.clone(), req)
         })
         .with_ipc_handler(move |req| event_handle.receive(req, window_handle_cloned.clone()));
 

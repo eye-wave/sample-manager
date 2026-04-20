@@ -57,22 +57,13 @@
                 </button>
               </div>
 
-              <nav class="dialog__nav" aria-label="Settings sections">
-                <button class="dialog__nav-tab dialog__nav-tab--active">General</button>
-                <button class="dialog__nav-tab">Appearance</button>
-                <button class="dialog__nav-tab">Notifications</button>
-              </nav>
-
               <div class="dialog__body">
                 <p class="section-label">Preferences</p>
 
                 <div class="field">
-                  <div class="field__left">
-                    <span class="field__label">Accent colour</span>
-                  </div>
+                  <span class="field__label">FFmpeg path</span>
                   <div class="color-row">
-                    <input type="color" class="color-swatch" value="#ffb7c5" id="color-pick" />
-                    <input type="text" class="color-hex" value="#ffb7c5" id="color-hex" style="width:80px;" />
+                    <input type="text" />
                   </div>
                 </div>
               </div>
@@ -139,7 +130,7 @@
       <div class="bottombar">
         <div class="bb-item">
           <div class="bb-dot"></div>
-          <span>1,269</span> samples
+          <span id="s_total"></span> samples
         </div>
         <div class="bb-sep"></div>
         <div class="bb-item">Playback mode: <span>Loop</span></div>

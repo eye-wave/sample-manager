@@ -97,7 +97,8 @@ pub fn draw_waveform(outpath: &Path, samples: &[u8], width: u32) -> bool {
         }
     }
 
-    img.save(outpath).is_ok()
+    img.save_with_format(outpath, image::ImageFormat::WebP)
+        .is_ok()
 }
 
 fn stack_col(samples: &[u8]) -> [u8; 256] {
@@ -131,19 +132,21 @@ fn stack_col(samples: &[u8]) -> [u8; 256] {
     slice
 }
 
-fn hash_path(path: &str) -> u64 {
+fn hash_path(path: &str) -> String {
+    use base64::Engine;
+
     let mut hasher = AHasher::default();
     path.hash(&mut hasher);
-    hasher.finish()
+
+    base64::prelude::BASE64_URL_SAFE_NO_PAD.encode(hasher.finish().to_be_bytes())
 }
 
-fn thumbnail_path(hashed: u64, cache_path: &Path) -> PathBuf {
-    let basename = hashed.to_string() + ".webp";
-    cache_path.join(basename)
+fn thumbnail_path(hashed: &str, cache_path: &Path) -> PathBuf {
+    cache_path.join(hashed)
 }
 
-fn thumbnail_uri(hashed: u64) -> String {
-    format!("athumb://_/{hashed}.webp")
+fn thumbnail_uri(hashed: &str) -> String {
+    format!("athumb://_/{hashed}")
 }
 
 fn read_audio_file(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
@@ -152,8 +155,8 @@ fn read_audio_file(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
         let guard = body.app_state.read().unwrap();
 
         let hashed = hash_path(path);
-        let thumb_path = thumbnail_path(hashed, &guard.cache_path);
-        let uri = thumbnail_uri(hashed);
+        let thumb_path = thumbnail_path(&hashed, &guard.cache_path);
+        let uri = thumbnail_uri(&hashed);
 
         if thumb_path.exists() {
             body.webview_sender

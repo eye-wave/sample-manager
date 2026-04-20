@@ -5,6 +5,8 @@ declare const waveform: HTMLImageElement;
 declare const preview_label: HTMLSpanElement;
 declare const preview_tags: HTMLDivElement;
 
+declare const s_total: HTMLSpanElement;
+
 let playing = false;
 playBtn.onclick = () => {
   playing = !playing;
@@ -29,4 +31,9 @@ function createPreview() {
 
 export const PreviewHandler = createPreview();
 
-listen("read_audio", (uri) => (PreviewHandler.img = uri));
+listen("read_audio", (uri) => {
+  console.log("Got: ", uri);
+  PreviewHandler.img = uri;
+});
+
+listen("s_tick", (n) => (s_total.textContent = n));
