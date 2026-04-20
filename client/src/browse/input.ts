@@ -1,6 +1,11 @@
-import { basename, escapeHTML } from "../helpers";
+import { basename } from "../helpers";
 import { POOL_SIZE } from "./browse";
 import type { BrowseRow } from "./row";
+
+type FSSample = {
+  path: string;
+  tags: string[];
+};
 
 export const TagInput = (
   input: HTMLInputElement,
@@ -10,13 +15,13 @@ export const TagInput = (
   const tags: string[] = [];
 
   const addTag = (tag: string) => {
+    if (!tag) return;
     tags.push(tag);
 
     const item = document.createElement("span");
-    item.className = "tag-chip";
 
-    const label = escapeHTML(tag);
-    item.innerHTML = label + '<span class="chip-x">x</span>';
+    item.className = "tag x";
+    item.textContent = tag + " x";
 
     item.onclick = () => removeTag(+(item.dataset.i ?? 0));
 
@@ -56,16 +61,22 @@ export const TagInput = (
     }
 
     const text = await invoke("search_for_sample", tags.reduce((q, t) => q + t + ",", "") + q);
-
-    const lines = text.split("\n").filter(Boolean);
+    const lines: FSSample[] = (() => {
+      try {
+        return JSON.parse(text);
+      } catch (_) {
+        return [];
+      }
+    })();
 
     for (let i = 0; i < POOL_SIZE; i++) {
       const row = pool[i];
 
       if (i < lines.length) {
-        const path = lines[i];
-        row.update(basename(path), null, false, []);
-        row.setPath(path);
+        const item = lines[i];
+
+        row.update(basename(item.path), null, false, item.tags);
+        row.setPath(item.path);
       } else {
         row.hide();
       }

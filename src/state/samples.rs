@@ -6,6 +6,9 @@ use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 
 use crate::state::AppState;
+use crate::state::samples::tagger::tag_string;
+
+mod tagger;
 
 pub const SAMPLE_EXTENSIONS: &[&str] = &[
     "aac", "aiff", "caf", "flac", "mid", "midi", "mp2", "mp3", "mp4", "mpeg", "ogg", "opus", "wav",
@@ -22,7 +25,7 @@ fn is_sample_file(path: &Path) -> bool {
 pub struct FsSample {
     pub path: PathBuf,
     search_str: Arc<str>,
-    tags: Vec<Arc<str>>,
+    pub tags: Vec<&'static str>,
 }
 
 impl FsSample {
@@ -37,17 +40,17 @@ impl FsSample {
             .join(" ")
             .to_lowercase();
 
+        let tags = tag_string(&path.to_string_lossy());
+
         Self {
             path,
             search_str: Arc::from(search_str),
-            tags: vec![],
+            tags: tags.iter().cloned().collect(),
         }
     }
 
     pub fn score(&self, query: &str, tags: &[&str], matcher: &SkimMatcherV2) -> i64 {
-        let has_all = tags
-            .iter()
-            .all(|t| self.tags.iter().any(|tag| *t == tag.as_ref()));
+        let has_all = tags.iter().all(|t| self.tags.contains(t));
 
         if !has_all {
             return 0;
@@ -56,6 +59,14 @@ impl FsSample {
         matcher
             .fuzzy_match(&self.search_str, query)
             .unwrap_or(i64::MIN)
+    }
+
+    pub fn serialize(&self) -> String {
+        format!(
+            r#"{{"path":"{}","tags":{:?}}}"#,
+            self.path.to_string_lossy(),
+            self.tags
+        )
     }
 }
 
@@ -82,6 +93,8 @@ pub fn process_directories(
             }
         }
     }
+
+    println!("SCAN DONE!");
 
     let mut guard = app_state.write().map_err(|_| ())?;
     guard.sample_registry = Arc::from(sample_registry);

@@ -10,3 +10,7 @@ export function escapeHTML(str: string) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
+
+export function renderTags<E extends HTMLElement>(tagsEl: E, tags: string[]) {
+  tagsEl.innerHTML = tags.map((t) => /* HTML */ `<span class="tag">${t}</span>`).join("");
+}

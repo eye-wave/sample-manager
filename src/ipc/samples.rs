@@ -78,11 +78,11 @@ fn search_for_sample(body: IPCBody) -> Option<Cow<'static, [u8]>> {
     let found = &scored[..100.min(scored.len())];
     let files = found
         .iter()
-        .map(|(f, _)| f.path.to_string_lossy())
-        .collect::<Vec<_>>()
-        .join("\n");
+        .map(|(f, _)| f.serialize())
+        .intersperse(",\n".into())
+        .collect::<String>();
 
-    files.finish()
+    format!("[{files}]").finish()
 }
 
 ipc_commands! {
