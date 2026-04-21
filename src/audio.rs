@@ -117,4 +117,12 @@ impl AudioPlayer {
     pub fn playback_state(&self) -> PlaybackState {
         self.handle.playback_state()
     }
+
+    pub fn get_volume(&self) -> f32 {
+        self.handle.get_volume()
+    }
+
+    pub fn set_volume(&self, volume: f32) {
+        self.handle.set_volume(volume)
+    }
 }

@@ -3,6 +3,8 @@ use std::sync::{
     atomic::{AtomicU8, AtomicU32, Ordering},
 };
 
+use atomic_float::AtomicF32;
+
 bitflags::bitflags! {
     #[derive(Clone, Copy)]
     pub struct PlayerFlags: u8 {
@@ -39,8 +41,10 @@ impl PlaybackState {
 
 pub struct SharedAudioState {
     flags: AtomicU8,
+
     pub position_millis: AtomicU32,
     pub seek_target: AtomicU32,
+    pub volume: AtomicF32,
 }
 
 impl SharedAudioState {
@@ -49,6 +53,7 @@ impl SharedAudioState {
             flags: AtomicU8::new(PlayerFlags::PLAYING.bits()),
             seek_target: AtomicU32::new(0),
             position_millis: AtomicU32::new(0),
+            volume: AtomicF32::new(1.0),
         })
     }
 
@@ -104,5 +109,13 @@ impl PlayerHandle {
 
     pub fn playback_state(&self) -> PlaybackState {
         PlaybackState::from_flags(self.shared.load_flags())
+    }
+
+    pub fn get_volume(&self) -> f32 {
+        self.shared.volume.load(Ordering::Relaxed)
+    }
+
+    pub fn set_volume(&self, volume: f32) {
+        self.shared.volume.store(volume, Ordering::Release);
     }
 }

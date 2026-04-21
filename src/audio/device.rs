@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use cpal::traits::{DeviceTrait, HostTrait};
 use cpal::{Stream, SupportedStreamConfig};
@@ -97,9 +98,11 @@ where
         return;
     }
 
+    let volume = shared_state.volume.load(Ordering::SeqCst);
+
     for s in data.iter_mut() {
         *s = match rb_cons.try_pop() {
-            Some(f) => S::from_sample(f),
+            Some(f) => S::from_sample(f * volume),
             None => S::EQUILIBRIUM,
         };
     }
