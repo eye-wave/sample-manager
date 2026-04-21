@@ -1,26 +1,29 @@
-use crate::ipc::IPCBody;
+use crate::ipc::{IPCBody, IPCResponse, ok};
 use crate::ipc_commands;
 
-fn close_window(_body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
+fn close_window(_body: IPCBody) -> IPCResponse {
     std::process::exit(0);
 }
 
-fn minimize_window(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
+fn minimize_window(body: IPCBody) -> IPCResponse {
     let w = body.window_handle.as_ref();
     w.set_minimized(true);
-    None
+
+    ok()
 }
 
-fn maximize_window(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
+fn maximize_window(body: IPCBody) -> IPCResponse {
     let w = body.window_handle.as_ref();
     w.set_maximized(!w.is_maximized());
-    None
+
+    ok()
 }
 
-fn drag_window(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
+fn drag_window(body: IPCBody) -> IPCResponse {
     let w = body.window_handle.as_ref();
-    w.drag_window().ok();
-    None
+    w.drag_window()?;
+
+    ok()
 }
 
 ipc_commands! {

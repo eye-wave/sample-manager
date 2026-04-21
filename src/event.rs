@@ -65,11 +65,16 @@ impl EventSystem {
                 window_handle: window_handle.clone(),
                 app_state: self.app_state.clone(),
             };
-            if let Some(bytes) = cmd.respond(body) {
-                self.send(call_id, bytes).ok();
-            } else {
-                self.send_empty(call_id).ok();
-            }
+
+            match cmd.respond(body) {
+                Ok(bytes) => {
+                    self.send(call_id, bytes).ok();
+                }
+                Err(err) => {
+                    eprintln!("{err}");
+                    self.send_empty(call_id).ok();
+                }
+            };
         }
     }
 

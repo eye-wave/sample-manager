@@ -5,11 +5,42 @@ use tao::window::Window;
 
 use crate::state::AppState;
 
+mod audio;
 mod fs;
 mod logger;
 mod samples;
 mod waveform;
 mod window;
+
+#[derive(Debug, thiserror::Error)]
+#[error("{0}")]
+pub struct IPCError(Cow<'static, str>);
+
+#[derive(Debug, thiserror::Error)]
+#[error("Lock is poisoned.")]
+pub struct Poisoned;
+
+impl IPCError {
+    pub fn empty() -> Self {
+        Self(Cow::Borrowed(""))
+    }
+}
+
+impl From<&'static str> for IPCError {
+    fn from(value: &'static str) -> Self {
+        Self(Cow::Borrowed(value))
+    }
+}
+
+impl From<String> for IPCError {
+    fn from(value: String) -> Self {
+        Self(Cow::Owned(value))
+    }
+}
+
+pub fn ok() -> IPCResponse {
+    [].finish()
+}
 
 trait IntoBytes {
     fn into_bytes(self) -> Cow<'static, [u8]>;
@@ -40,6 +71,7 @@ impl IntoBytes for &'static [u8] {
 }
 
 pub type IPCRequestBody<'a> = (&'a str, u32, &'a str);
+pub type IPCResponse = Result<std::borrow::Cow<'static, [u8]>, Box<dyn std::error::Error>>;
 
 #[derive(Clone)]
 pub struct IPCBody {
@@ -56,22 +88,23 @@ pub struct IPCMessage {
 
 pub trait IPCCommand: Send + Sync {
     fn name(&self) -> &'static str;
-    fn respond(&self, body: IPCBody) -> Option<Cow<'static, [u8]>>;
+    fn respond(&self, body: IPCBody) -> IPCResponse;
 }
 
-pub trait IPCResponse {
-    fn finish(self) -> Option<Cow<'static, [u8]>>;
+pub trait IntoIPCResponse {
+    fn finish(self) -> IPCResponse;
 }
 
-impl<T: IntoBytes> IPCResponse for T {
-    fn finish(self) -> Option<Cow<'static, [u8]>> {
-        Some(self.into_bytes())
+impl<T: IntoBytes> IntoIPCResponse for T {
+    fn finish(self) -> IPCResponse {
+        Ok(self.into_bytes())
     }
 }
 
-impl<T: IntoBytes> IPCResponse for Option<T> {
-    fn finish(self) -> Option<Cow<'static, [u8]>> {
+impl<T: IntoBytes> IntoIPCResponse for Option<T> {
+    fn finish(self) -> IPCResponse {
         self.map(|s| s.into_bytes())
+            .ok_or(Box::new(IPCError::empty()))
     }
 }
 
@@ -87,6 +120,7 @@ pub(super) fn ipc_strip_name(req: &str) -> Option<IPCRequestBody<'_>> {
 }
 
 pub fn commands_iter<'a>() -> impl Iterator<Item = &'a dyn IPCCommand> {
+    use crate::ipc::audio::IPC_AUDIO;
     use crate::ipc::fs::IPC_FS;
     use crate::ipc::logger::IPC_LOGGER;
     use crate::ipc::samples::IPC_SAMPLES;
@@ -95,6 +129,7 @@ pub fn commands_iter<'a>() -> impl Iterator<Item = &'a dyn IPCCommand> {
 
     IPC_WINDOW
         .iter()
+        .chain(IPC_AUDIO.iter())
         .chain(IPC_FS.iter())
         .chain(IPC_LOGGER.iter())
         .chain(IPC_SAMPLES.iter())
@@ -123,11 +158,20 @@ macro_rules! ipc_commands {
                     fn respond(
                         &self,
                         body: $crate::ipc::IPCBody,
-                    ) -> Option<std::borrow::Cow<'static, [u8]>> {
+                    ) -> IPCResponse {
                         $fn(body)
                     }
                 }
             )*
         }
     };
+}
+
+#[macro_export]
+macro_rules! with_state {
+    ($body:ident, $state:ident, $block:block) => {{
+        let $state = $body.app_state.read().map_err(|_| Poisoned)?;
+
+        $block
+    }};
 }

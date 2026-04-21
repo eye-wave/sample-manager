@@ -1,9 +1,9 @@
 use std::path::Path;
 
-use crate::ipc::{IPCBody, IPCResponse};
+use crate::ipc::{IPCBody, IPCResponse, IntoIPCResponse};
 use crate::ipc_commands;
 
-fn open_folder(_body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
+fn open_folder(_body: IPCBody) -> IPCResponse {
     let folder = tinyfiledialogs::select_folder_dialog("Select folder", "");
     folder.finish()
 }
@@ -40,12 +40,11 @@ fn get_path_type(path: &Path) -> u8 {
     90
 }
 
-fn read_dir(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
+fn read_dir(body: IPCBody) -> IPCResponse {
     const BYTE_OFFSET: u8 = 32;
 
     let path = body.req.as_ref();
-    let mut files: Vec<String> = std::fs::read_dir(path)
-        .ok()?
+    let mut files: Vec<String> = std::fs::read_dir(path)?
         .filter_map(Result::ok)
         .filter_map(|e| {
             let item_type = get_path_type(&e.path()) + BYTE_OFFSET;
@@ -57,12 +56,7 @@ fn read_dir(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
         .collect();
 
     files.sort();
-
-    if files.is_empty() {
-        None
-    } else {
-        files.join("\n").finish()
-    }
+    files.join("\n").finish()
 }
 
 ipc_commands! {

@@ -3,6 +3,7 @@
 
 use crate::{state::AppState, window::App};
 
+mod audio;
 mod event;
 mod http;
 mod ipc;

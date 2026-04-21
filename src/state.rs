@@ -4,14 +4,17 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
+use crate::audio::AudioPlayer;
 use crate::state::samples::FsSample;
 
 pub mod samples;
 
 pub struct AppState {
     _config_path: PathBuf,
+
     pub cache_path: PathBuf,
     pub sample_registry: Arc<[FsSample]>,
+    pub audio_player: AudioPlayer,
 
     app_config: AppConfig,
 }
@@ -33,6 +36,7 @@ impl Default for AppState {
 
             cache_path,
             sample_registry: Arc::new([]),
+            audio_player: AudioPlayer::new(),
 
             app_config: AppConfig::default(),
         }

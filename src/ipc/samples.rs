@@ -1,30 +1,29 @@
-use std::borrow::Cow;
 use std::fs;
 
 use fuzzy_matcher::skim::SkimMatcherV2;
 use rayon::prelude::*;
 
-use crate::ipc::{IPCBody, IPCResponse};
+use crate::ipc::{IPCBody, IPCError, IPCResponse, IntoIPCResponse, Poisoned, ok};
 use crate::ipc_commands;
 use crate::state::samples::process_directories;
 
-fn add_sample_folder(body: IPCBody) -> Option<Cow<'static, [u8]>> {
+fn add_sample_folder(body: IPCBody) -> IPCResponse {
     let path = body.req.as_ref();
 
     if fs::read_dir(path).is_err() {
-        return None;
+        Err(IPCError::from("Path is empty"))?;
     }
 
-    let mut guard = body.app_state.write().ok()?;
+    let mut guard = body.app_state.write().map_err(|_| Poisoned)?;
     guard.update_config(|cfg| {
         cfg.tracked_dirs.insert(path.into());
     });
 
-    b"Ok".finish()
+    ok()
 }
 
-fn get_sample_folders(body: IPCBody) -> Option<Cow<'static, [u8]>> {
-    let guard = body.app_state.read().ok()?;
+fn get_sample_folders(body: IPCBody) -> IPCResponse {
+    let guard = body.app_state.read().map_err(|_| Poisoned)?;
     let cfg = guard.get_config();
 
     cfg.tracked_dirs
@@ -34,23 +33,23 @@ fn get_sample_folders(body: IPCBody) -> Option<Cow<'static, [u8]>> {
         .finish()
 }
 
-fn start_sample_scan(body: IPCBody) -> Option<Cow<'static, [u8]>> {
+fn start_sample_scan(body: IPCBody) -> IPCResponse {
     let thread_state = body.app_state.clone();
-    let guard = body.app_state.read().ok()?;
+    let guard = body.app_state.read().map_err(|_| Poisoned)?;
     let dirs = guard.get_config().tracked_dirs.clone();
 
     if dirs.is_empty() {
-        return None;
+        Err(IPCError::from("Path is empty"))?;
     }
 
     std::thread::spawn(move || {
         process_directories(dirs, thread_state, body.webview_sender).ok();
     });
 
-    Some(Cow::Borrowed(b"Ok"))
+    ok()
 }
 
-fn search_for_sample(body: IPCBody) -> Option<Cow<'static, [u8]>> {
+fn search_for_sample(body: IPCBody) -> IPCResponse {
     let tokens = body.req.to_lowercase();
     let tokens = tokens.split(",").map(|t| t.trim()).collect::<Vec<_>>();
 
@@ -58,7 +57,7 @@ fn search_for_sample(body: IPCBody) -> Option<Cow<'static, [u8]>> {
 
     let query = query.first().unwrap_or(&"");
 
-    let guard = body.app_state.read().ok()?;
+    let guard = body.app_state.read().map_err(|_| Poisoned)?;
     let registry = guard.sample_registry.clone();
 
     let matcher = SkimMatcherV2::default().smart_case();

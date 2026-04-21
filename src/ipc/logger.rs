@@ -1,8 +1,14 @@
-use crate::ipc::IPCBody;
+use crate::ipc::{IPCBody, IPCError, IPCResponse, ok};
 use crate::ipc_commands;
 
-fn log(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
-    let mode = body.req.as_bytes().first().map(|&b| b as char)?;
+fn log(body: IPCBody) -> IPCResponse {
+    let mode = body
+        .req
+        .as_bytes()
+        .first()
+        .map(|&b| b as char)
+        .ok_or(IPCError::from("Missing logger mode"))?;
+
     let message = &body.req[1..];
 
     const RESET: &str = "\x1b[0m";
@@ -15,8 +21,7 @@ fn log(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
     };
 
     println!("[🌐WEB] {ansi}{message}{RESET}");
-
-    None
+    ok()
 }
 
 ipc_commands! {

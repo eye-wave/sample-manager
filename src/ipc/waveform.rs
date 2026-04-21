@@ -2,7 +2,7 @@ use ahash::AHasher;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
-use crate::ipc::{IPCBody, IPCMessage};
+use crate::ipc::{IPCBody, IPCMessage, IPCResponse, ok};
 use crate::ipc_commands;
 
 fn decode_audio(path: &str, downsample_factor: usize) -> Option<Vec<u8>> {
@@ -149,7 +149,7 @@ fn thumbnail_uri(hashed: &str) -> String {
     format!("athumb://_/{hashed}")
 }
 
-fn read_audio_file(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
+fn read_audio_file(body: IPCBody) -> IPCResponse {
     std::thread::spawn(move || {
         let path = body.req.as_ref();
         let guard = body.app_state.read().unwrap();
@@ -179,7 +179,7 @@ fn read_audio_file(body: IPCBody) -> Option<std::borrow::Cow<'static, [u8]>> {
         }
     });
 
-    None
+    ok()
 }
 
 ipc_commands! {

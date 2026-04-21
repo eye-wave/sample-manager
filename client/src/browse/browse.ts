@@ -11,6 +11,7 @@ export const POOL_SIZE = 100;
 let lastSelected = 0;
 function onSelect(i: number, file: string) {
   invoke("read_audio_file", file);
+  invoke("play_audio_file", file);
 
   pool[lastSelected]?.highlight(false);
 

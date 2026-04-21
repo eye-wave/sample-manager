@@ -32,7 +32,6 @@ function createPreview() {
 export const PreviewHandler = createPreview();
 
 listen("read_audio", (uri) => {
-  console.log("Got: ", uri);
   PreviewHandler.img = uri;
 });
 

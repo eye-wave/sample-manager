@@ -9,15 +9,23 @@ edition = "2024"
 [dependencies]
 ahash = { version = "0.8.12", default-features = false }
 aho-corasick = "1.1.4"
+assert_no_alloc = "1.1.2"
+atomic_float = "1.1.0"
 base64 = "0.22.1"
+bitflags = "2.11.1"
 bytemuck = "1.25.0"
+cpal = "0.17.3"
+crossbeam-channel = "0.5.15"
 dirs = "6.0.0"
 fuzzy-matcher = "0.3.7"
 image = { version = "0.25.10", default-features = false, features = ["webp"] }
 paste = "1.0.15"
 rayon = "1.12.0"
+ringbuf = "0.4.8"
 serde = { version = "1.0.228", default-features = false, features = ["derive"] }
+symphonia = { version = "0.5.5", features = ["mp3"] }
 tao = { version = "0.35.0" }
+thiserror = "2.0.18"
 tinyfiledialogs = "3.9.1"
 toml = "1.1.2"
 wry = "0.55.0"
