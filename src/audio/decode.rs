@@ -1,3 +1,4 @@
+use std::io::ErrorKind;
 use std::path::Path;
 use std::sync::mpsc::{self, Sender};
 use std::{path::PathBuf, sync::Arc, time::Duration};
@@ -141,7 +142,11 @@ fn decode_thread_loop(
         }
 
         if let Err(e) = decode_one_packet(decoder_state, &mut rb_prod, &audio_state) {
-            eprintln!("decode error: {e}");
+            if e.to_string() == "end of stream" {
+                audio_state.set_state(PlayerFlags::STOPPED);
+            } else {
+                eprintln!("decode error: {e}");
+            }
             current = None;
         }
     }
@@ -152,7 +157,7 @@ struct DecoderState {
     decoder: Box<dyn symphonia::core::codecs::Decoder>,
     track_id: u32,
     sample_rate: u32,
-    resample_ratio: u32,
+    resample_ratio: f64,
     channels: usize,
     resample_buf: Vec<f32>,
 }
@@ -166,9 +171,23 @@ fn decode_one_packet(
 
     let packet = match state.format.next_packet() {
         Ok(p) => p,
-        Err(SymphoniaError::IoError(_)) | Err(SymphoniaError::ResetRequired) => {
-            return Err("end of stream".into());
+        Err(SymphoniaError::IoError(e)) => {
+            if e.kind() == ErrorKind::UnexpectedEof
+                || e.to_string().to_lowercase().contains("end of stream")
+                || e.to_string().to_lowercase().contains("unexpected eof")
+            {
+                return Err("end of stream".into());
+            } else {
+                return Err(format!("io error: {e}").into());
+            }
         }
+
+        Err(SymphoniaError::ResetRequired) => {
+            println!("Reset required");
+            state.decoder.reset();
+            return Ok(());
+        }
+
         Err(e) => {
             return Err(format!("format error: {e}").into());
         }
@@ -197,22 +216,20 @@ fn decode_one_packet(
 
     let src_channels = decoded.spec().channels.count();
     let src_frames = interleaved.len() / src_channels;
-    let dst_frames = (src_frames as u32 * state.resample_ratio) as usize;
+    let dst_frames = (src_frames as f64 * state.resample_ratio).round() as usize;
 
     state.resample_buf.clear();
 
     for dst_i in 0..dst_frames {
-        let src_pos = dst_i as u32 / state.resample_ratio;
-        let src_frame = src_pos as usize;
-        let frac = src_pos - src_frame as u32;
+        let src_pos = dst_i as f64 / state.resample_ratio;
+        let src_frame = src_pos.floor() as usize;
+        let frac = src_pos - src_frame as f64;
         let nxt_frame = (src_frame + 1).min(src_frames - 1);
 
         for ch in 0..state.channels {
             let sc = ch.min(src_channels - 1);
-
             let a = interleaved[src_frame * src_channels + sc];
             let b = interleaved[nxt_frame * src_channels + sc];
-
             state.resample_buf.push(a + frac as f32 * (b - a));
         }
     }
@@ -226,6 +243,13 @@ fn init_decoder(
     path: &impl AsRef<Path>,
     stream_config: &SupportedStreamConfig,
 ) -> Result<DecoderState, DecodeError> {
+    eprintln!(
+        "opening: {:?}, exists: {}",
+        path.as_ref(),
+        path.as_ref().exists()
+    );
+    eprintln!("size: {:?}", std::fs::metadata(path).map(|m| m.len()));
+
     let file = std::fs::File::open(path)?;
     let mss = MediaSourceStream::new(Box::new(file), Default::default());
 
@@ -261,7 +285,8 @@ fn init_decoder(
         .ok_or(DecodeError::NoSampleRate)?;
 
     let output_rate = stream_config.config().sample_rate;
-    let resample_ratio = output_rate / sample_rate;
+    let resample_ratio = output_rate as f64 / sample_rate as f64;
+    println!("your resample ratio is: {resample_ratio}");
 
     let channels = stream_config.channels() as usize;
 
@@ -296,9 +321,10 @@ fn perform_seek(state: &mut DecoderState, millis: u32) -> Result<(), Box<dyn std
 
 fn audio_buffer_to_f32(buf: &AudioBufferRef<'_>) -> Vec<f32> {
     let spec = *buf.spec();
+    let capacity = buf.capacity() as u64;
     let frames = buf.frames();
 
-    let mut converted = AudioBuffer::<f32>::new(frames as u64, spec);
+    let mut converted = AudioBuffer::<f32>::new(capacity, spec);
 
     buf.convert(&mut converted);
 

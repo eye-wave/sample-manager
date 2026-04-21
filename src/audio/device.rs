@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use cpal::traits::{DeviceTrait, HostTrait};
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Stream, SupportedStreamConfig};
 use ringbuf::traits::{Consumer, Observer};
 use ringbuf::wrap::caching::Caching;
@@ -71,6 +71,8 @@ impl AudioDevice {
             cpal::SampleFormat::U32 => build_stream!(u32),
             _ => return Err(Box::new(DeviceError::UnsupportedSampleFormat)),
         };
+
+        _stream.play().ok();
 
         Ok((rb_prod, Self { config, _stream }))
     }

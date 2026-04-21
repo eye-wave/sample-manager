@@ -24,10 +24,12 @@ fn is_sample_file(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+#[derive(Debug)]
 pub struct FsSample {
     pub path: PathBuf,
-    search_str: Arc<str>,
     pub tags: Vec<&'static str>,
+
+    search_str: Arc<str>,
 }
 
 impl FsSample {
@@ -66,7 +68,7 @@ impl FsSample {
     pub fn serialize(&self) -> String {
         format!(
             r#"{{"path":"{}","tags":{:?}}}"#,
-            self.path.to_string_lossy(),
+            self.path.to_string_lossy().replace("\\", "\\\\"),
             self.tags
         )
     }
