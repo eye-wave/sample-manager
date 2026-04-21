@@ -1,3 +1,4 @@
+import { ONCLICK } from "./alias";
 import { renderTags } from "./helpers";
 
 declare const playBtn: HTMLButtonElement;
@@ -8,7 +9,7 @@ declare const preview_tags: HTMLDivElement;
 declare const s_total: HTMLSpanElement;
 
 let playing = false;
-playBtn.onclick = () => {
+playBtn[ONCLICK] = () => {
   playing = !playing;
   playBtn.textContent = playing ? "⏸" : "▶";
 };

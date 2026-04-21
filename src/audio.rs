@@ -66,6 +66,8 @@ impl AudioPlayer {
     }
 
     pub fn play(&self, path: &impl AsRef<Path>) -> AudioResult<()> {
+        self.stop().ok();
+
         with_decoder!(self, decoder => {
             decoder.start(path);
             self.handle.resume();

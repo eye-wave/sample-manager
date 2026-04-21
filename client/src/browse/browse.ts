@@ -1,3 +1,4 @@
+import { APPEND_CHILD, d } from "../alias";
 import { PreviewHandler } from "../preview";
 import { TagInput } from "./input";
 import { BrowseRow } from "./row";
@@ -27,13 +28,22 @@ function onSelect(i: number, file: string) {
   lastSelected = i;
 }
 
+export function displayPreview(path: string, name: string, tags: string[]) {
+  invoke("read_audio_file", path);
+  invoke("play_audio_file", path);
+
+  PreviewHandler.label = name;
+  PreviewHandler.img = "";
+  PreviewHandler.tags = tags;
+}
+
 const pool: BrowseRow[] = Array.from({ length: POOL_SIZE }, (_, i) => BrowseRow(i, onSelect));
-const fragment = document.createDocumentFragment();
+const fragment = d.createDocumentFragment();
 
 TagInput(search, search_tags, pool);
 
 pool.forEach((item) => {
-  fragment.appendChild(item.el);
+  fragment[APPEND_CHILD](item.el);
 });
 
-list_scroll.appendChild(fragment);
+list_scroll[APPEND_CHILD](fragment);

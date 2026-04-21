@@ -561,6 +561,7 @@ big room
 bluegrass
 blues
 botanica
+batanica
 breakbeat
 brostep
 chill
@@ -623,6 +624,7 @@ riddim
 ridim
 rnb
 rock
+math rock
 schranz
 soul
 soundtrack

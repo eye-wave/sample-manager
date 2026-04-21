@@ -1,3 +1,5 @@
+import { w } from "../alias";
+
 (() => {
   const pending = new Map();
   let nextId = 1;
@@ -41,11 +43,11 @@
     listeners.get(id)?.add(callback);
   }
 
-  window.invoke = inv;
-  window.listen = listen;
+  w.invoke = inv;
+  w.listen = listen;
 
-  window._r = res;
-  window._s = send;
+  w._r = res;
+  w._s = send;
 
   /// DEV start
   if (typeof ipc !== "undefined") {

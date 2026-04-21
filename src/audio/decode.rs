@@ -63,7 +63,9 @@ impl AudioDecoderHandle {
         std::thread::Builder::new()
             .name("decode-thread".into())
             .spawn(move || {
-                decode_thread_loop(rx, rb_prod, audio_state, stream_config).ok();
+                if let Err(err) = decode_thread_loop(rx, rb_prod, audio_state, stream_config) {
+                    eprintln!("{err}");
+                }
             })?;
 
         Ok(Self { tx })
@@ -104,8 +106,10 @@ fn decode_thread_loop(
         while let Ok(cmd) = rx.try_recv() {
             match cmd {
                 DecodeCommand::Start { path } => {
-                    current = Some(init_decoder(&path, &stream_config)?);
-                    audio_state.set_state(PlayerFlags::PLAYING);
+                    if let Ok(decoder) = init_decoder(&path, &stream_config) {
+                        current = Some(decoder);
+                        audio_state.set_state(PlayerFlags::PLAYING);
+                    }
                 }
 
                 DecodeCommand::Pause => {
@@ -174,19 +178,12 @@ fn decode_one_packet(
 
     let packet = match state.format.next_packet() {
         Ok(p) => p,
-        Err(SymphoniaError::IoError(e)) => {
-            if e.kind() == ErrorKind::UnexpectedEof
-                || e.to_string().to_lowercase().contains("end of stream")
-                || e.to_string().to_lowercase().contains("unexpected eof")
-            {
-                return Err("end of stream".into());
-            } else {
-                return Err(format!("io error: {e}").into());
-            }
+
+        Err(SymphoniaError::IoError(e)) if e.kind() == ErrorKind::UnexpectedEof => {
+            return Err("end of stream".into());
         }
 
         Err(SymphoniaError::ResetRequired) => {
-            println!("Reset required");
             state.decoder.reset();
             return Ok(());
         }
@@ -200,34 +197,42 @@ fn decode_one_packet(
         return Ok(());
     }
 
-    let pos = (packet.ts() as f64 / (state.sample_rate as f64 / 1000.0)) as u32;
-    shared_state
-        .position_millis
-        .store(pos, std::sync::atomic::Ordering::Release);
+    if let Some(sample_rate) = std::num::NonZeroU32::new(state.sample_rate) {
+        let pos = (packet.ts() as u64 * 1000) / sample_rate.get() as u64;
+        shared_state
+            .position_millis
+            .store(pos as u32, std::sync::atomic::Ordering::Release);
+    }
 
     let decoded = match state.decoder.decode(&packet) {
         Ok(d) => d,
-        Err(SymphoniaError::DecodeError(_)) => {
-            return Ok(());
-        }
-        Err(e) => {
-            return Err(format!("decoder fatal: {e}").into());
-        }
+        Err(SymphoniaError::DecodeError(_)) => return Ok(()),
+        Err(e) => return Err(format!("decoder fatal: {e}").into()),
     };
 
     let interleaved = audio_buffer_to_f32(&decoded);
 
     let src_channels = decoded.spec().channels.count();
     let src_frames = interleaved.len() / src_channels;
+
+    if src_frames < 2 {
+        return Ok(());
+    }
+
     let dst_frames = (src_frames as f64 * state.resample_ratio).round() as usize;
 
     state.resample_buf.clear();
+    state.resample_buf.reserve(dst_frames * state.channels);
 
     for dst_i in 0..dst_frames {
         let src_pos = dst_i as f64 / state.resample_ratio;
         let src_frame = src_pos.floor() as usize;
-        let frac = src_pos - src_frame as f64;
-        let nxt_frame = (src_frame + 1).min(src_frames - 1);
+        let frac = (src_pos - src_frame as f64) as f32;
+
+        let next_frame = (src_frame + 1).min(src_frames - 1);
+
+        let base_a = src_frame * src_channels;
+        let base_b = next_frame * src_channels;
 
         for ch in 0..state.channels {
             let sc = if src_channels == 1 {
@@ -235,9 +240,11 @@ fn decode_one_packet(
             } else {
                 ch.min(src_channels - 1)
             };
-            let a = interleaved[src_frame * src_channels + sc];
-            let b = interleaved[nxt_frame * src_channels + sc];
-            state.resample_buf.push(a + frac as f32 * (b - a));
+
+            let a = interleaved[base_a + sc];
+            let b = interleaved[base_b + sc];
+
+            state.resample_buf.push(a + frac * (b - a));
         }
     }
 
@@ -250,13 +257,6 @@ fn init_decoder(
     path: &impl AsRef<Path>,
     stream_config: &SupportedStreamConfig,
 ) -> Result<DecoderState, DecodeError> {
-    eprintln!(
-        "opening: {:?}, exists: {}",
-        path.as_ref(),
-        path.as_ref().exists()
-    );
-    eprintln!("size: {:?}", std::fs::metadata(path).map(|m| m.len()));
-
     let file = std::fs::File::open(path)?;
     let mss = MediaSourceStream::new(Box::new(file), Default::default());
 
@@ -293,7 +293,6 @@ fn init_decoder(
 
     let output_rate = stream_config.config().sample_rate;
     let resample_ratio = output_rate as f64 / sample_rate as f64;
-    println!("your resample ratio is: {resample_ratio}");
 
     let channels = stream_config.channels() as usize;
 

@@ -3,7 +3,7 @@ use std::sync::atomic::Ordering;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Stream, SupportedStreamConfig};
-use ringbuf::traits::{Consumer, Observer};
+use ringbuf::traits::Consumer;
 use ringbuf::wrap::caching::Caching;
 use ringbuf::{HeapRb, SharedRb, storage::Heap, traits::Split};
 
@@ -89,10 +89,9 @@ where
 
     if paused || flushing {
         if flushing {
-            let n = data.len().min(rb_cons.occupied_len());
-            for _ in 0..n {
-                rb_cons.try_pop();
-            }
+            rb_cons.clear();
+
+            shared_state.clear_flag(PlayerFlags::FLUSHING);
         }
         for s in data.iter_mut() {
             *s = S::EQUILIBRIUM;

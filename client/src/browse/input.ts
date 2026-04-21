@@ -1,3 +1,4 @@
+import { $el, APPEND_CHILD, ONCLICK } from "../alias";
 import { basename } from "../helpers";
 import { POOL_SIZE } from "./browse";
 import type { BrowseRow } from "./row";
@@ -18,16 +19,16 @@ export const TagInput = (
     if (!tag) return;
     tags.push(tag);
 
-    const item = document.createElement("span");
+    const item = $el("span");
 
     item.className = "tag x";
     item.textContent = tag + " x";
 
-    item.onclick = () => removeTag(+(item.dataset.i ?? 0));
+    item[ONCLICK] = () => removeTag(+(item.dataset.i ?? 0));
 
     container.firstChild
       ? container.insertBefore(item, container.firstChild)
-      : container.appendChild(item);
+      : container[APPEND_CHILD](item);
   };
 
   const removeTag = (i: number) => {

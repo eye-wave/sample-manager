@@ -8,9 +8,10 @@ use fuzzy_matcher::skim::SkimMatcherV2;
 
 use crate::ipc::IPCMessage;
 use crate::state::AppState;
-use crate::state::samples::tagger::tag_string;
 
 mod tagger;
+
+pub use tagger::tag_string;
 
 pub const SAMPLE_EXTENSIONS: &[&str] = &[
     "aac", "aiff", "caf", "flac", "mid", "midi", "mp2", "mp3", "mp4", "mpeg", "ogg", "opus", "wav",

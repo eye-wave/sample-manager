@@ -1,3 +1,4 @@
+import { BEFOREEND, INSERT_ADJACENT_HTML } from "../alias";
 import { basename } from "../helpers";
 import { parseVFS } from "./parse";
 import { renderNode } from "./render";
@@ -12,7 +13,7 @@ export async function loadNode(node: VFSNode): Promise<void> {
     res
       .split("\n")
       .filter((e) => e)
-      .map(parseVFS),
+      .map((p) => parseVFS(node.path(), p)),
   );
 
   node.extend(children);
@@ -22,9 +23,9 @@ export async function loadNode(node: VFSNode): Promise<void> {
   if (node.visual?.childrenEl) {
     for (const child of node.children) {
       if (child.nodeType === FileType) {
-        node.visual.childrenEl.insertAdjacentHTML(
-          "beforeend",
-          SIDEBAR_ITEM(basename(child.name), child.ftype),
+        node.visual.childrenEl[INSERT_ADJACENT_HTML](
+          BEFOREEND,
+          SIDEBAR_ITEM(basename(child.path), child.ftype, child.path),
         );
       } else {
         renderNode(node.visual.childrenEl, child);

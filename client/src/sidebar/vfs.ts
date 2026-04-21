@@ -1,3 +1,4 @@
+import { APPEND_CHILD, QUERY_SELECTOR, txt } from "../alias";
 import { basename } from "../helpers";
 import { FOLDER_CLOSED, FOLDER_OPEN } from "./template";
 
@@ -12,24 +13,24 @@ export interface VFSCNodeType {
 
 type VFSFile = {
   nodeType: typeof FileType;
-  name: string;
+  path: string;
   ftype: number;
 };
 
 type VFSVisual = ReturnType<typeof createVisualNode>;
 const createVisualNode = (section: Element) => {
-  const labelEl = section.querySelector<HTMLElement>(".tree-label");
+  const labelEl = section[QUERY_SELECTOR]<HTMLElement>(".tree-label");
   const childrenEl = section.nextElementSibling as HTMLElement | null;
 
-  const arrowClassList = section.querySelector(".tree-arrow")?.classList ?? null;
+  const arrowClassList = section[QUERY_SELECTOR](".tree-arrow")?.classList ?? null;
 
-  const countSpan = section.querySelector<HTMLElement>(".tree-count");
-  const countEl = countSpan ? document.createTextNode("") : null;
-  if (countSpan && countEl) countSpan.appendChild(countEl);
+  const countSpan = section[QUERY_SELECTOR]<HTMLElement>(".tree-count");
+  const countEl = countSpan ? txt() : null;
+  if (countSpan && countEl) countSpan[APPEND_CHILD](countEl);
 
-  const iconSpan = section.querySelector<HTMLElement>(".tree-icon");
-  const iconEl = iconSpan ? document.createTextNode(FOLDER_CLOSED) : null;
-  if (iconSpan && iconEl) iconSpan.appendChild(iconEl);
+  const iconSpan = section[QUERY_SELECTOR]<HTMLElement>(".tree-icon");
+  const iconEl = iconSpan ? txt(FOLDER_CLOSED) : null;
+  if (iconSpan && iconEl) iconSpan[APPEND_CHILD](iconEl);
 
   return {
     labelEl,
@@ -39,7 +40,7 @@ const createVisualNode = (section: Element) => {
     iconEl,
 
     updateCount(count: number | null = null) {
-      if (countEl) countEl.nodeValue = count != null ? String(count) : "";
+      if (countEl) countEl.nodeValue = count != null ? (count as unknown as string) : "";
     },
 
     toggle() {
@@ -88,8 +89,8 @@ export const VFSNode = {
     return n;
   },
 
-  file(name: string, ftype: number): VFSFile {
-    return { nodeType: FileType, name, ftype };
+  file(path: string, ftype: number): VFSFile {
+    return { nodeType: FileType, ftype, path };
   },
 };
 

@@ -1,3 +1,4 @@
+import { $el, APPEND_CHILD, ONCLICK, QUERY_SELECTOR, txt } from "../alias";
 import { renderTags } from "../helpers";
 
 export type BrowseRow = ReturnType<typeof BrowseRow>;
@@ -6,7 +7,7 @@ export const BrowseRow = (
   onSelect?: (i: number, p: string) => void,
   onLike?: () => void,
 ) => {
-  const el = document.createElement("div");
+  const el = $el("div");
   el.className = "list-item hidden";
 
   el.innerHTML = /* HTML */ `
@@ -19,20 +20,20 @@ export const BrowseRow = (
     <div class="item-tags"></div>
   `;
 
-  const favElText = document.createTextNode("");
-  const labelText = document.createTextNode("");
-  const typeEl = document.createTextNode("");
-  const bpmEl = document.createTextNode("");
+  const favElText = txt();
+  const labelText = txt();
+  const typeEl = txt();
+  const bpmEl = txt();
 
-  const labelEl = el.querySelector(".item-label") as HTMLSpanElement;
-  const favEl = el.querySelector(".item-fav") as HTMLSpanElement;
-  const tagsEl = el.querySelector(".item-tags") as HTMLDivElement;
+  const labelEl = el[QUERY_SELECTOR](".item-label") as HTMLSpanElement;
+  const favEl = el[QUERY_SELECTOR](".item-fav") as HTMLSpanElement;
+  const tagsEl = el[QUERY_SELECTOR](".item-tags") as HTMLDivElement;
 
-  labelEl.appendChild(labelText);
-  el.querySelector(".item-type")?.appendChild(typeEl);
-  el.querySelector(".item-bpm")?.appendChild(bpmEl);
+  labelEl[APPEND_CHILD](labelText);
+  el[QUERY_SELECTOR](".item-type")?.[APPEND_CHILD](typeEl);
+  el[QUERY_SELECTOR](".item-bpm")?.[APPEND_CHILD](bpmEl);
 
-  favEl?.appendChild(favElText);
+  favEl?.[APPEND_CHILD](favElText);
 
   let isLiked = false;
   let path: string | null = null;
@@ -58,14 +59,14 @@ export const BrowseRow = (
 
     labelText.nodeValue = name;
     typeEl.nodeValue = bpm ? "Loop" : "One-shot";
-    bpmEl.nodeValue = bpm ? String(bpm) : "-";
+    bpmEl.nodeValue = bpm ? (bpm as unknown as string) : "-";
 
     renderTags(tagsEl, tags);
 
     el.style.display = "";
   };
 
-  el.onclick = () => path && onSelect?.(idx, path);
+  el[ONCLICK] = () => path && onSelect?.(idx, path);
 
   const highlight = (on: boolean) => el.classList[on ? "add" : "remove"]("highlight");
   const hide = () => {
@@ -73,7 +74,7 @@ export const BrowseRow = (
     highlight(false);
   };
 
-  favEl.onclick = (e) => {
+  favEl[ONCLICK] = (e) => {
     setLiked(!isLiked);
     onLike?.();
     e.stopPropagation();

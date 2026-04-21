@@ -9,12 +9,19 @@ export default function htmlTemplateMinifyPlugin() {
       let result = code;
 
       const isProd = import.meta.env?.PROD ?? process.env.NODE_ENV === "production";
+      const isUnix = process.platform !== "win32";
 
       // strip blocks correctly
       if (isProd) {
         result = result.replace(/\/\/\/\s*DEV start[\s\S]*?\/\/\/\s*DEV end/g, "");
       } else {
         result = result.replace(/\/\/\/\s*BUILD start[\s\S]*?\/\/\/\s*BUILD end/g, "");
+      }
+
+      if (isUnix) {
+        result = result.replace(/\/\/\/\s*WIN start[\s\S]*?\/\/\/\s*WIN end/g, "");
+      } else {
+        result = result.replace(/\/\/\/\s*UNIX start[\s\S]*?\/\/\/\s*UNIX end/g, "");
       }
 
       // minify /* HTML */ templates

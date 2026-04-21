@@ -75,6 +75,10 @@ impl SharedAudioState {
         flags.contains(PlayerFlags::PAUSED)
     }
 
+    pub fn clear_flag(&self, flag: PlayerFlags) {
+        self.flags.fetch_and(!flag.bits(), Ordering::Release);
+    }
+
     #[inline(always)]
     pub fn load_flags(&self) -> PlayerFlags {
         PlayerFlags::from_bits_retain(self.flags.load(Ordering::Relaxed))
@@ -96,6 +100,7 @@ impl PlayerHandle {
 
     pub fn stop(&self) {
         self.shared.set_state(PlayerFlags::STOPPED);
+        self.shared.set_flag(PlayerFlags::FLUSHING);
     }
 
     pub fn seek(&self, millis: u32) {

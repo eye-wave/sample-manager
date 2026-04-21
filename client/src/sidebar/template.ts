@@ -16,5 +16,5 @@ const ICON_OTHER = 254;
 const itemIcons: Record<number, string> = ["♪", "🎹", "🛠️"];
 itemIcons[ICON_OTHER] = "📄";
 
-export const SIDEBAR_ITEM = (name: string, ftype: number) =>
-  /* HTML */ `<div class="tree-section item">${itemIcons[ftype - 1] ?? itemIcons[ICON_OTHER]} ${name}</div>`;
+export const SIDEBAR_ITEM = (name: string, ftype: number, fullpath: string) =>
+  /* HTML */ `<div class="tree-section item" data-path="${encodeURI(fullpath)}">${itemIcons[ftype - 1] ?? itemIcons[ICON_OTHER]} ${name}</div>`;

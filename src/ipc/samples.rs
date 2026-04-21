@@ -5,7 +5,7 @@ use rayon::prelude::*;
 
 use crate::ipc::{IPCBody, IPCError, IPCResponse, IntoIPCResponse, Poisoned, ok};
 use crate::ipc_commands;
-use crate::state::samples::process_directories;
+use crate::state::samples::{process_directories, tag_string};
 
 fn add_sample_folder(body: IPCBody) -> IPCResponse {
     let path = body.req.as_ref();
@@ -79,11 +79,21 @@ fn search_for_sample(body: IPCBody) -> IPCResponse {
     format!("[{files}]").finish()
 }
 
+fn tag_path(body: IPCBody) -> IPCResponse {
+    tag_string(&body.req)
+        .iter()
+        .cloned()
+        .intersperse(",")
+        .collect::<String>()
+        .finish()
+}
+
 ipc_commands! {
     IPC_SAMPLES = [
         add_sample_folder,
         get_sample_folders,
         start_sample_scan,
-        search_for_sample
+        search_for_sample,
+        tag_path
     ]
 }

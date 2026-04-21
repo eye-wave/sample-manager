@@ -15,6 +15,7 @@ async function main() {
   });
 
   output = renameCssVariables(output);
+  output = moveHeadScriptToBodyEnd(output);
 
   output = output.replace("\n/*$vite$:1*/", "").replace(" crossorigin type=module", "");
 
@@ -48,4 +49,22 @@ function renameCssVariables(html: string) {
   });
 
   return html;
+}
+
+function moveHeadScriptToBodyEnd(html: string) {
+  const scriptMatch = html.match(
+    /<head[^>]*>[\s\S]*?<script[\s\S]*?<\/script>[\s\S]*?<\/head>/i,
+  );
+  if (!scriptMatch) return html;
+
+  const headBlock = scriptMatch[0];
+
+  const scriptTagMatch = headBlock.match(/<script[\s\S]*?<\/script>/i);
+  if (!scriptTagMatch) return html;
+
+  const scriptTag = scriptTagMatch[0];
+
+  const withoutScript = html.replace(scriptTag, "");
+
+  return withoutScript.replace(/<\/body>/i, `${scriptTag}</body>`);
 }
