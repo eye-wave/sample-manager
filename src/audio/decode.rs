@@ -17,8 +17,10 @@ use symphonia::core::{
     units::Time,
 };
 
-use super::device::RingProd;
+use super::device::{RING_CAPACITY, RingProd};
 use super::handle::{PlayerFlags, SharedAudioState};
+
+const REFILL_TARGET: usize = RING_CAPACITY / 2;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DecodeError {
@@ -89,6 +91,7 @@ impl AudioDecoderHandle {
         let _ = self.tx.send(DecodeCommand::Stop);
     }
 }
+
 fn decode_thread_loop(
     rx: std::sync::mpsc::Receiver<DecodeCommand>,
     mut rb_prod: RingProd,
@@ -136,7 +139,7 @@ fn decode_thread_loop(
             continue;
         }
 
-        if rb_prod.vacant_len() < 4096 {
+        if rb_prod.occupied_len() > REFILL_TARGET {
             std::thread::sleep(Duration::from_millis(1));
             continue;
         }
@@ -197,7 +200,7 @@ fn decode_one_packet(
         return Ok(());
     }
 
-    let pos = packet.ts() as u32 / (state.sample_rate / 1000);
+    let pos = (packet.ts() as f64 / (state.sample_rate as f64 / 1000.0)) as u32;
     shared_state
         .position_millis
         .store(pos, std::sync::atomic::Ordering::Release);
@@ -227,7 +230,11 @@ fn decode_one_packet(
         let nxt_frame = (src_frame + 1).min(src_frames - 1);
 
         for ch in 0..state.channels {
-            let sc = ch.min(src_channels - 1);
+            let sc = if src_channels == 1 {
+                0
+            } else {
+                ch.min(src_channels - 1)
+            };
             let a = interleaved[src_frame * src_channels + sc];
             let b = interleaved[nxt_frame * src_channels + sc];
             state.resample_buf.push(a + frac as f32 * (b - a));

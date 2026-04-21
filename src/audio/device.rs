@@ -26,7 +26,7 @@ pub enum DeviceError {
 pub type RingProd = Caching<Arc<SharedRb<Heap<f32>>>, true, false>;
 pub type RingCons = Caching<Arc<SharedRb<Heap<f32>>>, false, true>;
 
-const RING_CAPACITY: usize = 48_000 * 2 * 4;
+pub const RING_CAPACITY: usize = 48_000 * 2 * 4;
 
 impl AudioDevice {
     pub fn new(
