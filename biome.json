@@ -6,7 +6,7 @@
     "useIgnoreFile": false
   },
   "files": {
-    "includes": ["**", "!!**/dist", "!!**/target"]
+    "includes": ["**", "!!**/dist", "!!**/target", "!!**/tagger/build"]
   },
   "formatter": {
     "enabled": true,

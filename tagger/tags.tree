@@ -1,0 +1,37 @@
+// This is my tag tree
+
+drems *drum
+droom *drum
+drum *
+durm *drum
+
+drum {
+  clap *
+  kcik *kick
+  kick *
+  kickclap *kick *clap
+  snaer *snare
+  snar *snare
+  snare *
+  snear *snare
+  sner *snare
+  snor *snare
+}
+
+bass {
+  grol *growl
+  grow+l *
+
+  neural *neuro
+  neuro *
+  neuro {
+    re+ce *reese
+    re+s *reese
+    re+se *reese
+    re+sge *reese
+    re+s+e *reese
+  }
+
+  yoi *
+  yoy *yoi
+}

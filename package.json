@@ -3,14 +3,8 @@
   "workspaces": [
     "client"
   ],
-  "scripts": {
-    "dev": "concurrently \"bun run --filter client dev\" \"cargo watch -x run -i client\"",
-    "build": "bun run --filter client build && cargo build --release",
-    "format": "biome format --write && cargo fmt",
-    "lint": "cargo clippy && biome lint --write"
-  },
   "devDependencies": {
     "@biomejs/biome": "2.4.11",
-    "concurrently": "^9.2.1"
+    "@types/node": "^25.6.0"
   }
 }
