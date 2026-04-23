@@ -22,8 +22,10 @@ build-rust:
     cargo build --release
 
 build-c:
-  cmake -S tagger -B build
-  cmake --build tagger/build
+    cd tagger/compiler && cargo run
+
+    cmake -S tagger -B tagger/build -DCMAKE_BUILD_TYPE=Release
+    cmake --build tagger/build
 
 format:
     biome format --write

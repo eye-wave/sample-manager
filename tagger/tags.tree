@@ -1,37 +1,255 @@
-// This is my tag tree
+// All the tags used
+//
+//
 
-drems *drum
-droom *drum
-drum *
-durm *drum
+bpm *
 
-drum {
-  clap *
-  kcik *kick
-  kick *
-  kickclap *kick *clap
-  snaer *snare
-  snar *snare
-  snare *
-  snear *snare
-  sner *snare
-  snor *snare
-}
+// Style of the sample
+
+fill *
+hit *
+legato *
+logn *long
+long *
+loop *
+one#shot *
+onehsot *
+riff *
+sustain *
 
 bass {
-  grol *growl
-  grow+l *
+  808 *
+
+  bsss *bass
+
+  chonk *chonky
+  chonker *chonky
+  chonky *
+
+  crunch *crunchy
+  crunchy *
+
+  fm *
+
+  grol *
+  grow+l+ *
+
+
+  heavy *
+  hoo+ver *
 
   neural *neuro
   neuro *
-  neuro {
-    re+ce *reese
-    re+s *reese
-    re+se *reese
-    re+sge *reese
-    re+s+e *reese
+
+  ray#gun *
+
+  re+ce+ *reese
+  ree+s *reese
+  ree+s+e *
+  re+sge *reese
+
+  scream *
+  screech *
+
+  spectral *
+
+  squelch *
+  squelsh *squelch
+
+  sub *
+
+  thick *
+  thicc *thick
+
+  wob+ly *
+  wob *wobbly
+  wub *wobbly
+  wobble *wobbly
+
+  whomp *
+  womp *whomp
+
+  wonk *wonky
+  wonky *
+
+
+  yoi *yoy
+  yoink *
+  yonk *yoink
+  yoy *
+}
+
+drum {
+  909 *
+  amen *
+  break *
+
+  clap *
+  dru+m+s+
+  dru+m+
+  drems
+  dro+m
+  durm
+
+  ki+ck *
+  kcik *kick
+  kickclap *kick *clap
+
+  pan *
+
+  sna+re+ *
+  snaer *snare
+  snar *snare
+  snear *snare
+  sner *snare
+  snor *snare
+
+  timpani *
+  tom *
+}
+
+perc {
+  foley
+  kitchen
+  mechanical *
+  metal+ic *
+
+  meteronome *metronome
+  metronome *
+
+  percussion
+  rim *
+  snap *
+  taiko *
+  transiant *transient
+  transient *
+  wood *
+  woodblock *wood
+}
+
+cymbal {
+  crash *
+  cymbal *
+  hat *
+  ride *
+  shaker *
+  tambourine *
+}
+
+synth {
+  analog *
+  anlog *analog
+  anlogu *analog
+
+  arp *
+
+  atonal *
+
+  detune *
+  digital *
+
+  drone *
+  lead *
+
+  oscillator *
+  oscilator *oscillator
+
+  pad *
+  pluck *
+  saw *
+  sine *
+  squar *square
+  square *
+
+  super#saw * *saw
+
+  synth *
+  tonal *
+  unison *
+}
+
+instrument {
+
+  keys {
+    keys *
+    accordion *
+    church#organ *
+    harpsichord *
+    honky#tonk *
+    harmonica *melodica
+    melodica *
+    organ *
+    piano *
+    wurli *
   }
 
-  yoi *
-  yoy *yoi
+  acoustic *
+
+  bag#pipe *
+  banjo *
+  bassoon *
+  bell *
+  blow#bottle *bottle
+  blown#bottle *bottle
+  brass *
+  celesta *
+  cello *
+  clarinet *
+  contrabass *
+  dulcimer *
+  english#horn *horn
+  fiddle *
+  flute *
+  french#horn *horn
+  fret *
+  fretless *
+  glockenspiel *
+  guitar *
+  guitar#harmonics *guitar
+  harp *
+  horn *
+  instrument *
+
+  kalimba *
+  koto *
+  mandolin *
+  marimba *
+  mellotone *
+  music box *
+  muted#trumpet *
+  oboe *
+  ocarina *
+  orchestra *
+  pan#flute *
+  piccolo *
+  pizzicato *
+  recorder *
+  reed#organ *
+  rhodes *
+  rock#organ *
+  sax *
+  saxophone *sax
+  shakuhachi *
+  shamisen *
+  shanai *
+  sitar *
+  steel#drum *
+  string *strings
+  strings *strings
+  tinkle#bell *bell
+  tremolo *
+  trombone *
+  trumpet *
+  tuba *
+  tubular#bells *bell
+  ukulele *
+  vibraphone *
+  vibrato *
+  viola *
+
+  violin *violin
+  voilin *
+
+  whistle *
+  xylophone *
 }

@@ -50,7 +50,7 @@ impl FsSample {
         Self {
             path,
             search_str: Arc::from(search_str),
-            tags: tags.iter().cloned().collect(),
+            tags,
         }
     }
 

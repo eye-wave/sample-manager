@@ -1,38 +1,35 @@
-use std::{collections::HashSet, sync::LazyLock};
+use std::ffi::{CStr, CString, c_char, c_ushort};
 
-use aho_corasick::AhoCorasick;
+unsafe extern "C" {
+    fn search(text: *const c_char, buffer: *const *const c_char, max_out: c_ushort);
+}
 
-pub static TAGS: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
-    fn leak<T: ToString>(name: T) -> &'static str {
-        Box::leak(name.to_string().into_boxed_str()) as &'static str
+pub fn tag_string(text: &str) -> Vec<&'static str> {
+    const MAX_SIZE: usize = 20;
+
+    let input = CString::new(text).unwrap();
+    let mut buffer: [*const c_char; MAX_SIZE] = [std::ptr::null(); MAX_SIZE];
+
+    unsafe {
+        search(input.as_ptr(), buffer.as_mut_ptr(), MAX_SIZE as u16);
     }
 
-    include_str!("./tags.txt")
-        .lines()
-        .filter(|l| !(l.starts_with('#') || l.is_empty()))
-        .flat_map(|l| {
-            if l.contains(' ') {
-                vec![
-                    //
-                    leak(l.replace(" ", "-")),
-                    leak(l.replace(" ", "_")),
-                    leak(l.replace(" ", "")),
-                    l,
-                ]
-            } else {
-                vec![l]
-            }
-        })
+    buffer
+        .iter()
+        .filter(|p| !p.is_null())
+        .map(|ptr| unsafe { CStr::from_ptr(*ptr).to_str().unwrap() })
         .collect()
-});
+}
 
-static TAG_MATCHER: LazyLock<AhoCorasick> =
-    LazyLock::new(|| AhoCorasick::builder().build(TAGS.iter()).unwrap());
+#[cfg(test)]
+mod test {
+    use crate::state::samples::tag_string;
 
-pub fn tag_string(text: &str) -> HashSet<&'static str> {
-    // TODO dedupicate and postprocess
-    TAG_MATCHER
-        .find_iter(&text.to_lowercase())
-        .filter_map(|p| TAGS.get(p.pattern().as_usize()).copied())
-        .collect()
+    #[test]
+    fn test() {
+        let text = "super_saw";
+        let tags = tag_string(text);
+
+        println!("{tags:?}");
+    }
 }

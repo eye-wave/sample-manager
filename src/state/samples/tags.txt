@@ -145,7 +145,6 @@ bag pipe
 banjo
 bassoon
 bell
-bird
 blown bottle
 brass
 celesta
@@ -166,7 +165,6 @@ guitar harmonics
 harmonica
 harp
 harpsichord
-helicopter
 honky tonk
 horn
 instrument
@@ -193,7 +191,6 @@ rhodes
 rock organ
 sax
 saxophone
-seashore
 shakuhachi
 shamisen
 shanai
@@ -340,6 +337,8 @@ slorp
 sonar
 sound
 sound effect
+seashore
+helicopter
 soundscape
 space
 splash

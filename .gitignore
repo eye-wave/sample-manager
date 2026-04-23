@@ -1,5 +1,14 @@
+# Rust output
 /target
 
+#
 node_modules/
-dist/
 build/
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated
+**/gen

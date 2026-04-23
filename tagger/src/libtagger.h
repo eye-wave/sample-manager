@@ -1,14 +1,13 @@
-#ifndef LIBTAGGER_H
-#define LIBTAGGER_H
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-void tag_string(short *buf, char *input);
+#include <stdint.h>
+
+void search(const char *text, const char **buffer, uint16_t max_out);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif
