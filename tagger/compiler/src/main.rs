@@ -64,5 +64,6 @@ fn main() {
     let code = emit_c(&trie);
     print_size(&code);
 
+    fs::create_dir(&path.parent().unwrap()).expect("Failed to create gen dir");
     fs::write(path, code).expect("Failed to write C header");
 }
