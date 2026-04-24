@@ -1,13 +1,5 @@
-// All the tags used
-//
-//
-
-bpm *
-
-// Style of the sample
-
 fill *
-hit *
+!hit *
 legato *
 logn *long
 long *
@@ -18,13 +10,19 @@ riff *
 sustain *
 
 bass {
+  bass
   808 *
 
-  bsss *bass
+  dumloop
+  drumfill
 
-  chonk *chonky
-  chonker *chonky
-  chonky *
+  bsss
+
+  chonky {
+    chonky
+    chonk
+    chonker
+  }
 
   crunch *crunchy
   crunchy *
@@ -34,7 +32,6 @@ bass {
   grol *
   grow+l+ *
 
-
   heavy *
   hoo+ver *
 
@@ -43,28 +40,33 @@ bass {
 
   ray#gun *
 
-  re+ce+ *reese
-  ree+s *reese
-  ree+s+e *
-  re+sge *reese
+  reese {
+    re+ce+
+    ree+s
+    ree+s+e
+    re+sge
+  }
 
-  scream *
   screech *
-
   spectral *
 
   squelch *
   squelsh *squelch
 
-  sub *
+  !sub *
 
   thick *
   thicc *thick
 
-  wob+ly *
-  wob *wobbly
-  wub *wobbly
-  wobble *wobbly
+  wobbly {
+    !wob+l+y
+    !wob
+    !wub
+    !wobs
+    !wubs
+    !wo+b+l+e
+    !we+b+l+e
+  }
 
   whomp *
   womp *whomp
@@ -72,14 +74,16 @@ bass {
   wonk *wonky
   wonky *
 
-
+  yoy *
   yoi *yoy
+
   yoink *
   yonk *yoink
-  yoy *
 }
 
 drum {
+  drum
+
   909 *
   amen *
   break *
@@ -88,31 +92,36 @@ drum {
   dru+m+s+
   dru+m+
   drems
-  dro+m
+  !dro+m
   durm
 
   ki+ck *
   kcik *kick
-  kickclap *kick *clap
 
-  pan *
+  !pan *
 
-  sna+re+ *
-  snaer *snare
-  snar *snare
-  snear *snare
-  sner *snare
-  snor *snare
+  snare {
+    sna+re+
+    snaer
+    snar
+    snear
+    sner
+    snor
+  }
 
   timpani *
   tom *
 }
 
 perc {
-  foley
-  kitchen
-  mechanical *
-  metal+ic *
+  perc
+
+  foley {
+    foley
+    kitchen
+    mechanical *
+    metal+ic *
+  }
 
   meteronome *metronome
   metronome *
@@ -121,35 +130,45 @@ perc {
   rim *
   snap *
   taiko *
-  transiant *transient
-  transient *
+
+  transient {
+    click
+    transiant
+    transient
+  }
+
   wood *
   woodblock *wood
 }
 
 cymbal {
+  cymbal
+
   crash *
-  cymbal *
-  hat *
+  hi#hat *hat
   ride *
   shaker *
   tambourine *
 }
 
 synth {
+  synth
+
   analog *
   anlog *analog
   anlogu *analog
 
-  arp *
-
-  atonal *
+  !atonal *
 
   detune *
   digital *
 
   drone *
-  lead *
+  !lead *
+  pluck *
+  !arp *
+
+  !donk *
 
   oscillator *
   oscilator *oscillator
@@ -163,7 +182,7 @@ synth {
 
   super#saw * *saw
 
-  synth *
+  stab *
   tonal *
   unison *
 }
@@ -171,7 +190,7 @@ synth {
 instrument {
 
   keys {
-    keys *
+    keys
     accordion *
     church#organ *
     harpsichord *
@@ -183,12 +202,21 @@ instrument {
     wurli *
   }
 
+  horn {
+    horn
+    english#horn
+    french#horn
+  }
+
   acoustic *
 
   bag#pipe *
   banjo *
   bassoon *
-  bell *
+
+  !bell *
+  jingle *bell
+
   blow#bottle *bottle
   blown#bottle *bottle
   brass *
@@ -197,17 +225,14 @@ instrument {
   clarinet *
   contrabass *
   dulcimer *
-  english#horn *horn
   fiddle *
   flute *
-  french#horn *horn
   fret *
   fretless *
   glockenspiel *
   guitar *
   guitar#harmonics *guitar
   harp *
-  horn *
   instrument *
 
   kalimba *
@@ -253,3 +278,1014 @@ instrument {
   whistle *
   xylophone *
 }
+
+voice {
+  acappella {
+    acap+el+
+    acap+el+a
+  }
+
+  whisper *
+  asmr *whisper
+
+  autotune *
+  beatbox *
+
+  breath {
+    breath
+    inhale
+    exhale
+    sigh
+  }
+
+  burp *
+  eugh *burp
+
+  chant *
+  choir *
+  cough *
+  cry *
+  eating *
+
+  giggle *laugh
+  laugh *
+
+  moan {
+    moan
+    grunt
+    groan
+  }
+
+  hurt {
+    owie
+    hurt
+  }
+
+  mouth
+  phrase
+
+  scream {
+    scream
+    shout
+    !yell
+    yelling
+    vomit
+  }
+
+  sing
+  speech
+  talk
+  voc
+  vocal
+
+  vocalchop {
+    vocal#chop
+    volchop
+  }
+
+  voice
+  voicecrack
+  voicetag
+  voies
+  vowl
+  vox
+
+  opera
+}
+
+sfx {
+  ambience *ambience
+  ambiance *
+
+  atmos {
+    atmo
+    atmos
+    atmosphere
+  }
+
+  bed#squeak *
+
+  bleep {
+    bleep
+    beep
+    sonar
+  }
+
+  laser {
+    laser
+    zap
+    blaster
+    lazer
+    lazor
+    peow
+    pew
+  }
+
+  explosion {
+    explosion
+    bomb
+    boom
+    explode
+    explosive
+  }
+
+  bonk *
+
+  bubble *
+  buzz *
+
+  vehicle {
+    !car
+    engine
+    helicoper
+    motorcycle
+    vroom
+    tank
+  }
+
+  chips *
+
+  faller {
+    faller
+    donwlifter
+    donwlitfer
+    downfall
+    downlifter
+    downlitfer
+  }
+
+  riser {
+    rise
+    riser
+    uplifter
+    uplitfer
+    uplitr
+  }
+
+  computer {
+    computer
+    network
+  }
+
+  soundscape *
+  dreamscape *soundscape
+
+  fx
+
+  fart *
+
+  glass *
+
+  glitch {
+    glich
+    glitch
+    gltcih
+
+    scratch *
+  }
+
+  color {
+    candy
+    color
+    colour
+    ear#candy
+    rainbow
+    sparkle
+    sparkly
+    sprinkle
+    twinkle
+    twinkles
+    twinklez
+    twinklies
+  }
+
+  gun *
+
+  sound#effect
+  soundboard
+
+  impact *
+  impct *impact
+
+  crispy *
+  crisp *crispy
+
+  vinyl {
+    crackle
+    radio
+    static
+    texture
+    vinyl
+  }
+
+  liquid {
+    liquid
+    splash
+    water
+  }
+
+  sword {
+    sword
+    katana
+  }
+
+  noise {
+    noisy
+    noiz
+  }
+
+  robot {
+    machine
+    robo
+    robot
+    volt
+    clank
+    clanky
+    clanker
+  }
+
+  paper *
+  punch *
+  shriek *
+  seashore *
+
+  space {
+    space
+    whormole
+    worm#hole
+  }
+
+  squeeky {
+    squeek
+    squeeky
+  }
+
+  squish *
+
+  swell *
+  sweep *swell
+
+  thunder *
+  tinnitus
+
+  wheel#up *
+
+  animal {
+
+    dog {
+      !dog
+      !woo+f
+      !bark
+      !howl
+      !whine
+      !panting
+    }
+
+    cat {
+      !cat
+      !me+o+w+
+      !maw
+      !pur+
+      !hiss+
+      !rawr
+      !roar
+    }
+
+    sheep {
+      !shee+p
+      !baa+
+    }
+
+    bird {
+      !bird
+      !chicken
+      !rooster
+      !duck
+      !crow
+      !seagull
+      !owl
+      !chirp
+      !chirping
+      !tweet
+      !squawk
+      !caw
+    }
+
+    cow {
+      !cow
+      !moo+
+    }
+
+    pig {
+      !pig
+      !oink
+    }
+
+    frog {
+      !frog
+      !croak
+    }
+
+    !goat *
+
+    horse {
+      !horse
+      !neigh
+    }
+
+    insect {
+      !insect
+      !cricket
+      !mosquito
+    }
+
+    elephant {
+      !elephant
+      !toot
+    }
+  }
+}
+
+vst {
+  synth {
+    !3xosc
+    !fm8
+    !harmor
+    !phaseplant
+    !razor
+    !serum
+    !sylenth
+    !sylenth1
+    !vital
+  }
+
+  !bitspeek *
+  !bitspeak *bitspeek
+
+  color {
+    !chroma *
+    pitchmap {
+      !pitch#map
+      !bitch#map
+    }
+    !retune *
+  }
+
+  glitch {
+    !grossbeat
+    !portal
+  }
+
+  snapheap {
+    !snap#heap
+    !snap#he+p
+  }
+}
+
+sounddesign {
+  aliasing *
+  artifact {
+    artifact
+    aertefact
+  }
+
+  filter {
+    filter
+    all#pass
+    all#pss
+    band#pass
+    band#pss
+    band#reject
+    eq
+    equalizer
+    high#pass
+    high#pss
+    low#pass
+    low#pss
+  }
+
+  distortion {
+    distortion
+    waveshaper
+    distorted
+    datamosh
+    saturation
+    shaper
+    overdrive
+    overdriven
+  }
+
+  granular {
+    granular
+    granulator
+    granulized
+    granulizer
+  }
+
+  bitcrush {
+    downsample
+    bit#crush
+    bit#depth
+    bit#rate
+    dc#offset
+  }
+
+  compressed {
+    co+mpres+ion
+    co+mpres+ed
+    multiband
+    ott
+    side#chain
+  }
+
+  cellular
+  chain
+
+  chorus {
+    chorus
+    comb
+    flanger
+  }
+
+  convo {
+    convo
+    convolution
+    impulse
+  }
+
+  delay
+
+  disperser {
+    disperser
+    disperse
+  }
+
+  resample {
+    resample
+    rsmpling
+    resmpling
+    sample
+    sampling
+  }
+
+  fft
+
+  frequencyshifter {
+    frequency#shifter
+    frequency#shift
+    freq#shifter
+    freq#shift
+  }
+
+  gain {
+    !gain
+    utility
+    utiul+
+    utiul+y
+    utlility
+    utlt+i
+  }
+
+  gate *
+
+  harmonize {
+    harmonize
+    resonator
+  }
+
+  layered
+  layers
+
+  !mixed
+  modelling
+  modular
+  morph
+
+  phaser *
+  preset
+  processed
+  random
+
+  re#verb *
+  ring#mod *
+
+  sound#design
+  stereo
+
+  tapestop {
+    !tape#stop
+    !tape
+  }
+
+  timestretch *
+
+  tube
+  unfiltered
+
+  vocoder {
+    voco+d
+    vocode
+    vocoder
+  }
+
+  wavetable {
+    wave#table
+    waveform
+    tables
+  }
+}
+
+daw {
+  flstudio {
+    !fl
+    !fl#studio
+    !consolidated
+    !edison
+  }
+
+  ableton {
+    !ableton
+    !freeze
+  }
+
+  !daw
+  !export
+
+  !project
+  !pattern
+  !recorded
+  !recording
+
+  !stem
+  track
+  uirec
+
+  untitled
+}
+
+buildup {
+  buildup
+  buil
+  builr
+  builup
+}
+
+chordprog {
+  chord#progression
+  chord#prog
+}
+
+rythm {
+  groove
+  rhyddm
+  rhythm
+  rhytm
+  rithym
+  rythm
+}
+
+intro *
+melody {
+  melody
+  meldoy
+  melodie
+}
+
+
+// --------------------------------- Genres -----------------------------------
+
+edm {
+  dj
+
+  2 step
+  acid
+  ambient
+
+  botanica {
+    botanica
+    batanica
+  }
+
+  electro*
+
+  house {
+    house
+    big room
+    progressive#house
+    future#house
+    electro#house
+    tech#house
+  }
+
+  breakbeat
+
+  dubstep {
+    brostep
+    color#bass
+    complextro
+    cyberpunk
+    dubstep
+    glitch#hop
+    melodic#dubstep
+    melodub
+    riddim
+    ridim
+    tearout
+    tearut
+  }
+
+  dnb {
+    dnb
+    dru+m+#a+n+d+#ba+ss+
+    drumstep
+    liquid#dnb
+    neurofunk
+  }
+
+  trap {
+    future#bass
+    phonk {
+      phonk
+      memphis
+    }
+  }
+
+  chill {
+    chill
+    chillout
+    donwtempo
+    downtempo
+    lofi
+    trip#hop
+  }
+
+  disco*
+
+  hardcore {
+    extratone
+    rawstyle
+    schranz
+    speedcore
+    hardcore
+    hardstyle
+    uptempo
+    uptmpo
+  }
+
+  garage {
+    garage
+    future#garage *
+    uk#garage *
+  }
+
+  hyperpop *
+  jersey *
+
+  jungle {
+    jungle
+    jungle#terror
+  }
+
+  tech
+  techno *
+
+  rave
+
+  synthwave *
+  vaporwave *
+
+  trance *
+}
+
+classical {
+  classical
+  baroque
+}
+
+pop*
+bluegrass *
+blues *
+country *
+
+metal {
+  metal
+  death#metal *
+  heavy#metal *
+  metalcore *
+}
+
+folk *
+funk *
+gospel *
+grunge *
+hip#hop *
+indie *
+jazz *
+pop *
+reggae *
+rnb *
+
+rock {
+  math#rock *
+}
+
+soul *
+
+!ost *
+soundtrack *ost
+swing *
+
+vocaloid {
+  vocaloid
+  miku
+  teto
+
+  yuyoyuppe *
+}
+
+
+// --------------------------------- Artists -----------------------------------
+
+dubstep {
+  ace#aura *
+  au5 *
+  barely#alive *
+  chibs *
+  chime *
+  cymatics *
+  disciple *
+  excision *
+  fox#ste+venson *
+  graphyt *
+  infekt *
+  kompany *
+  leotrix *
+  marauda *
+  mastadon *marauda
+
+  convexity * *jazz
+
+  neddie *
+  nedy *neddie
+
+  nodex *
+  oddprophet *
+  oliverse *
+  panda#eyes *
+  phonon *
+
+  teminite *
+
+  rayvolpe {
+    ray#volpe *
+    vay#rolpe *
+  }
+
+  rushdown *
+  seven#lions *
+
+  sharks *
+
+  skrillex {
+    skril
+    skril+
+    skr+il+ex
+    skwrilex
+  }
+
+  vr {
+    virtual#riot
+    virtulrit
+    virtulsri
+    virtumi
+    virto
+    vr
+  }
+
+  ximm *
+  voltra *
+  voka *
+  noctane *
+  infowler *
+  eccentric *
+  marcix *
+  voka *
+  azure#spark *
+  skybreak *
+}
+
+rap {
+  lil#uzi *
+  juice#wrld *
+}
+
+hyperpop {
+  acloudyskye *
+  brakence *
+  kmoe *
+  nettspend *
+  umru *
+  underscores *
+}
+
+pop {
+  michael#jackson *
+  oliver#tree
+  porter
+  porter#robinson
+}
+
+neurofunk {
+  voljum * *jazz
+  koan#sound *
+  stasys *
+}
+
+jazz {
+  anomalie
+  adam#ne+l+y+
+}
+
+// ---------------------------------- Vibes ------------------------------------
+
+angry {
+  aggrsiv
+  aggrssion
+  aggrssiv
+  anger
+  angry
+}
+
+moody {
+  moody
+  melancholic
+  melancholy
+  gloomy
+  bleak
+  emo *
+  melancholic
+  emotion
+  emotional
+  sad
+  depressed
+  downbeat
+  lonely
+
+  nostalgic {
+    nostaligic
+    nostalgic
+  }
+}
+
+intense {
+  intense
+  adrenaline
+  fast *
+  hyper *
+  bouncy
+}
+
+
+cute {
+  anime
+  kawaii
+  uwu
+  owo
+  waifu
+}
+
+weird {
+  cursed *
+  weird
+  werid
+}
+
+calm {
+  calm
+  calb
+}
+
+happy {
+  nice
+  peaceful
+  upbeat
+  uplifting
+  upliting
+  joy
+  joyful
+  happy
+  cheerful
+  euphoric
+}
+
+funny {
+  go+fy
+  playful
+  sil+y
+  fun+y
+}
+
+loud *
+cool *
+slow *
+
+big {
+  big
+  fat *
+  huge
+}
+
+small {
+  smal+
+  smol *
+}
+
+soft {
+  soft
+  softer
+  softest
+}
+
+hard {
+  hard
+  harder
+  hardest
+}
+
+warm *
+shiny *
+bright *
+dark *
+creepy *
+
+nasty {
+  nasty
+  disgust
+  disgusting
+}
+
+!dirty *
+
+melodic {
+  melodic
+  meldic
+  meldoic
+}
+
+// --------------------------------- Creature ----------------------------------
+
+alien {
+  alins
+  alien
+  alion
+}
+
+angel *
+angl *angel
+
+demon {
+  demon
+  behemoth
+  devil *
+}
+
+creature *
+
+monster {
+  monster
+  dragon *
+  mutant
+}
+
+// ---------------------------------- Games ------------------------------------
+
+minecraft *
+deltarune *
+undertale *
+
+// ----------------------------------- Yes -------------------------------------
+
+amogus *
+among#us *amogus
+
+banana *
+bruh+ *
+chungus *
+cock *
+cum *
+fuck *
+idk *
+lmao *
+lmfao *
+lol *
+meme {
+  !meme
+  !memes
+}
+
+penis *
+sex *
+trash *
+xd *
+yeet *
+yes *

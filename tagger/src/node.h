@@ -1,7 +1,8 @@
 #pragma once
+#include <stdint.h>
 
 typedef struct Node {
-  struct Node *next[37];
-  const char **output;
-  unsigned short len;
+  uint16_t next[37];
+  uint16_t output[4];
+  uint8_t strict;
 } Node;

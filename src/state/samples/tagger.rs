@@ -7,7 +7,7 @@ unsafe extern "C" {
 pub fn tag_string(text: &str) -> Vec<&'static str> {
     const MAX_SIZE: usize = 20;
 
-    let input = CString::new(text).unwrap();
+    let input = CString::new(text.to_lowercase()).unwrap();
     let mut buffer: [*const c_char; MAX_SIZE] = [std::ptr::null(); MAX_SIZE];
 
     unsafe {
@@ -19,17 +19,4 @@ pub fn tag_string(text: &str) -> Vec<&'static str> {
         .filter(|p| !p.is_null())
         .map(|ptr| unsafe { CStr::from_ptr(*ptr).to_str().unwrap() })
         .collect()
-}
-
-#[cfg(test)]
-mod test {
-    use crate::state::samples::tag_string;
-
-    #[test]
-    fn test() {
-        let text = "super_saw";
-        let tags = tag_string(text);
-
-        println!("{tags:?}");
-    }
 }

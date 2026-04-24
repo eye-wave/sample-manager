@@ -27,6 +27,9 @@ build-c:
     cmake -S tagger -B tagger/build -DCMAKE_BUILD_TYPE=Release
     cmake --build tagger/build
 
+test: build-c
+    cargo test -- --no-capture
+
 format:
     biome format --write
     cargo fmt

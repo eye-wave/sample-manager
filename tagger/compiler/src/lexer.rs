@@ -9,6 +9,8 @@ pub enum Token {
     #[regex(r"[a-zA-Z0-9]+", |lex| lex.slice().to_string())]
     Ident(String),
 
+    #[token("!")]
+    Bang,
     #[token("*")]
     Star,
     #[token("+")]

@@ -6,6 +6,7 @@ use crate::lexer::Token;
 pub struct PatChar {
     pub ch: char,
     pub repeating: bool,
+    pub optional: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -18,6 +19,7 @@ pub enum Output {
 pub struct WordDecl {
     pub pattern: Vec<PatChar>,
     pub outputs: Vec<Output>,
+    pub strict: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -40,6 +42,7 @@ pub fn make_parser<'src>() -> impl Parser<'src, Inp<'src>, Vec<Item>, Extra<'src
         vec![PatChar {
             ch: '_',
             repeating: false,
+            optional: true,
         }]
     });
 
@@ -54,6 +57,7 @@ pub fn make_parser<'src>() -> impl Parser<'src, Inp<'src>, Vec<Item>, Extra<'src
                 .map(|(i, ch)| PatChar {
                     ch,
                     repeating: i == last && plus.is_some(),
+                    optional: false,
                 })
                 .collect::<Vec<_>>()
         });
@@ -74,9 +78,15 @@ pub fn make_parser<'src>() -> impl Parser<'src, Inp<'src>, Vec<Item>, Extra<'src
                 None => Output::Itself,
             });
 
-    let word_decl = pattern
+    let word_decl = just(Token::Bang)
+        .or_not()
+        .then(pattern)
         .then(output_clause.repeated().collect::<Vec<_>>())
-        .map(|(pattern, outputs)| WordDecl { pattern, outputs });
+        .map(|((bang, pattern), outputs)| WordDecl {
+            pattern,
+            outputs,
+            strict: bang.is_some(),
+        });
 
     let mut item: Recursive<Indirect<'src, '_, Inp<'src>, Item, Extra<'src>>> =
         Recursive::declare();
