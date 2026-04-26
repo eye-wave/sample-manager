@@ -1,0 +1,27 @@
+bg_base = "303446"
+bg_panel = "292c3c"
+bg_surface = "414559"
+bg_hover = "51576d"
+bg_active = "626880"
+
+accent = "81c8be"
+accent_dim = "5dbab0"
+accent_glow = "81c8be33"
+
+text_primary = "e6e9ef"
+text_secondary = "b5bfe2"
+text_muted = "a5adce"
+
+border = "51576d"
+border_active = "81c8be66"
+
+tag_bg = "414559"
+tag_text = "e6e9ef"
+tag_text_secondary = "81c8be"
+
+love = "e78284"
+
+wave_a = "81c8be"
+wave_b = "a6d189"
+
+radius = 12

@@ -14,41 +14,11 @@ async function main() {
     collapseBooleanAttributes: true,
   });
 
-  output = renameCssVariables(output);
   output = moveHeadScriptToBodyEnd(output);
 
   output = output.replace("\n/*$vite$:1*/", "").replace(" crossorigin type=module", "");
 
   await writeFile("dist/index.html", output);
-}
-
-function renameCssVariables(html: string) {
-  const varMap = new Map<string, string>();
-  let index = 0;
-
-  const getName = (i: number) => `--${String.fromCharCode(65 + i)}`;
-
-  const usedVars = new Set<string>();
-  html.replace(/var\(\s*(--[a-zA-Z0-9-_]+)/g, (_, v) => {
-    usedVars.add(v);
-    return "";
-  });
-
-  html = html.replace(/(--[a-zA-Z0-9-_]+)\s*:\s*[^;}{]+;/g, (full, name) => {
-    if (!usedVars.has(name)) return "";
-    return full;
-  });
-
-  html = html.replace(/--[a-zA-Z0-9-_]+/g, (match) => {
-    if (!usedVars.has(match)) return match;
-
-    if (!varMap.has(match)) {
-      varMap.set(match, getName(index++));
-    }
-    return varMap.get(match) ?? match;
-  });
-
-  return html;
 }
 
 function moveHeadScriptToBodyEnd(html: string) {

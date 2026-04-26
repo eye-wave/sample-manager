@@ -1,4 +1,5 @@
 import { ONCLICK, w } from "./alias";
+import { updateCurrentTheme } from "./helpers";
 
 /// BUILD start
 w.oncontextmenu = (e) => e.preventDefault();
@@ -14,3 +15,7 @@ titlebar_handle.onmousedown = () => invoke("drag_window");
 btn_minimize[ONCLICK] = () => invoke("minimize_window");
 btn_maximize[ONCLICK] = () => invoke("maximize_window");
 btn_closeWindow[ONCLICK] = () => invoke("close_window");
+
+/// DEV start
+updateCurrentTheme();
+/// DEV end

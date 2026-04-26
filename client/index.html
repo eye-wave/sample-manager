@@ -4,9 +4,8 @@
 
     <script src="/src/main.ts" type="module"></script>
 
+    <theme></theme>
     <link rel='stylesheet' href="/styles/__app__.scss" />
-
-    <link rel='stylesheet' href="/styles/theme.scss" />
     <link rel='stylesheet' href="/styles/settings.scss" />
     <link rel='stylesheet' href="/styles/styles.scss" />
 
@@ -61,11 +60,10 @@
                 <p class="section-label">Preferences</p>
 
                 <div class="field">
-                  <span class="field__label">FFmpeg path</span>
-                  <div class="color-row">
-                    <input type="text" />
-                  </div>
+                  <span class="field__label">App Theme</span>
+                  <select id="theme_select"></select>
                 </div>
+
               </div>
 
               <div class="dialog__footer">
@@ -120,9 +118,6 @@
         </div>
         <div class="preview-body">
           <div id="waveform"></div>
-        </div>
-        <div class="preview-controls">
-          <button class="play-btn" id="playBtn">▶</button>
         </div>
       </div>
 

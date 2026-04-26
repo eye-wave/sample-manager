@@ -1,0 +1,27 @@
+bg_base = "f6f9fc"
+bg_panel = "ffffff"
+bg_surface = "f0f4f8"
+bg_hover = "e6eef7"
+bg_active = "d9e6f5"
+
+accent = "2f6fed"
+accent_dim = "5b8def"
+accent_glow = "2f6fed33"
+
+text_primary = "1b2430"
+text_secondary = "4a5a6a"
+text_muted = "7a8a99"
+
+border = "d9e2ec"
+border_active = "2f6fed66"
+
+tag_bg = "e7f0ff"
+tag_text = "1b3a57"
+tag_text_secondary = "2f6fed"
+
+love = "e63946"
+
+wave_a = "8ab4ff"
+wave_b = "2f6fed"
+
+radius = 12

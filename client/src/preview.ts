@@ -1,18 +1,10 @@
-import { ONCLICK } from "./alias";
 import { renderTags } from "./helpers";
 
-declare const playBtn: HTMLButtonElement;
 declare const waveform: HTMLImageElement;
 declare const preview_label: HTMLSpanElement;
 declare const preview_tags: HTMLDivElement;
 
 declare const s_total: HTMLSpanElement;
-
-let playing = false;
-playBtn[ONCLICK] = () => {
-  playing = !playing;
-  playBtn.textContent = playing ? "⏸" : "▶";
-};
 
 function createPreview() {
   return {

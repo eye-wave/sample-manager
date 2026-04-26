@@ -2,7 +2,7 @@ dialog {
   inset: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.55);
+  background: #0000008c;
 }
 
 .dialog-shell {
@@ -131,6 +131,7 @@ dialog {
   & input[type="email"],
   & input[type="number"],
   & select {
+    appearance: none;
     background: var(--bg-hover);
     border: 1px solid var(--border);
     border-radius: 7px;
@@ -148,6 +149,8 @@ dialog {
       background: var(--bg-active);
     }
   }
+
+
 }
 
 .section-label {

@@ -1,40 +1,54 @@
-use std::collections::HashSet;
+use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
-
 use crate::audio::AudioPlayer;
-use crate::state::samples::FsSample;
 
+pub mod config;
 pub mod samples;
 
-pub struct AppState {
-    _config_path: PathBuf,
+use config::AppConfig;
+use samples::FsSample;
 
-    pub cache_path: PathBuf,
+pub const APP_NAME: &str = "SampleVault";
+
+pub struct AppDirs;
+
+impl AppDirs {
+    fn _cache_path() -> PathBuf {
+        dirs::cache_dir().unwrap().join(APP_NAME)
+    }
+
+    fn _config_path() -> PathBuf {
+        dirs::config_local_dir().unwrap().join(APP_NAME)
+    }
+
+    pub fn themes_path() -> PathBuf {
+        Self::_config_path().join("themes")
+    }
+
+    pub fn thumbnail_cache_path() -> PathBuf {
+        Self::_cache_path().join(".waves")
+    }
+
+    pub fn create_all_dirs() -> io::Result<()> {
+        std::fs::create_dir_all(Self::thumbnail_cache_path())?;
+        std::fs::create_dir_all(Self::themes_path())?;
+
+        Ok(())
+    }
+}
+
+pub struct AppState {
     pub sample_registry: Arc<[FsSample]>,
     pub audio_player: AudioPlayer,
 
     app_config: AppConfig,
 }
 
-#[derive(Default, Serialize, Deserialize)]
-pub struct AppConfig {
-    pub tracked_dirs: HashSet<PathBuf>,
-}
-
 impl Default for AppState {
     fn default() -> Self {
-        const APP_NAME: &str = "SampleVault";
-
-        let _config_path = dirs::config_local_dir().unwrap().join(APP_NAME);
-        let cache_path = dirs::cache_dir().unwrap().join(APP_NAME);
-
         Self {
-            _config_path,
-
-            cache_path,
             sample_registry: Arc::new([]),
             audio_player: AudioPlayer::new(),
 
@@ -53,17 +67,14 @@ impl AppState {
         Ok(())
     }
 
-    pub fn create_dirs(&self) {
-        std::fs::create_dir_all(&self.cache_path).ok();
-        std::fs::create_dir_all(&self._config_path).ok();
-    }
-
-    pub fn update_config<F: FnMut(&mut AppConfig)>(&mut self, mut cb: F) {
-        cb(&mut self.app_config);
+    pub fn update_config<R, F: FnMut(&mut AppConfig) -> R>(&mut self, mut cb: F) -> R {
+        let result = cb(&mut self.app_config);
 
         if let Ok(contents) = toml::to_string(&self.app_config) {
             std::fs::write(self.config_file(), contents).ok();
         }
+
+        result
     }
 
     pub fn get_config(&self) -> &AppConfig {
@@ -72,6 +83,6 @@ impl AppState {
 
     fn config_file(&self) -> PathBuf {
         const CONFIG_NAME: &str = "config.toml";
-        self._config_path.join(CONFIG_NAME)
+        AppDirs::_config_path().join(CONFIG_NAME)
     }
 }

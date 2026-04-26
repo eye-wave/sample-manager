@@ -1,3 +1,5 @@
+import { $el } from "./alias";
+
 export function escapeHTML(str: string) {
   return str
     .replace(/&/g, "&amp;")
@@ -11,14 +13,12 @@ export function renderTags<E extends HTMLElement>(tagsEl: E, tags: string[]) {
   tagsEl.innerHTML = tags.map((t) => /* HTML */ `<span class="tag">${t}</span>`).join("");
 }
 
-/// UNIX start
-// biome-ignore lint/correctness/noUnusedVariables: trust
-var SEPARATOR = "/";
+const SEPARATOR =
+  /// UNIX start
+  "/";
 /// UNIX end
-
 /// WIN start
-// biome-ignore lint/suspicious/noRedeclare: trust
-var SEPARATOR = "\\";
+("\\");
 /// WIN end
 
 const basenameRegex = new RegExp(`[${SEPARATOR}]`);
@@ -54,4 +54,28 @@ export function joinPath(...parts: string[]) {
   }
 
   return out;
+}
+
+// DEV start
+const devStyle = document.createElement("style");
+document.head.append(devStyle);
+// DEV end
+
+export function updateThemeCss(css: string) {
+  // DEV start
+  devStyle.innerHTML = css;
+  // DEV end
+  // BUILD start
+  $el("style").innerHTML = css;
+  // BUILD end
+}
+
+export async function updateTheme(theme: string) {
+  const css = await invoke("update_theme", theme);
+  if (!css) return;
+  updateThemeCss(css);
+}
+
+export async function updateCurrentTheme() {
+  updateThemeCss(await invoke("get_theme"));
 }

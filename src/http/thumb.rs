@@ -1,15 +1,11 @@
 use std::borrow::Cow;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use wry::http::{Request, Response, StatusCode, Uri};
 
-pub fn thumbnail_handler(
-    cache_path: Arc<Path>,
-    req: Request<Vec<u8>>,
-) -> Response<Cow<'static, [u8]>> {
-    match try_read_file(&cache_path, req.uri()) {
+pub fn thumbnail_handler(cache_path: &Path, req: Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> {
+    match try_read_file(cache_path, req.uri()) {
         Some(bytes) => Response::builder()
             .status(StatusCode::OK)
             .header("Access-Control-Allow-Origin", "*")

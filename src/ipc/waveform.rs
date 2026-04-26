@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::ipc::{IPCBody, IPCMessage, IPCResponse, ok};
 use crate::ipc_commands;
+use crate::state::AppDirs;
 
 fn decode_audio(path: &str, downsample_factor: usize) -> Option<Vec<u8>> {
     use std::io::Read;
@@ -152,10 +153,9 @@ fn thumbnail_uri(hashed: &str) -> String {
 fn read_audio_file(body: IPCBody) -> IPCResponse {
     std::thread::spawn(move || {
         let path = body.req.as_ref();
-        let guard = body.app_state.read().unwrap();
 
         let hashed = hash_path(path);
-        let thumb_path = thumbnail_path(&hashed, &guard.cache_path);
+        let thumb_path = thumbnail_path(&hashed, &AppDirs::thumbnail_cache_path());
         let uri = thumbnail_uri(&hashed);
 
         if thumb_path.exists() {
@@ -168,7 +168,7 @@ fn read_audio_file(body: IPCBody) -> IPCResponse {
         }
 
         if let Some(samples) = decode_audio(path, 3)
-            && draw_waveform(&thumb_path, &samples, 512)
+            && draw_waveform(&thumb_path, &samples, 960)
         {
             body.webview_sender
                 .send(IPCMessage {

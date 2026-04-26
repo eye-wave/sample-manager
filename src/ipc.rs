@@ -9,6 +9,7 @@ mod audio;
 mod fs;
 mod logger;
 mod samples;
+mod theme;
 mod waveform;
 mod window;
 
@@ -124,6 +125,7 @@ pub fn commands_iter<'a>() -> impl Iterator<Item = &'a dyn IPCCommand> {
     use crate::ipc::fs::IPC_FS;
     use crate::ipc::logger::IPC_LOGGER;
     use crate::ipc::samples::IPC_SAMPLES;
+    use crate::ipc::theme::IPC_THEME;
     use crate::ipc::waveform::IPC_WAVEFORM;
     use crate::ipc::window::IPC_WINDOW;
 
@@ -133,6 +135,7 @@ pub fn commands_iter<'a>() -> impl Iterator<Item = &'a dyn IPCCommand> {
         .chain(IPC_FS.iter())
         .chain(IPC_LOGGER.iter())
         .chain(IPC_SAMPLES.iter())
+        .chain(IPC_THEME.iter())
         .chain(IPC_WAVEFORM.iter())
         .copied()
 }
