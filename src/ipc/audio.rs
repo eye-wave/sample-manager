@@ -53,6 +53,12 @@ fn get_audio_position(body: IPCBody) -> IPCResponse {
     })
 }
 
+fn get_audio_position_pretty(body: IPCBody) -> IPCResponse {
+    crate::with_state!(body, state, {
+        state.audio_player.position_pretty().finish()
+    })
+}
+
 fn player_seek(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
         let millis = body.req.parse()?;
@@ -79,11 +85,12 @@ fn set_volume(body: IPCBody) -> IPCResponse {
 
 crate::ipc_commands! {
     IPC_AUDIO = [
+        get_audio_position_pretty,
         get_audio_position,
         get_playback_state,
         play_audio_file,
-        player_pause,
         player_resume,
+        player_pause,
         player_stop,
         player_seek,
         get_volume,

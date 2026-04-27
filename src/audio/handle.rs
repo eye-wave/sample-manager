@@ -124,6 +124,20 @@ impl PlayerHandle {
         (played_ms as f64 / len_ms as f64).clamp(0.0, 1.0)
     }
 
+    pub fn position_pretty(&self) -> String {
+        let played = self.shared.samples_played.load(Ordering::Acquire);
+        let len_ms = self.shared.estimated_audio_len.load(Ordering::Acquire);
+
+        if len_ms == 0 {
+            return "0:00 / 0:00".to_string();
+        }
+
+        let sample_rate = self.shared.sample_rate.load(Ordering::Relaxed) as u64;
+        let played_ms = (played * 1000) / sample_rate;
+
+        format_time(played_ms) + "/" + &format_time(len_ms as u64)
+    }
+
     pub fn playback_state(&self) -> PlaybackState {
         PlaybackState::from_flags(self.shared.load_flags())
     }
@@ -135,4 +149,18 @@ impl PlayerHandle {
     pub fn set_volume(&self, volume: f32) {
         self.shared.volume.store(volume, Ordering::Release);
     }
+}
+
+fn format_time(ms: u64) -> String {
+    let total_seconds = ms / 1000;
+
+    let seconds = total_seconds % 60;
+    let minutes = (total_seconds / 60) % 60;
+    let hours = total_seconds / 3600;
+
+    if hours > 0 {
+        return format!("{:02}:{:02}:{:02}", hours, minutes, seconds);
+    }
+
+    format!("{:02}:{:02}", minutes, seconds)
 }

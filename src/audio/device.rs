@@ -100,7 +100,10 @@ fn audio_loop<S>(
         if flushing {
             rb_cons.clear();
             shared_state.clear_flag(PlayerFlags::FLUSHING);
-            shared_state.samples_played.store(0, Ordering::Relaxed);
+
+            if f.contains(PlayerFlags::STOPPED) {
+                shared_state.samples_played.store(0, Ordering::Release);
+            }
         }
 
         for s in data.iter_mut() {

@@ -31,9 +31,6 @@ pub enum DecodeError {
     #[error("")]
     NoTrack,
 
-    #[error("")]
-    InvalidTimeSeek,
-
     #[error("{0}")]
     Io(#[from] std::io::Error),
 
@@ -122,8 +119,13 @@ fn decode_thread_loop(
                 }
 
                 DecodeCommand::Seek { millis } => {
-                    if let Some(dec) = &mut current {
-                        perform_seek(dec, millis).ok();
+                    if let Some(dec) = &mut current
+                        && perform_seek(dec, millis).is_ok()
+                    {
+                        audio_state.set_flag(PlayerFlags::FLUSHING);
+                        let sample_rate = audio_state.sample_rate.load(Ordering::Relaxed) as u64;
+                        let new_pos = (millis as u64 * sample_rate) / 1000;
+                        audio_state.samples_played.store(new_pos, Ordering::Release);
                     }
                 }
 
@@ -312,10 +314,10 @@ fn init_decoder(
 }
 
 fn perform_seek(state: &mut DecoderState, millis: u32) -> Result<(), Box<dyn std::error::Error>> {
-    let secs = (millis / 1000) as u8;
+    let secs = (millis / 1000) as u64;
     let ns = (millis % 1000) * 1_000_000;
 
-    let time = Time::from_ss(secs, ns).ok_or(DecodeError::InvalidTimeSeek)?;
+    let time = Time::new(secs, ns as f64 / 1_000_000_000.0);
 
     let seek_to = SeekTo::Time {
         time,

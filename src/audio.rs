@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, sync::atomic::Ordering};
 
 mod decode;
 mod device;
@@ -68,6 +68,15 @@ impl AudioPlayer {
     pub fn play(&self, path: &impl AsRef<Path>) -> AudioResult<()> {
         self.stop().ok();
 
+        self.handle
+            .shared
+            .samples_played
+            .store(0, Ordering::Release);
+        self.handle
+            .shared
+            .estimated_audio_len
+            .store(0, Ordering::Release);
+
         with_decoder!(self, decoder => {
             decoder.start(path);
             self.handle.resume();
@@ -103,7 +112,15 @@ impl AudioPlayer {
         })
     }
 
-    pub fn seek(&self, millis: u32) -> AudioResult<()> {
+    pub fn seek(&self, pos: f64) -> AudioResult<()> {
+        let len = self
+            .handle
+            .shared
+            .estimated_audio_len
+            .load(Ordering::Relaxed);
+
+        let millis = (len as f64 * pos) as u32;
+
         with_decoder!(self, decoder => {
             decoder.seek(millis);
             self.handle.seek(millis);
@@ -114,6 +131,10 @@ impl AudioPlayer {
 
     pub fn position(&self) -> f64 {
         self.handle.position()
+    }
+
+    pub fn position_pretty(&self) -> String {
+        self.handle.position_pretty()
     }
 
     pub fn playback_state(&self) -> PlaybackState {

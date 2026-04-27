@@ -1,4 +1,5 @@
 import { renderTags } from "../helpers";
+import { playerHandle } from "../player/player";
 
 declare const waveform: HTMLDivElement;
 declare const wave_thumb: HTMLDivElement;
@@ -9,6 +10,14 @@ declare const preview_tags: HTMLDivElement;
 declare const s_total: HTMLSpanElement;
 
 function createPreview() {
+  waveform.onclick = (e) => {
+    const rect = waveform.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+
+    const prog = x / rect.width;
+    playerHandle.seek(prog);
+  };
+
   return {
     set position(pos: number) {
       const margin = 0.1;
@@ -36,8 +45,5 @@ export const PreviewHandler = createPreview();
 listen("read_audio", (uri) => {
   PreviewHandler.img = uri;
 });
-
-PreviewHandler.img = "athumb://_/RFQDzvStdAQ";
-PreviewHandler.position = 0.8;
 
 listen("s_tick", (n) => (s_total.textContent = n));

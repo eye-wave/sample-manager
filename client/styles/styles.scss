@@ -460,6 +460,7 @@ body {
   &-body {
     position: relative;
     display: flex;
+    flex-direction: column;
     flex: 1;
     overflow: hidden;
   }
@@ -485,6 +486,7 @@ body {
   position: absolute;
   height: 80px;
   width: 100%px;
+  pointer-events: none;
 }
 
 .add-tag {
@@ -553,5 +555,22 @@ body {
   &:hover {
     border-color: var(--accent-dim);
     color: var(--accent-dim);
+  }
+}
+
+.controls {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+
+  & span {
+    width: 64px;
+  }
+
+  & #time_cur {
+    text-align: right;
   }
 }
