@@ -5,6 +5,7 @@ export type BrowseRow = ReturnType<typeof BrowseRow>;
 export const BrowseRow = (
   idx: number,
   onSelect?: (i: number, p: string) => void,
+  onDrag?: (p: string) => void,
   onLike?: () => void,
 ) => {
   const el = $el("div");
@@ -67,6 +68,8 @@ export const BrowseRow = (
   };
 
   el[ONCLICK] = () => path && onSelect?.(idx, path);
+  el.draggable = true;
+  el.ondragstart = () => path && onDrag?.(path);
 
   const highlight = (on: boolean) => el.classList[on ? "add" : "remove"]("highlight");
   const hide = () => {

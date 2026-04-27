@@ -182,13 +182,18 @@ body {
     color: var(--text-secondary);
     margin-bottom: 4px;
     transition: background 0.1s;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+    word-break: break-all;
+    text-wrap: nowrap;
+    overflow: hidden;
+    padding: 2px 0;
 
     &.item {
       margin: 0;
       font-size: 12px;
       font-weight: 600;
       cursor: grab;
-      word-break: break-all;
       position: relative;
 
       &::before{
@@ -240,7 +245,6 @@ body {
 
   &-name {
     flex: 1;
-    font-size: 12px;
   }
 
   &-count {

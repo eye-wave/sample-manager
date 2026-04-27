@@ -20,6 +20,7 @@ bytemuck = "1.25.0"
 cpal = "0.17.3"
 crossbeam-channel = "0.5.15"
 dirs = "6.0.0"
+drag = "2.1.0"
 fuzzy-matcher = "0.3.7"
 image = { version = "0.25.10", default-features = false, features = ["webp"] }
 paste = "1.0.15"

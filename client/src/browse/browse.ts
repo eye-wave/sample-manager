@@ -22,7 +22,13 @@ function onSelect(i: number, file: string) {
   lastSelected = i;
 }
 
-const pool: BrowseRow[] = Array.from({ length: POOL_SIZE }, (_, i) => BrowseRow(i, onSelect));
+function onDrag(path: string) {
+  invoke("start_drag_file", path);
+}
+
+const pool: BrowseRow[] = Array.from({ length: POOL_SIZE }, (_, i) =>
+  BrowseRow(i, onSelect, onDrag, () => {}),
+);
 const fragment = d.createDocumentFragment();
 
 TagInput(search, search_tags, pool);
