@@ -1,4 +1,5 @@
-set shell := ["powershell", "-NoProfile", "-Command"]
+set windows-shell := ["powershell", "-NoProfile", "-Command"]
+set shell := ["sh", "-c"]
 
 default:
     just dev

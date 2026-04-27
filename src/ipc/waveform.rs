@@ -1,6 +1,7 @@
 use ahash::AHasher;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use crate::ipc::{IPCBody, IPCMessage, IPCResponse, ok};
 use crate::ipc_commands;
@@ -9,19 +10,23 @@ use crate::state::AppDirs;
 use crate::window::PROTOCOL;
 
 #[cfg(target_os = "windows")]
-fn hide_console(cmd: &mut std::process::Command) {
+fn command(cmd: &str) -> Command {
+    let mut cmd = Command::new(cmd);
     use std::os::windows::process::CommandExt;
     cmd.creation_flags(0x08000000);
+    cmd
+}
+
+#[cfg(not(target_os = "windows"))]
+fn command(cmd: &str) -> Command {
+    Command::new(cmd)
 }
 
 fn decode_audio(path: &str, downsample_factor: usize) -> Option<Vec<u8>> {
     use std::io::Read;
-    use std::process::{Command, Stdio};
+    use std::process::Stdio;
 
-    let mut cmd = Command::new("ffmpeg");
-    hide_console(&mut cmd);
-
-    let mut child = cmd
+    let mut child = command("ffmpeg")
         .arg("-i")
         .arg(path)
         .args([
@@ -157,8 +162,14 @@ fn thumbnail_path(hashed: &str, cache_path: &Path) -> PathBuf {
     cache_path.join(hashed)
 }
 
+#[cfg(target_os = "windows")]
 fn thumbnail_uri(hashed: &str) -> String {
     format!("https://{PROTOCOL}._/thumb/{hashed}")
+}
+
+#[cfg(not(target_os = "windows"))]
+fn thumbnail_uri(hashed: &str) -> String {
+    format!("{PROTOCOL}://_/thumb/{hashed}")
 }
 
 fn read_audio_file(body: IPCBody) -> IPCResponse {

@@ -2,9 +2,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use tao::window::Window;
-use wry::{WebView, WebViewBuilder, WebViewBuilderExtWindows};
+use wry::{WebView, WebViewBuilder};
 
-use crate::{http::app_handler, state::AppDirs};
+use crate::http::app_handler;
 
 use super::event::{EventRunner, EventSystem};
 
@@ -44,10 +44,17 @@ impl App {
             .with_custom_protocol(PROTOCOL.to_string(), move |_, req| {
                 app_handler(theme.clone(), req)
             })
-            .with_https_scheme(true)
-            .with_url(PROTOCOL.to_string() + "://_")
             .with_devtools(true)
             .with_ipc_handler(move |req| event_handle.receive(req, window_handle_cloned.clone()));
+
+        let webview = if cfg!(debug_assertions) {
+            webview.with_url("http://localhost:5173")
+        } else {
+            webview.with_url(PROTOCOL.to_string() + "://_")
+        };
+
+        #[cfg(target_os = "windows")]
+        let webview = webview.with_https_scheme(true);
 
         let _webview = finish_webview(window_handle.clone(), webview);
 
