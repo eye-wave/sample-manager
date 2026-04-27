@@ -1,6 +1,11 @@
 import { APPEND_CHILD, QUERY_SELECTOR, txt } from "../alias";
 import { basename } from "../helpers";
-import { FOLDER_CLOSED, FOLDER_OPEN } from "./template";
+
+const FOLDER_CLOSED =
+  "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z";
+
+const FOLDER_OPEN =
+  "m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2";
 
 export const FileType = 0 as const;
 export const NodeType = 1 as const;
@@ -28,9 +33,10 @@ const createVisualNode = (section: Element) => {
   const countEl = countSpan ? txt() : null;
   if (countSpan && countEl) countSpan[APPEND_CHILD](countEl);
 
-  const iconSpan = section[QUERY_SELECTOR]<HTMLElement>(".tree-icon");
-  const iconEl = iconSpan ? txt(FOLDER_CLOSED) : null;
-  if (iconSpan && iconEl) iconSpan[APPEND_CHILD](iconEl);
+  // biome-ignore lint/style/noNonNullAssertion: trust
+  const iconEl = section[QUERY_SELECTOR]<SVGPathElement>("path")!;
+
+  iconEl.setAttribute("d", FOLDER_CLOSED);
 
   return {
     labelEl,
@@ -48,7 +54,7 @@ const createVisualNode = (section: Element) => {
 
       const open = arrowClassList?.contains("open");
 
-      if (iconEl) iconEl.nodeValue = open ? FOLDER_OPEN : FOLDER_CLOSED;
+      iconEl?.setAttribute("d", open ? FOLDER_OPEN : FOLDER_CLOSED);
       if (childrenEl) {
         childrenEl.style.display = open ? "block" : "none";
       }

@@ -1,5 +1,6 @@
 use std::io::ErrorKind;
 use std::path::Path;
+use std::sync::atomic::Ordering;
 use std::sync::mpsc::{self, Sender};
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
@@ -106,7 +107,7 @@ fn decode_thread_loop(
         while let Ok(cmd) = rx.try_recv() {
             match cmd {
                 DecodeCommand::Start { path } => {
-                    if let Ok(decoder) = init_decoder(&path, &stream_config) {
+                    if let Ok(decoder) = init_decoder(&path, audio_state.clone(), &stream_config) {
                         current = Some(decoder);
                         audio_state.set_state(PlayerFlags::PLAYING);
                     }
@@ -148,7 +149,7 @@ fn decode_thread_loop(
             continue;
         }
 
-        if let Err(e) = decode_one_packet(decoder_state, &mut rb_prod, &audio_state) {
+        if let Err(e) = decode_one_packet(decoder_state, &mut rb_prod) {
             if e.to_string() == "end of stream" {
                 audio_state.set_state(PlayerFlags::STOPPED);
             } else {
@@ -163,7 +164,6 @@ struct DecoderState {
     format: Box<dyn symphonia::core::formats::FormatReader>,
     decoder: Box<dyn symphonia::core::codecs::Decoder>,
     track_id: u32,
-    sample_rate: u32,
     resample_ratio: f64,
     channels: usize,
     resample_buf: Vec<f32>,
@@ -172,7 +172,6 @@ struct DecoderState {
 fn decode_one_packet(
     state: &mut DecoderState,
     rb_prod: &mut RingProd,
-    shared_state: &Arc<SharedAudioState>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use symphonia::core::errors::Error as SymphoniaError;
 
@@ -195,13 +194,6 @@ fn decode_one_packet(
 
     if packet.track_id() != state.track_id {
         return Ok(());
-    }
-
-    if let Some(sample_rate) = std::num::NonZeroU32::new(state.sample_rate) {
-        let pos = (packet.ts() as u64 * 1000) / sample_rate.get() as u64;
-        shared_state
-            .position_millis
-            .store(pos as u32, std::sync::atomic::Ordering::Release);
     }
 
     let decoded = match state.decoder.decode(&packet) {
@@ -255,6 +247,7 @@ fn decode_one_packet(
 
 fn init_decoder(
     path: &impl AsRef<Path>,
+    state: Arc<SharedAudioState>,
     stream_config: &SupportedStreamConfig,
 ) -> Result<DecoderState, DecodeError> {
     let file = std::fs::File::open(path)?;
@@ -281,6 +274,8 @@ fn init_decoder(
         .ok_or(DecodeError::NoTrack)?
         .clone();
 
+    let total_frames = track.codec_params.n_frames;
+
     let track_id = track.id;
 
     let decoder =
@@ -291,6 +286,16 @@ fn init_decoder(
         .sample_rate
         .ok_or(DecodeError::NoSampleRate)?;
 
+    let estimated_len_ms = if let Some(frames) = total_frames {
+        ((frames * 1000) / sample_rate as u64) as u32
+    } else {
+        0
+    };
+
+    state
+        .estimated_audio_len
+        .store(estimated_len_ms, Ordering::Relaxed);
+
     let output_rate = stream_config.config().sample_rate;
     let resample_ratio = output_rate as f64 / sample_rate as f64;
 
@@ -300,7 +305,6 @@ fn init_decoder(
         format,
         decoder,
         track_id,
-        sample_rate,
         resample_ratio,
         channels,
         resample_buf: Vec::new(),

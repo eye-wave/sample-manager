@@ -1,11 +1,18 @@
-export const FOLDER_CLOSED = "📁";
-export const FOLDER_OPEN = "📂";
-
 export const SIDEBAR_FOLDER = (name: string) =>
   /* HTML */ `<div class="tree-section">
     <div class="tree-label">
       <span class="tree-arrow">▶</span>
-      <span class="tree-icon"></span>
+      <span class="tree-icon">
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      ><path></svg></span>
       <span class="tree-name">${name}</span>
       <span class="tree-count"></span>
     </div>

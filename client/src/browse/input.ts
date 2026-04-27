@@ -1,4 +1,4 @@
-import { $el, APPEND_CHILD, ONCLICK } from "../alias";
+import { $el, ADD_EVENT_LISTENER, APPEND_CHILD, KEYDOWN, ONCLICK, w } from "../alias";
 import { basename } from "../helpers";
 import { POOL_SIZE } from "./browse";
 import type { BrowseRow } from "./row";
@@ -14,6 +14,13 @@ export const TagInput = (
   pool: BrowseRow[],
 ) => {
   const tags: string[] = [];
+
+  w[ADD_EVENT_LISTENER](KEYDOWN, (e) => {
+    if (e.key === "/" || ((e.key === "k" || e.key === "K") && e.ctrlKey)) {
+      e.preventDefault();
+      input.focus();
+    }
+  });
 
   const addTag = (tag: string) => {
     if (!tag) return;
@@ -42,6 +49,10 @@ export const TagInput = (
   };
 
   input.onkeydown = (e) => {
+    if (e.key === "Escape") {
+      input.blur();
+      return;
+    }
     if (e.key === "Enter") {
       for (const w of input.value.split(/\s+/)) {
         if (!tags.includes(w)) addTag(w);

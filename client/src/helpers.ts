@@ -79,3 +79,8 @@ export async function updateTheme(theme: string) {
 export async function updateCurrentTheme() {
   updateThemeCss(await invoke("get_theme"));
 }
+
+export function isFocusElement(el?: EventTarget | null) {
+  const tags = ["INPUT", "SELECT", "BUTTON"];
+  return tags.includes((el as HTMLElement)?.tagName ?? "");
+}

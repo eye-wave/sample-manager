@@ -4,6 +4,7 @@ export const $el = (el: string) => d.createElement(el);
 
 export const w = window;
 
+export const KEYDOWN = "keydown" as const;
 export const ONCLICK = "onclick" as const;
 export const BEFOREEND = "beforeend" as const;
 export const APPEND_CHILD = "appendChild" as const;

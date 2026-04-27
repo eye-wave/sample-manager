@@ -112,7 +112,7 @@ impl AudioPlayer {
         })
     }
 
-    pub fn position(&self) -> u32 {
+    pub fn position(&self) -> f64 {
         self.handle.position()
     }
 

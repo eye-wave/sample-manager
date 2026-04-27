@@ -1,3 +1,5 @@
+theme_type = "dark"
+
 bg_base = "2d2a32"
 bg_panel = "37333d"
 bg_surface = "443f4a"

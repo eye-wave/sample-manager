@@ -1,3 +1,5 @@
+theme_type = "light"
+
 bg_base = "eff1f5"
 bg_panel = "e6e9ef"
 bg_surface = "ccd0da"

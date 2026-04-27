@@ -2,8 +2,16 @@ use serde::{Deserialize, Serialize};
 
 use super::color::{RGBAColor, RGBColor};
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
+#[serde(rename_all = "lowercase")]
+pub enum ThemeType {
+    Light,
+    Dark,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Theme {
+    pub theme_type: ThemeType,
     bg_base: RGBColor,
     bg_panel: RGBColor,
     bg_surface: RGBColor,
@@ -35,6 +43,7 @@ impl Default for Theme {
 impl Theme {
     pub fn to_css(&self) -> String {
         let Theme {
+            theme_type: _,
             bg_base,
             bg_panel,
             bg_surface,
@@ -58,36 +67,7 @@ impl Theme {
         } = self;
 
         format!(
-            "
-:root {{
-    --bg-base: {bg_base};
-    --bg-panel: {bg_panel};
-    --bg-surface: {bg_surface};
-    --bg-hover: {bg_hover};
-    --bg-active: {bg_active};
-
-    --accent: {accent};
-    --accent-dim: {accent_dim};
-    --accent-glow: {accent_glow};
-
-    --text-primary: {text_primary};
-    --text-secondary: {text_secondary};
-    --text-muted: {text_muted};
-
-    --border: {border};
-    --border-active: {border_active};
-    --tag-bg: {tag_bg};
-    --tag-text: {tag_text};
-    --tag-text-secondary: {tag_text_secondary};
-
-    --love: {love};
-
-    --wave-a: {wave_a};
-    --wave-b: {wave_b};
-
-    --radius: {radius}px;
-}}
-"
+            ":root{{--bg-base:{bg_base};--bg-panel:{bg_panel};--bg-surface:{bg_surface};--bg-hover:{bg_hover};--bg-active:{bg_active};--accent:{accent};--accent-dim:{accent_dim};--accent-glow:{accent_glow};--text-primary:{text_primary};--text-secondary:{text_secondary};--text-muted:{text_muted};--border:{border};--border-active:{border_active};--tag-bg:{tag_bg};--tag-text:{tag_text};--tag-text-secondary:{tag_text_secondary};--love:{love};--wave-a:{wave_a};--wave-b:{wave_b};--radius:{radius}px}}"
         )
     }
 }

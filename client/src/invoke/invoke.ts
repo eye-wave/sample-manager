@@ -7,6 +7,10 @@ import { w } from "../alias";
     return new Promise<string>((resolve, reject) => {
       const callId = nextId++;
       pending.set(callId, { resolve, reject });
+      /// DEV start
+      if (typeof ipc === "undefined")
+        return console.warn(`Trying to call IPC command: "${id}" in the browser window.`);
+      /// DEV end
       ipc.postMessage(`${id}:${callId}:${payload ?? ""}`);
     });
   };

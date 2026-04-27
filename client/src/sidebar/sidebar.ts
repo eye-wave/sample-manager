@@ -1,6 +1,6 @@
 import { ONCLICK } from "../alias";
-import { displayPreview } from "../browse/browse";
 import { basename } from "../helpers";
+import { playerHandle } from "../player/player";
 import { parseVFS } from "./parse";
 import { renderNode } from "./render";
 import { NodeType, type VFSChild, VFSNode } from "./vfs";
@@ -40,16 +40,13 @@ sidebar[ONCLICK] = async (e) => {
   if (!url) return;
 
   const path = decodeURI(url);
-  const text = (await invoke("tag_path", path)) ?? "";
-  const tags = text ? text.split(",") : [];
 
-  displayPreview(path, basename(path), tags);
+  playerHandle.startPlaying(path, basename(path));
 };
 
 add_folder[ONCLICK] = async () => {
   const folder = await invoke("open_folder");
-  const isOk = await invoke("add_sample_folder", folder);
-  if (isOk !== "Ok") return;
+  await invoke("add_sample_folder", folder);
 
   const node = VFSNode.root(folder);
   root.add(node);

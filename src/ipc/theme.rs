@@ -3,7 +3,10 @@ use std::fs;
 use crate::{
     ipc::{IPCBody, IPCError, IPCResponse, IntoIPCResponse},
     ipc_commands,
-    state::AppDirs,
+    state::{
+        AppDirs,
+        config::{Theme, ThemeType},
+    },
 };
 
 fn get_theme(body: IPCBody) -> IPCResponse {
@@ -49,13 +52,32 @@ fn get_theme_name(body: IPCBody) -> IPCResponse {
 }
 
 fn list_themes(_: IPCBody) -> IPCResponse {
-    fs::read_dir(AppDirs::themes_path())?
+    let mut files = fs::read_dir(AppDirs::themes_path())?
         .filter_map(Result::ok)
-        .filter(|f| f.path().extension().is_some_and(|ext| ext == "toml"))
-        .map(|f| f.file_name().to_string_lossy().into_owned())
-        .intersperse(",".into())
-        .collect::<String>()
-        .finish()
+        .filter_map(|f| {
+            let path = AppDirs::themes_path().join(f.path());
+            let theme: Theme = toml::from_str(&fs::read_to_string(&path).ok()?).ok()?;
+
+            Some((
+                theme.theme_type,
+                f.file_name().to_string_lossy().into_owned(),
+            ))
+        })
+        .collect::<Vec<_>>();
+
+    let light_count = files.iter().filter(|e| e.0 == ThemeType::Light).count();
+
+    files.sort_by_key(|a| a.0);
+
+    format!(
+        "{light_count},{}",
+        files
+            .iter()
+            .map(|f| f.1.clone())
+            .intersperse(",".into())
+            .collect::<String>()
+    )
+    .finish()
 }
 
 ipc_commands! {

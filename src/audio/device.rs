@@ -42,15 +42,19 @@ impl AudioDevice {
 
         let config = device.default_output_config()?;
 
+        shared_state
+            .sample_rate
+            .store(config.sample_rate(), Ordering::Relaxed);
+
         macro_rules! build_stream {
-            ($T:ty) => {{
+            ($T:ty,$chan:expr) => {{
                 let shared_cb = Arc::clone(&shared_state);
                 let mut rb_cons = rb_cons;
 
                 device.build_output_stream(
                     &config.config(),
                     move |data: &mut [$T], _info: &cpal::OutputCallbackInfo| {
-                        audio_loop(data, &shared_cb, &mut rb_cons)
+                        audio_loop(data, &shared_cb, $chan as u64, &mut rb_cons)
                     },
                     |err| eprintln!("cpal stream error: {err}"),
                     None,
@@ -59,16 +63,17 @@ impl AudioDevice {
         }
 
         let sample_format = config.sample_format();
+        let chan_count = config.channels();
 
         let _stream = match sample_format {
-            cpal::SampleFormat::F32 => build_stream!(f32),
-            cpal::SampleFormat::F64 => build_stream!(f64),
-            cpal::SampleFormat::I8 => build_stream!(i8),
-            cpal::SampleFormat::I16 => build_stream!(i16),
-            cpal::SampleFormat::I32 => build_stream!(i32),
-            cpal::SampleFormat::U8 => build_stream!(u8),
-            cpal::SampleFormat::U16 => build_stream!(u16),
-            cpal::SampleFormat::U32 => build_stream!(u32),
+            cpal::SampleFormat::F32 => build_stream!(f32, chan_count),
+            cpal::SampleFormat::F64 => build_stream!(f64, chan_count),
+            cpal::SampleFormat::I8 => build_stream!(i8, chan_count),
+            cpal::SampleFormat::I16 => build_stream!(i16, chan_count),
+            cpal::SampleFormat::I32 => build_stream!(i32, chan_count),
+            cpal::SampleFormat::U8 => build_stream!(u8, chan_count),
+            cpal::SampleFormat::U16 => build_stream!(u16, chan_count),
+            cpal::SampleFormat::U32 => build_stream!(u32, chan_count),
             _ => return Err(Box::new(DeviceError::UnsupportedSampleFormat)),
         };
 
@@ -78,8 +83,12 @@ impl AudioDevice {
     }
 }
 
-fn audio_loop<S>(data: &mut [S], shared_state: &Arc<SharedAudioState>, rb_cons: &mut RingCons)
-where
+fn audio_loop<S>(
+    data: &mut [S],
+    shared_state: &Arc<SharedAudioState>,
+    num_channels: u64,
+    rb_cons: &mut RingCons,
+) where
     S: cpal::Sample + cpal::FromSample<f32>,
 {
     let f = shared_state.load_flags();
@@ -90,9 +99,10 @@ where
     if paused || flushing {
         if flushing {
             rb_cons.clear();
-
             shared_state.clear_flag(PlayerFlags::FLUSHING);
+            shared_state.samples_played.store(0, Ordering::Relaxed);
         }
+
         for s in data.iter_mut() {
             *s = S::EQUILIBRIUM;
         }
@@ -101,10 +111,19 @@ where
 
     let volume = shared_state.volume.load(Ordering::SeqCst);
 
+    let mut played_samples = 0u64;
+
     for s in data.iter_mut() {
         *s = match rb_cons.try_pop() {
-            Some(f) => S::from_sample(f * volume),
+            Some(f) => {
+                played_samples += 1;
+                S::from_sample(f * volume)
+            }
             None => S::EQUILIBRIUM,
         };
     }
+
+    shared_state
+        .samples_played
+        .fetch_add(played_samples / num_channels, Ordering::Release);
 }

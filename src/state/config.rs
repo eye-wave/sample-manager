@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 mod color;
 mod theme;
 
-pub use theme::Theme;
+pub use theme::{Theme, ThemeType};
 
 use crate::state::AppDirs;
 

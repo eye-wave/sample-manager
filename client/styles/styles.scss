@@ -458,6 +458,7 @@ body {
   }
 
   &-body {
+    position: relative;
     display: flex;
     flex: 1;
     overflow: hidden;
@@ -467,11 +468,23 @@ body {
 #waveform {
   width: 100%;
   height: 80px;
-  background: linear-gradient(var(--wave-a),var(--wave-b));
+  background-image:
+    linear-gradient(var(--wave-a),var(--wave-b)),
+    linear-gradient(var(--bg-surface),var(--bg-hover));
+  background-position: left, right;
+  background-repeat: no-repeat;
+
   mask-mode: luminance;
   mask-image: linear-gradient( #000);
   mask-size: 100% 80px;
   mask-position: center;
+}
+
+#wave_thumb {
+  inset: 0;
+  position: absolute;
+  height: 80px;
+  width: 100%px;
 }
 
 .add-tag {

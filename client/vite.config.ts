@@ -5,6 +5,11 @@ import { viteSingleFile } from "vite-plugin-singlefile";
 import htmlTemplateMinifyPlugin from "./src-build/minify-templates";
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@assets": "/assets",
+    },
+  },
   css: {
     postcss: {
       plugins: [cssNano({ preset: "advanced" })],

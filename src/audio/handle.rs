@@ -1,7 +1,5 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicU8, AtomicU32, Ordering},
-};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU8, AtomicU32, AtomicU64, Ordering};
 
 use atomic_float::AtomicF32;
 
@@ -42,7 +40,9 @@ impl PlaybackState {
 pub struct SharedAudioState {
     flags: AtomicU8,
 
-    pub position_millis: AtomicU32,
+    pub sample_rate: AtomicU32,
+    pub estimated_audio_len: AtomicU32,
+    pub samples_played: AtomicU64,
     pub seek_target: AtomicU32,
     pub volume: AtomicF32,
 }
@@ -51,8 +51,10 @@ impl SharedAudioState {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
             flags: AtomicU8::new(PlayerFlags::PLAYING.bits()),
+            sample_rate: AtomicU32::new(44100),
+            estimated_audio_len: AtomicU32::new(0),
+            samples_played: AtomicU64::new(0),
             seek_target: AtomicU32::new(0),
-            position_millis: AtomicU32::new(0),
             volume: AtomicF32::new(1.0),
         })
     }
@@ -108,8 +110,18 @@ impl PlayerHandle {
         self.shared.set_flag(PlayerFlags::SEEK_PENDING);
     }
 
-    pub fn position(&self) -> u32 {
-        self.shared.position_millis.load(Ordering::Acquire)
+    pub fn position(&self) -> f64 {
+        let played = self.shared.samples_played.load(Ordering::Acquire);
+        let len_ms = self.shared.estimated_audio_len.load(Ordering::Acquire);
+
+        if len_ms == 0 {
+            return 0.0;
+        }
+
+        let sample_rate = self.shared.sample_rate.load(Ordering::Relaxed) as u64;
+        let played_ms = (played * 1000) / sample_rate;
+
+        (played_ms as f64 / len_ms as f64).clamp(0.0, 1.0)
     }
 
     pub fn playback_state(&self) -> PlaybackState {
