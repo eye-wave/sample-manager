@@ -18,7 +18,7 @@ const SEPARATOR =
   "/";
 /// UNIX end
 /// WIN start
-("\\");
+("\\\\");
 /// WIN end
 
 const basenameRegex = new RegExp(`[${SEPARATOR}]`);

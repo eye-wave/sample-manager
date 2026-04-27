@@ -6,11 +6,22 @@ use crate::ipc::{IPCBody, IPCMessage, IPCResponse, ok};
 use crate::ipc_commands;
 use crate::state::AppDirs;
 
+use crate::window::PROTOCOL;
+
+#[cfg(target_os = "windows")]
+fn hide_console(cmd: &mut std::process::Command) {
+    use std::os::windows::process::CommandExt;
+    cmd.creation_flags(0x08000000);
+}
+
 fn decode_audio(path: &str, downsample_factor: usize) -> Option<Vec<u8>> {
     use std::io::Read;
     use std::process::{Command, Stdio};
 
-    let mut child = Command::new("ffmpeg")
+    let mut cmd = Command::new("ffmpeg");
+    hide_console(&mut cmd);
+
+    let mut child = cmd
         .arg("-i")
         .arg(path)
         .args([
@@ -147,7 +158,7 @@ fn thumbnail_path(hashed: &str, cache_path: &Path) -> PathBuf {
 }
 
 fn thumbnail_uri(hashed: &str) -> String {
-    format!("athumb://_/{hashed}")
+    format!("https://{PROTOCOL}._/thumb/{hashed}")
 }
 
 fn read_audio_file(body: IPCBody) -> IPCResponse {

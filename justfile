@@ -1,3 +1,5 @@
+set shell := ["powershell", "-NoProfile", "-Command"]
+
 default:
     just dev
 
@@ -5,7 +7,7 @@ default:
 dev: dev-client dev-rust
 
 dev-client:
-    cd client && bun dev
+    bun --cwd client dev
 
 dev-rust:
     cargo watch -x run -i client
@@ -16,13 +18,13 @@ build:
     just build-rust
 
 build-client:
-    cd client && bun run build
+    bun --cwd client build
 
 build-rust:
     cargo build --release
 
 build-c:
-    cd tagger/compiler && cargo run
+    cargo run -p compiler
 
     cmake -S tagger -B tagger/build -DCMAKE_BUILD_TYPE=Release
     cmake --build tagger/build

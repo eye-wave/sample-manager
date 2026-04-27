@@ -1,9 +1,9 @@
 import { ONCLICK, w } from "./alias";
 import { updateCurrentTheme } from "./helpers";
 
-/// BUILD start
-w.oncontextmenu = (e) => e.preventDefault();
-/// BUILD end
+/// fBUILD start
+// w.oncontextmenu = (e) => e.preventDefault();
+/// fBUILD end
 
 declare const titlebar_handle: HTMLDivElement;
 declare const btn_minimize: HTMLButtonElement;

@@ -28,7 +28,7 @@ rayon = "1.12.0"
 ringbuf = "0.4.8"
 serde = { version = "1.0.228", default-features = false, features = ["derive"] }
 symphonia = { version = "0.5.5", features = ["mp3", "wav", "vorbis"] }
-tao = { version = "0.35.0" }
+tao = "0.35.0"
 thiserror = "2.0.18"
 tinyfiledialogs = "3.9.1"
 toml = "1.1.2"

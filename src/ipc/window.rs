@@ -41,7 +41,7 @@ fn start_drag_file(body: IPCBody) -> IPCResponse {
             body.window_handle.gtk_window()
         },
         #[cfg(not(target_os = "linux"))]
-        &body.window_handle.window(),
+        &body.window_handle,
         drag::DragItem::Files(vec![PathBuf::from(path.to_string())]),
         drag::Image::Raw(ICON.to_vec()),
         |_, _| {},
