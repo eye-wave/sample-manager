@@ -1,3 +1,5 @@
+import * as IPC from "../gen/ipc-gen";
+import { invoke } from "../invoke/invoke";
 import { playerHandle } from "../player/player";
 import { TagInput } from "./input";
 import { BrowseRow } from "./row";
@@ -23,7 +25,7 @@ function onSelect(i: number, file: string) {
 }
 
 function onDrag(path: string) {
-  invoke("start_drag_file", path);
+  invoke(IPC.START_DRAG_FILE, path);
 }
 
 const pool: BrowseRow[] = Array.from({ length: POOL_SIZE }, (_, i) =>

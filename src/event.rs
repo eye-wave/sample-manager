@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, RwLock};
@@ -7,14 +6,14 @@ use std::sync::{Arc, RwLock};
 use tao::{event_loop::EventLoopBuilder, window::Window};
 use wry::WebView;
 
-use crate::ipc::{IPCBody, IPCCommand, IPCMessage, commands_iter, ipc_strip_name};
+use crate::ipc::{IPCBody, IPCCommand, IPCMessage, commands_iter, ipc_strip_cmd_id};
 use crate::state::AppState;
 
 pub struct EventSystem {
     webview_tx: Sender<IPCMessage>,
     event_loop: EventLoopProxy,
     pub app_state: Arc<RwLock<AppState>>,
-    ipc_commands: HashMap<&'static str, &'static dyn IPCCommand>,
+    ipc_commands: Vec<&'static dyn IPCCommand>,
 }
 
 pub struct EventRunner {
@@ -48,7 +47,7 @@ impl EventSystem {
                 webview_tx: tx,
                 event_loop: proxy,
                 app_state: Arc::new(RwLock::new(app_state)),
-                ipc_commands: commands_iter().map(|cmd| (cmd.name(), cmd)).collect(),
+                ipc_commands: commands_iter().collect(),
             },
         )
     }
@@ -56,8 +55,8 @@ impl EventSystem {
     pub fn receive(&self, req: wry::http::Request<String>, window_handle: Arc<Window>) {
         let body = req.body();
 
-        if let Some((fn_name, call_id, payload)) = ipc_strip_name(body)
-            && let Some(cmd) = self.ipc_commands.get(fn_name)
+        if let Some((cmd_id, call_id, payload)) = ipc_strip_cmd_id(body)
+            && let Some(cmd) = self.ipc_commands.get(cmd_id)
         {
             let body = IPCBody {
                 webview_sender: self.webview_tx.clone(),

@@ -1,5 +1,7 @@
 import { $el, w } from "../alias";
+import * as IPC from "../gen/ipc-gen";
 import { basename } from "../helpers";
+import { invoke } from "../invoke/invoke";
 import { POOL_SIZE } from "./browse";
 import { PaginationHandler } from "./pagination";
 import type { BrowseRow } from "./row";
@@ -88,7 +90,7 @@ export const TagInput = (
     const PAGE_SIZE = 50;
 
     const text = await invoke(
-      "search_for_sample",
+      IPC.SEARCH_FOR_SAMPLE,
       [PAGE_SIZE, (offset - 1) * PAGE_SIZE, ...tags, query].join(","),
     );
     const { files, count }: { files: FSSample[]; count: number } = (() => {

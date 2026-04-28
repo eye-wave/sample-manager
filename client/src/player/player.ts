@@ -1,5 +1,7 @@
 import { w } from "../alias";
+import * as IPC from "../gen/ipc-gen";
 import { isFocusElement } from "../helpers";
+import { invoke } from "../invoke/invoke";
 import { PreviewHandler } from "../preview/preview";
 
 export const PAUSED = 0 as const;
@@ -21,8 +23,8 @@ function createPlayerHandle() {
     if (intervalId > -1) return;
 
     intervalId = w.setInterval(async () => {
-      const pos = await invoke("get_audio_position");
-      const [fmtCur, fmtEst] = (await invoke("get_audio_position_pretty")).split("/");
+      const pos = await invoke(IPC.GET_AUDIO_POSITION);
+      const [fmtCur, fmtEst] = (await invoke(IPC.GET_AUDIO_POSITION_PRETTY)).split("/");
 
       time_cur__.textContent = fmtCur;
       time_est__.textContent = fmtEst;
@@ -37,15 +39,13 @@ function createPlayerHandle() {
   }
 
   async function startPlaying(path: string, name: string, tagsList?: string[]) {
-    invoke("read_audio_file", path);
-    invoke("play_audio_file", path).then(() => {
+    invoke(IPC.READ_AUDIO_FILE, path);
+    invoke(IPC.PLAY_AUDIO_FILE, path).then(() => {
       playerState = PLAYING;
       startTicker();
-
-      return invoke("get_estimated_len_ms");
     });
 
-    const tags = tagsList ? tagsList : (await invoke("tag_path", path)).split(",");
+    const tags = tagsList ? tagsList : (await invoke(IPC.TAG_PATH, path)).split(",");
 
     PreviewHandler.label = name;
     PreviewHandler.img = "";
@@ -53,7 +53,7 @@ function createPlayerHandle() {
   }
 
   function pause() {
-    invoke("player_pause").then(() => {
+    invoke(IPC.PLAYER_PAUSE).then(() => {
       playerState = PAUSED;
       pause_btn.textContent = "Resume";
       stopTicker();
@@ -61,7 +61,7 @@ function createPlayerHandle() {
   }
 
   function resume() {
-    invoke("player_resume").then(() => {
+    invoke(IPC.PLAYER_RESUME).then(() => {
       playerState = PLAYING;
       pause_btn.textContent = "Pause";
       startTicker();
@@ -88,7 +88,7 @@ function createPlayerHandle() {
     pause,
     seek(pos: number) {
       if (playerState === PAUSED) resume();
-      invoke("player_seek", pos as unknown as string);
+      invoke(IPC.PLAYER_SEEK, pos as unknown as string);
     },
   };
 }

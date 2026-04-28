@@ -1,4 +1,6 @@
+import * as IPC from "../gen/ipc-gen";
 import { basename } from "../helpers";
+import { invoke } from "../invoke/invoke";
 import { playerHandle } from "../player/player";
 import { parseVFS } from "./parse";
 import { renderNode } from "./render";
@@ -9,14 +11,14 @@ declare const add_folder__: HTMLButtonElement;
 
 const root = VFSNode.root("__root__");
 
-invoke("start_sample_scan");
-invoke("get_sample_folders").then(async (res) => {
+invoke(IPC.START_SAMPLE_SCAN);
+invoke(IPC.GET_SAMPLE_FOLDERS).then(async (res) => {
   const folders: string[] = res.split("\n").filter((e) => e);
 
   for (const folder of folders) {
     const node = VFSNode.root(folder);
 
-    const children: VFSChild[] = await invoke("read_dir", folder).then((res) =>
+    const children: VFSChild[] = await invoke(IPC.READ_DIR, folder).then((res) =>
       res
         .split("\n")
         .filter((e) => e)
@@ -44,8 +46,8 @@ sidebar__.onclick = async (e) => {
 };
 
 add_folder__.onclick = async () => {
-  const folder = await invoke("open_folder");
-  await invoke("add_sample_folder", folder);
+  const folder = await invoke(IPC.OPEN_FOLDER);
+  await invoke(IPC.ADD_SAMPLE_FOLDER, folder);
 
   const node = VFSNode.root(folder);
   root.add(node);

@@ -71,7 +71,7 @@ impl IntoBytes for &'static [u8] {
     }
 }
 
-pub type IPCRequestBody<'a> = (&'a str, u32, &'a str);
+pub type IPCRequestBody<'a> = (usize, u32, &'a str);
 pub type IPCResponse = Result<std::borrow::Cow<'static, [u8]>, Box<dyn std::error::Error>>;
 
 #[derive(Clone)]
@@ -88,6 +88,7 @@ pub struct IPCMessage {
 }
 
 pub trait IPCCommand: Send + Sync {
+    #[allow(unused)]
     fn name(&self) -> &'static str;
     fn respond(&self, body: IPCBody) -> IPCResponse;
 }
@@ -109,7 +110,7 @@ impl<T: IntoBytes> IntoIPCResponse for Option<T> {
     }
 }
 
-pub(super) fn ipc_strip_name(req: &str) -> Option<IPCRequestBody<'_>> {
+pub(super) fn ipc_strip_cmd_id(req: &str) -> Option<IPCRequestBody<'_>> {
     let mut parts = req.splitn(3, ':');
 
     let fn_name = parts.next()?;
@@ -117,7 +118,7 @@ pub(super) fn ipc_strip_name(req: &str) -> Option<IPCRequestBody<'_>> {
     let payload = parts.next().unwrap_or("");
 
     let id = id_str.parse::<u32>().ok()?;
-    Some((fn_name, id, payload))
+    Some((fn_name.parse().ok()?, id, payload))
 }
 
 pub fn commands_iter<'a>() -> impl Iterator<Item = &'a dyn IPCCommand> {
@@ -177,4 +178,31 @@ macro_rules! with_state {
 
         $block
     }};
+}
+
+#[cfg(test)]
+mod test {
+    use std::{fs, path::Path};
+
+    use super::*;
+
+    #[test]
+    fn generate_ipc() {
+        let mut contents: String = commands_iter()
+            .enumerate()
+            .map(|(i, c)| format!("export const {} = {i};", c.name().to_uppercase()) + "\n")
+            .collect();
+
+        contents += "\nexport type IPC_ID = \n";
+        contents += &commands_iter()
+            .enumerate()
+            .map(|(i, _)| i.to_string())
+            .intersperse("|".into())
+            .collect::<String>();
+
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("client/src/gen");
+
+        let _ = fs::create_dir(&path);
+        let _ = fs::write(path.join("ipc-gen.ts"), contents);
+    }
 }

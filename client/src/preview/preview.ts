@@ -1,4 +1,5 @@
 import { renderTags } from "../helpers";
+import { listen } from "../invoke/invoke";
 import { playerHandle } from "../player/player";
 
 declare const waveform__: HTMLDivElement;

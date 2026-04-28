@@ -1,5 +1,7 @@
 import { w } from "../alias";
+import * as IPC from "../gen/ipc-gen";
 import { isFocusElement, updateCurrentTheme, updateTheme, updateThemeCss } from "../helpers";
+import { invoke } from "../invoke/invoke";
 
 declare const conf_btn__: HTMLButtonElement;
 declare const conf_dial__: HTMLDialogElement;
@@ -28,8 +30,8 @@ function themeSelectionTemplate(type: "light" | "dark", themes: string[]) {
 conf_btn__.onclick = async () => {
   conf_dial__.open = true;
 
-  const currentTheme = await invoke("get_theme_name");
-  const [lightCount, ...themes] = (await invoke("list_themes")).split(",");
+  const currentTheme = await invoke(IPC.GET_THEME_NAME);
+  const [lightCount, ...themes] = (await invoke(IPC.LIST_THEMES)).split(",");
 
   const lightThemes = themes.slice(0, +lightCount).toSorted();
   const darkThemes = themes.slice(+lightCount).toSorted();
@@ -44,7 +46,7 @@ conf_btn__.onclick = async () => {
 
 theme_select__.onchange = async () => {
   newTheme = theme_select__.value;
-  const css = await invoke("preview_theme", theme_select__.value);
+  const css = await invoke(IPC.PREVIEW_THEME, theme_select__.value);
 
   updateThemeCss(css);
 };

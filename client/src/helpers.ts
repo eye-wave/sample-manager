@@ -1,4 +1,6 @@
 import { $el } from "./alias";
+import * as IPC from "./gen/ipc-gen";
+import { invoke } from "./invoke/invoke";
 
 export function escapeHTML(str: string) {
   return str
@@ -74,13 +76,13 @@ export function updateThemeCss(css: string) {
 }
 
 export async function updateTheme(theme: string) {
-  const css = await invoke("update_theme", theme);
+  const css = await invoke(IPC.UPDATE_THEME, theme);
   if (!css) return;
   updateThemeCss(css);
 }
 
 export async function updateCurrentTheme() {
-  updateThemeCss(await invoke("get_theme"));
+  updateThemeCss(await invoke(IPC.GET_THEME));
 }
 
 export function isFocusElement(el?: EventTarget | null) {
