@@ -53,9 +53,15 @@ fn search_for_sample(body: IPCBody) -> IPCResponse {
     let tokens = body.req.to_lowercase();
     let tokens = tokens.split(",").map(|t| t.trim()).collect::<Vec<_>>();
 
-    let (tags, query) = tokens.split_at(tokens.len().saturating_sub(1));
+    if tokens.len() < 3 {
+        return Err(Box::new(IPCError::empty()));
+    }
 
-    let query = query.first().unwrap_or(&"");
+    let limit: usize = tokens[0].parse().unwrap_or(50);
+    let offset: usize = tokens[1].parse().unwrap_or(0);
+
+    let query = tokens.last().unwrap();
+    let tags = &tokens[2..tokens.len() - 1];
 
     let guard = body.app_state.read().map_err(|_| Poisoned)?;
     let registry = guard.sample_registry.clone();
@@ -65,18 +71,27 @@ fn search_for_sample(body: IPCBody) -> IPCResponse {
     let mut scored: Vec<_> = registry
         .par_iter()
         .map(|s| (s, s.score(query, tags, &matcher)))
+        .filter(|s| s.1 > 0)
         .collect();
 
     scored.sort_by_key(|&(_, score)| std::cmp::Reverse(score));
 
-    let found = &scored[..100.min(scored.len())];
+    let start = offset;
+    let end = (start + limit).min(scored.len());
+
+    let found = if start < scored.len() {
+        &scored[start..end]
+    } else {
+        &[]
+    };
+
     let files = found
         .iter()
         .map(|(f, _)| f.serialize())
         .intersperse(",\n".into())
         .collect::<String>();
 
-    format!("[{files}]").finish()
+    format!("{{\"count\":{},\"files\":[{files}]}}", scored.len()).finish()
 }
 
 fn tag_path(body: IPCBody) -> IPCResponse {

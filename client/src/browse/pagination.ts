@@ -9,6 +9,8 @@ function createPagination() {
   const template = pagi_template__.cloneNode(true) as HTMLButtonElement;
   pagi_template__.remove();
 
+  let onClick: null | ((page: number) => void) = null;
+
   function makeButton(label: string | number, page?: number, cls?: string): HTMLButtonElement {
     const btn = template.cloneNode(true) as HTMLButtonElement;
     btn.textContent = label as unknown as string;
@@ -18,6 +20,7 @@ function createPagination() {
       if (page !== undefined) {
         btn.onclick = () => {
           current = page;
+          onClick?.(page);
           build();
         };
       }
@@ -62,6 +65,7 @@ function createPagination() {
     } else {
       prev.onclick = () => {
         current--;
+        onClick?.(current);
         build();
       };
     }
@@ -90,6 +94,7 @@ function createPagination() {
     } else {
       next.onclick = () => {
         current++;
+        onClick?.(current);
         build();
       };
     }
@@ -97,6 +102,10 @@ function createPagination() {
   }
 
   return {
+    set onClick(c: (page: number) => void) {
+      onClick = c;
+    },
+
     display(show: boolean) {
       pagination__.style.display = show ? "" : "none";
     },

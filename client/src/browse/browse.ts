@@ -2,8 +2,6 @@ import { playerHandle } from "../player/player";
 import { TagInput } from "./input";
 import { BrowseRow } from "./row";
 
-import "./pagination";
-
 declare const list_scroll__: HTMLDivElement;
 declare const search__: HTMLInputElement;
 declare const search_tags__: HTMLInputElement;

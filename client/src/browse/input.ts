@@ -18,6 +18,8 @@ export const TagInput = (
 ) => {
   const tags: string[] = [];
 
+  let recentQuery = "";
+
   w.addEventListener("keydown", (e) => {
     if (e.key === "/" || ((e.key === "k" || e.key === "K") && e.ctrlKey)) {
       e.preventDefault();
@@ -64,9 +66,32 @@ export const TagInput = (
     }
   };
 
-  async function search(query: string, tags: string[], _offset: number) {
-    const text = await invoke("search_for_sample", [...tags, query].join(","));
-    const lines: FSSample[] = (() => {
+  input.oninput = () => {
+    const query = input.value;
+
+    if (!query.length) {
+      recentQuery = "";
+
+      for (const p of pool) p.hide();
+      PaginationHandler.display(false);
+
+      return;
+    }
+
+    recentQuery = query;
+
+    list_scroll__.scrollTo({ top: 0 });
+    search(query, tags, 1);
+  };
+
+  async function search(query: string, tags: string[], offset: number) {
+    const PAGE_SIZE = 50;
+
+    const text = await invoke(
+      "search_for_sample",
+      [PAGE_SIZE, (offset - 1) * PAGE_SIZE, ...tags, query].join(","),
+    );
+    const { files, count }: { files: FSSample[]; count: number } = (() => {
       try {
         return JSON.parse(text);
       } catch (_) {
@@ -75,12 +100,14 @@ export const TagInput = (
     })();
 
     PaginationHandler.display(true);
+    PaginationHandler.setPages((count / PAGE_SIZE) | 0);
+    PaginationHandler.setPage(offset);
 
     for (let i = 0; i < POOL_SIZE; i++) {
       const row = pool[i];
 
-      if (i < lines.length) {
-        const item = lines[i];
+      if (i < files.length) {
+        const item = files[i];
 
         row.update(basename(item.path), null, false, item.tags);
         row.setPath(item.path);
@@ -90,17 +117,5 @@ export const TagInput = (
     }
   }
 
-  input.oninput = () => {
-    const query = input.value;
-
-    if (!query.length) {
-      for (const p of pool) p.hide();
-      PaginationHandler.display(false);
-
-      return;
-    }
-
-    list_scroll__.scrollTo({ top: 0 });
-    search(query, tags, 0);
-  };
+  PaginationHandler.onClick = (p) => search(recentQuery, tags, p);
 };
