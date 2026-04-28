@@ -59,18 +59,18 @@ export function joinPath(...parts: string[]) {
   return out;
 }
 
-// DEV start
+/// DEV start
 const devStyle = document.createElement("style");
 document.head.append(devStyle);
-// DEV end
+/// DEV end
 
 export function updateThemeCss(css: string) {
-  // DEV start
+  /// DEV start
   devStyle.innerHTML = css;
-  // DEV end
-  // BUILD start
+  /// DEV end
+  /// BUILD start
   $el("style").innerHTML = css;
-  // BUILD end
+  /// BUILD end
 }
 
 export async function updateTheme(theme: string) {
