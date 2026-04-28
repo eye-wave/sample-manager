@@ -1,8 +1,9 @@
 use std::io;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, mpsc};
 
 use crate::audio::AudioPlayer;
+use crate::ipc::IPCMessage;
 
 pub mod config;
 pub mod samples;
@@ -46,18 +47,16 @@ pub struct AppState {
     app_config: AppConfig,
 }
 
-impl Default for AppState {
-    fn default() -> Self {
+impl AppState {
+    pub fn new(rx: mpsc::Sender<IPCMessage>) -> Self {
         Self {
             sample_registry: Arc::new([]),
-            audio_player: AudioPlayer::new(),
+            audio_player: AudioPlayer::new(rx),
 
             app_config: AppConfig::default(),
         }
     }
-}
 
-impl AppState {
     pub fn load(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let conf = std::fs::read(self.config_file())?;
         let conf: AppConfig = toml::from_slice(&conf)?;

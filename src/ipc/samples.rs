@@ -43,7 +43,7 @@ fn start_sample_scan(body: IPCBody) -> IPCResponse {
     }
 
     std::thread::spawn(move || {
-        process_directories(dirs, thread_state, body.webview_sender).ok();
+        process_directories(dirs.iter(), thread_state, body.webview_sender).ok();
     });
 
     ok()

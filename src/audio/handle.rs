@@ -1,7 +1,9 @@
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicU32, AtomicU64, Ordering};
+use std::sync::{Arc, mpsc};
 
 use atomic_float::AtomicF32;
+
+use crate::ipc::IPCMessage;
 
 bitflags::bitflags! {
     #[derive(Clone, Copy)]
@@ -45,10 +47,12 @@ pub struct SharedAudioState {
     pub samples_played: AtomicU64,
     pub seek_target: AtomicU32,
     pub volume: AtomicF32,
+
+    pub _event_sender: mpsc::Sender<IPCMessage>,
 }
 
 impl SharedAudioState {
-    pub fn new() -> Arc<Self> {
+    pub fn new(rx: mpsc::Sender<IPCMessage>) -> Arc<Self> {
         Arc::new(Self {
             flags: AtomicU8::new(PlayerFlags::PLAYING.bits()),
             sample_rate: AtomicU32::new(44100),
@@ -56,6 +60,7 @@ impl SharedAudioState {
             samples_played: AtomicU64::new(0),
             seek_target: AtomicU32::new(0),
             volume: AtomicF32::new(1.0),
+            _event_sender: rx,
         })
     }
 

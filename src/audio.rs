@@ -1,4 +1,7 @@
-use std::{path::Path, sync::atomic::Ordering};
+use std::{
+    path::Path,
+    sync::{atomic::Ordering, mpsc},
+};
 
 mod decode;
 mod device;
@@ -9,6 +12,8 @@ use device::AudioDevice;
 use handle::{PlayerHandle, SharedAudioState};
 
 pub use handle::PlaybackState;
+
+use crate::ipc::IPCMessage;
 
 pub struct AudioPlayer {
     handle: PlayerHandle,
@@ -36,8 +41,8 @@ macro_rules! with_decoder {
 }
 
 impl AudioPlayer {
-    pub fn new() -> Self {
-        let shared_state = SharedAudioState::new();
+    pub fn new(rx: mpsc::Sender<IPCMessage>) -> Self {
+        let shared_state = SharedAudioState::new(rx);
         let audio_handle = PlayerHandle {
             shared: shared_state.clone(),
         };

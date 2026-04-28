@@ -25,10 +25,10 @@ const REFILL_TARGET: usize = RING_CAPACITY / 2;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DecodeError {
-    #[error("")]
+    #[error("File has no sample rate provided.")]
     NoSampleRate,
 
-    #[error("")]
+    #[error("File has no track.")]
     NoTrack,
 
     #[error("{0}")]
@@ -36,6 +36,12 @@ pub enum DecodeError {
 
     #[error("{0}")]
     Symph(#[from] SymphoniaError),
+
+    #[error("{0}")]
+    Custom(String),
+
+    #[error("")]
+    EndOfFile,
 }
 
 pub enum DecodeCommand {
@@ -93,7 +99,7 @@ impl AudioDecoderHandle {
 }
 
 fn decode_thread_loop(
-    rx: std::sync::mpsc::Receiver<DecodeCommand>,
+    rx: mpsc::Receiver<DecodeCommand>,
     mut rb_prod: RingProd,
     audio_state: Arc<SharedAudioState>,
     stream_config: SupportedStreamConfig,
@@ -152,7 +158,7 @@ fn decode_thread_loop(
         }
 
         if let Err(e) = decode_one_packet(decoder_state, &mut rb_prod) {
-            if e.to_string() == "end of stream" {
+            if let DecodeError::EndOfFile = e {
                 audio_state.set_state(PlayerFlags::STOPPED);
             } else {
                 eprintln!("decode error: {e}");
@@ -171,17 +177,14 @@ struct DecoderState {
     resample_buf: Vec<f32>,
 }
 
-fn decode_one_packet(
-    state: &mut DecoderState,
-    rb_prod: &mut RingProd,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn decode_one_packet(state: &mut DecoderState, rb_prod: &mut RingProd) -> Result<(), DecodeError> {
     use symphonia::core::errors::Error as SymphoniaError;
 
     let packet = match state.format.next_packet() {
         Ok(p) => p,
 
         Err(SymphoniaError::IoError(e)) if e.kind() == ErrorKind::UnexpectedEof => {
-            return Err("end of stream".into());
+            return Err(DecodeError::EndOfFile);
         }
 
         Err(SymphoniaError::ResetRequired) => {
@@ -190,7 +193,7 @@ fn decode_one_packet(
         }
 
         Err(e) => {
-            return Err(format!("format error: {e}").into());
+            return Err(DecodeError::Symph(e));
         }
     };
 
@@ -201,7 +204,7 @@ fn decode_one_packet(
     let decoded = match state.decoder.decode(&packet) {
         Ok(d) => d,
         Err(SymphoniaError::DecodeError(_)) => return Ok(()),
-        Err(e) => return Err(format!("decoder fatal: {e}").into()),
+        Err(e) => return Err(DecodeError::Custom(e.to_string())),
     };
 
     let interleaved = audio_buffer_to_f32(&decoded);

@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, RwLock};
@@ -75,15 +74,15 @@ impl FsSample {
     }
 }
 
-pub fn process_directories(
-    dirs: HashSet<PathBuf>,
+pub fn process_directories<'a>(
+    dirs: impl Iterator<Item = &'a PathBuf>,
     app_state: Arc<RwLock<AppState>>,
     sender: Sender<IPCMessage>,
 ) -> Result<(), ()> {
     use std::time::{Duration, Instant};
 
     let mut sample_registry = Vec::<FsSample>::new();
-    let mut stack: Vec<PathBuf> = dirs.into_iter().collect();
+    let mut stack: Vec<PathBuf> = dirs.into_iter().cloned().collect();
 
     let mut time = Instant::now();
 

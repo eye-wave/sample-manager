@@ -2263,7 +2263,6 @@ dependencies = [
  "bitflags 2.11.1",
  "bytemuck",
  "cpal",
- "crossbeam-channel",
  "dirs",
  "drag",
  "fuzzy-matcher",

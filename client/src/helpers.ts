@@ -10,7 +10,10 @@ export function escapeHTML(str: string) {
 }
 
 export function renderTags<E extends HTMLElement>(tagsEl: E, tags: string[]) {
-  tagsEl.innerHTML = tags.map((t) => /* HTML */ `<span class="tag">${t}</span>`).join("");
+  tagsEl.innerHTML = tags
+    .filter((t) => t)
+    .map((t) => /* HTML */ `<span class="tag">${t}</span>`)
+    .join("");
 }
 
 const SEPARATOR =
