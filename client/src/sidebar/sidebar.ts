@@ -47,7 +47,11 @@ sidebar__.onclick = async (e) => {
 
 add_folder__.onclick = async () => {
   const folder = await invoke(IPC.OPEN_FOLDER);
-  await invoke(IPC.ADD_SAMPLE_FOLDER, folder);
+  if ((await invoke(IPC.ADD_SAMPLE_FOLDER, folder)) !== "Ok") {
+    return;
+  }
+
+  invoke(IPC.START_SAMPLE_SCAN, folder);
 
   const node = VFSNode.root(folder);
   root.add(node);

@@ -1,6 +1,7 @@
+use std::collections::HashSet;
 use std::io;
 use std::path::PathBuf;
-use std::sync::{Arc, mpsc};
+use std::sync::mpsc;
 
 use crate::audio::AudioPlayer;
 use crate::ipc::IPCMessage;
@@ -41,7 +42,7 @@ impl AppDirs {
 }
 
 pub struct AppState {
-    pub sample_registry: Arc<[FsSample]>,
+    pub sample_registry: HashSet<FsSample>,
     pub audio_player: AudioPlayer,
 
     app_config: AppConfig,
@@ -50,7 +51,7 @@ pub struct AppState {
 impl AppState {
     pub fn new(rx: mpsc::Sender<IPCMessage>) -> Self {
         Self {
-            sample_registry: Arc::new([]),
+            sample_registry: HashSet::new(),
             audio_player: AudioPlayer::new(rx),
 
             app_config: AppConfig::default(),

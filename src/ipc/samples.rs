@@ -19,7 +19,7 @@ fn add_sample_folder(body: IPCBody) -> IPCResponse {
         cfg.tracked_dirs.insert(path.into());
     });
 
-    ok()
+    b"Ok".finish()
 }
 
 fn get_sample_folders(body: IPCBody) -> IPCResponse {
@@ -34,9 +34,18 @@ fn get_sample_folders(body: IPCBody) -> IPCResponse {
 }
 
 fn start_sample_scan(body: IPCBody) -> IPCResponse {
+    let path = body.req;
+
     let thread_state = body.app_state.clone();
-    let guard = body.app_state.read().map_err(|_| Poisoned)?;
-    let dirs = guard.get_config().tracked_dirs.clone();
+
+    let dirs = {
+        if path.is_empty() {
+            let guard = body.app_state.read().map_err(|_| Poisoned)?;
+            guard.get_config().tracked_dirs.iter().cloned().collect()
+        } else {
+            vec![path.to_string().into()]
+        }
+    };
 
     if dirs.is_empty() {
         Err(IPCError::from("Path is empty"))?;

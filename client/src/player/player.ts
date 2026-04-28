@@ -13,11 +13,17 @@ export type PlayerState = typeof PAUSED | typeof PLAYING | typeof STOPPED;
 declare const time_cur__: HTMLSpanElement;
 declare const time_est__: HTMLSpanElement;
 
-declare const pause_btn: HTMLButtonElement;
+declare const pause_btn__: HTMLButtonElement;
+
+const RESUME_ICON = `<path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/>`;
+const PAUSE_ICON = `<rect x=14 y=3 width=5 height=18 rx="1"/><rect x=5 y=3 width=5 height=18 rx="1"/>`;
 
 function createPlayerHandle() {
   let playerState = 2;
   let intervalId = -1;
+
+  const svg = pause_btn__.querySelector("svg") as SVGElement;
+  svg.innerHTML = RESUME_ICON;
 
   function startTicker(ms = 100) {
     if (intervalId > -1) return;
@@ -42,6 +48,7 @@ function createPlayerHandle() {
     invoke(IPC.READ_AUDIO_FILE, path);
     invoke(IPC.PLAY_AUDIO_FILE, path).then(() => {
       playerState = PLAYING;
+      svg.innerHTML = PAUSE_ICON;
       startTicker();
     });
 
@@ -55,7 +62,7 @@ function createPlayerHandle() {
   function pause() {
     invoke(IPC.PLAYER_PAUSE).then(() => {
       playerState = PAUSED;
-      pause_btn.textContent = "Resume";
+      svg.innerHTML = RESUME_ICON;
       stopTicker();
     });
   }
@@ -63,7 +70,7 @@ function createPlayerHandle() {
   function resume() {
     invoke(IPC.PLAYER_RESUME).then(() => {
       playerState = PLAYING;
-      pause_btn.textContent = "Pause";
+      svg.innerHTML = PAUSE_ICON;
       startTicker();
     });
   }
@@ -73,7 +80,7 @@ function createPlayerHandle() {
     else if (playerState === PLAYING) pause();
   }
 
-  pause_btn.onclick = togglePause;
+  pause_btn__.onclick = togglePause;
 
   w.addEventListener("keydown", (e) => {
     if (isFocusElement(e.target)) return;

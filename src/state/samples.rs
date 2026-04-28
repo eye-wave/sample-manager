@@ -24,12 +24,26 @@ fn is_sample_file(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FsSample {
     pub path: PathBuf,
     pub tags: Vec<&'static str>,
 
     search_str: Arc<str>,
+}
+
+impl PartialEq for FsSample {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path
+    }
+}
+
+impl Eq for FsSample {}
+
+impl std::hash::Hash for FsSample {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.path.hash(state);
+    }
 }
 
 impl FsSample {
@@ -124,7 +138,9 @@ pub fn process_directories<'a>(
     println!("SCAN DONE!");
 
     let mut guard = app_state.write().map_err(|_| ())?;
-    guard.sample_registry = Arc::from(sample_registry);
+    for s in sample_registry.iter() {
+        guard.sample_registry.insert(s.clone());
+    }
 
     Ok(())
 }
