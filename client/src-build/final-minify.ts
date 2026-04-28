@@ -1,4 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { load } from "cheerio";
 import { minify as minifyHTML } from "html-minifier-terser";
 import { minify as minifyJS } from "terser";
 
@@ -6,7 +7,11 @@ main();
 async function main() {
   const file = await readFile("dist/index.html", "utf8");
 
-  let output = await minifyHTML(file, {
+  let output = file;
+
+  output = shortenHtmlIds(output);
+
+  output = await minifyHTML(output, {
     collapseWhitespace: true,
     collapseInlineTagWhitespace: true,
     removeComments: true,
@@ -16,7 +21,6 @@ async function main() {
     collapseBooleanAttributes: true,
   });
 
-  output = shortenHtmlIds(output);
   output = moveHeadScriptToBodyEnd(output);
 
   output = output.replace("\n/*$vite$:1*/", "").replace(" crossorigin type=module", "");
@@ -42,28 +46,48 @@ function moveHeadScriptToBodyEnd(html: string) {
   return withoutScript.replace(/<\/body>/i, `${scriptTag}</body>`);
 }
 
+export const idFactory = (prefix: string) => {
+  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+  let count = -1;
+
+  return () => {
+    let n = count++;
+
+    let result = "";
+    while (n >= 0) {
+      result = alphabet[n % 63] + result;
+      n = Math.floor(n / 63) - 1;
+    }
+
+    return prefix + result;
+  };
+};
+
 function shortenHtmlIds(html: string): string {
-  const idRegex = /<[^>]+id=([^\s>]+)/g;
+  const $ = load(html);
 
-  const ids = new Set<string>(Array.from(html.matchAll(idRegex), (m) => m[1]));
-
-  const generateId = (() => {
-    let i = 0;
-    return () => "x" + (++i).toString(36);
-  })();
-
+  const gen = idFactory("x");
   const map = new Map<string, string>();
 
-  for (const oldId of ids) {
-    map.set(oldId, generateId());
-  }
+  $("[id]").each((_, el) => {
+    const oldId = $(el).attr("id");
+    if (oldId?.endsWith("__")) {
+      if (!map.has(oldId)) {
+        map.set(oldId, gen());
+      }
+    }
+  });
 
-  for (const [oldId, newId] of map.entries()) {
+  let output = html;
+
+  for (const [oldId, newId] of map) {
     const escaped = oldId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    html = html.replace(new RegExp(escaped, "g"), newId);
+    const re = new RegExp(escaped, "g");
+    output = output.replace(re, newId);
   }
 
-  return html;
+  return output;
 }
 
 function commonDictionary(html: string) {

@@ -1,7 +1,6 @@
 use crate::ipc::{IPCBody, IPCError, IPCResponse, ok};
 use crate::ipc_commands;
 
-#[cfg(debug_assertions)]
 fn log(body: IPCBody) -> IPCResponse {
     let mode = body
         .req
@@ -25,14 +24,8 @@ fn log(body: IPCBody) -> IPCResponse {
     ok()
 }
 
-#[cfg(debug_assertions)]
 ipc_commands! {
     IPC_LOGGER = [
         log
     ]
-}
-
-#[cfg(not(debug_assertions))]
-ipc_commands! {
-    IPC_LOGGER = []
 }
