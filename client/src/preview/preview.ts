@@ -1,17 +1,17 @@
 import { renderTags } from "../helpers";
 import { playerHandle } from "../player/player";
 
-declare const waveform: HTMLDivElement;
-declare const wave_thumb: HTMLDivElement;
+declare const waveform__: HTMLDivElement;
+declare const wave_thumb__: HTMLDivElement;
 
-declare const preview_label: HTMLSpanElement;
-declare const preview_tags: HTMLDivElement;
+declare const preview_label__: HTMLSpanElement;
+declare const preview_tags__: HTMLDivElement;
 
-declare const s_total: HTMLSpanElement;
+declare const s_total__: HTMLSpanElement;
 
 function createPreview() {
-  waveform.onclick = (e) => {
-    const rect = waveform.getBoundingClientRect();
+  waveform__.onclick = (e) => {
+    const rect = waveform__.getBoundingClientRect();
     const x = e.clientX - rect.left;
 
     const prog = x / rect.width;
@@ -23,19 +23,19 @@ function createPreview() {
       const margin = 0.1;
       const p = Math.max(Math.min(1, pos), 0) * 100;
 
-      waveform.style.backgroundSize = `${p}% 100%, ${100 - p}% 100%`;
-      wave_thumb.style.background = `linear-gradient(to right,transparent ${p - margin}%,var(--text-primary) ${p}%,transparent ${p + margin}%)`;
+      waveform__.style.backgroundSize = `${p}% 100%, ${100 - p}% 100%`;
+      wave_thumb__.style.background = `linear-gradient(to right,transparent ${p - margin}%,var(--text-primary) ${p}%,transparent ${p + margin}%)`;
     },
     set img(uri: string) {
-      waveform.style.maskImage = `url(${uri})`;
+      waveform__.style.maskImage = `url(${uri})`;
     },
 
     set label(label: string) {
-      preview_label.textContent = label;
+      preview_label__.textContent = label;
     },
 
     set tags(tags: string[]) {
-      renderTags(preview_tags, tags);
+      renderTags(preview_tags__, tags);
     },
   };
 }
@@ -46,4 +46,4 @@ listen("read_audio", (uri) => {
   PreviewHandler.img = uri;
 });
 
-listen("s_tick", (n) => (s_total.textContent = n));
+listen("s_tick", (n) => (s_total__.textContent = n));

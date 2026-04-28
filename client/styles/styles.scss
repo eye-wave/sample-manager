@@ -3,12 +3,18 @@
   margin: 0;
   padding: 0;
   font-family: inherit;
+  font-size: inherit;
 }
 
 html,
 body {
   height: 100%;
   overflow: hidden;
+}
+
+button, input {
+  outline: none;
+  border: 0;
 }
 
 body {
@@ -20,11 +26,11 @@ body {
   flex-direction: column;
 }
 
-#titlebar_handle {
+#titlebar_handle__ {
   flex: 1;
 }
 
-#titlebar {
+.titlebar {
   display: flex;
   background-color: var(--bg-base);
 }
@@ -37,14 +43,12 @@ body {
 
   button {
     font-weight: 600;
-    outline: none;
     border: 0;
     border-radius: calc(var(--radius) /3 );
     background: var(--bg-panel);
     color: var(--accent);
     width: 16px;
     height: 16px;
-    font-size: 12px;
 
     &:hover {
       background: var(--bg-hover);
@@ -118,7 +122,7 @@ body {
     flex-shrink: 0;
   }
 
-  #search_tags {
+  #search_tags__ {
     display: flex;
     overflow: hidden;
     max-width: 120px;
@@ -127,10 +131,7 @@ body {
   input {
     display: block;
     background: none;
-    border: none;
-    outline: none;
     color: var(--text-primary);
-    font-size: 12px;
     min-width: 80px;
     flex:1;
 
@@ -191,7 +192,7 @@ body {
 
     &.item {
       margin: 0;
-      font-size: 12px;
+
       font-weight: 600;
       cursor: grab;
       position: relative;
@@ -272,7 +273,6 @@ body {
   color: var(--text-muted);
   border-radius: var(--radius);
   cursor: pointer;
-  font-size: 12px;
 
   &:hover {
     background: var(--bg-hover);
@@ -363,7 +363,6 @@ body {
 
   &-fav {
     color: var(--text-muted);
-    font-size: 12px;
     flex-shrink: 0;
     cursor: pointer;
 
@@ -374,7 +373,6 @@ body {
 
   &-label {
     color: var(--text-secondary);
-    font-size: 12px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -387,7 +385,6 @@ body {
   }
 
   &-bpm {
-    font-size: 12px;
     color: var(--text-secondary);
     text-align: right;
   }
@@ -470,7 +467,7 @@ body {
   }
 }
 
-#waveform {
+.waveform {
   width: 100%;
   height: 80px;
   background-image:
@@ -485,7 +482,7 @@ body {
   mask-position: center;
 }
 
-#wave_thumb {
+.wave-thumb {
   inset: 0;
   position: absolute;
   height: 80px;
@@ -546,7 +543,7 @@ body {
   }
 }
 
-#add_folder {
+.add-folder {
   width: 100%;
   background: var(--bg-surface);
   border: 1px dashed var(--border);
@@ -574,7 +571,32 @@ body {
     width: 64px;
   }
 
-  & #time_cur {
+  & #time_cur__ {
     text-align: right;
+  }
+}
+
+#pagination__ {
+  padding: 4px;
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+
+  & button {
+    padding: 4px 10px;
+    border-radius: calc(var(--radius) / 4);
+    color: var(--text-muted);
+    background: var(--bg-base);
+    border: 1px solid var(--bg-surface);
+
+    &:not(.ellipsis) {
+      cursor: pointer;
+    }
+
+    &.active {
+      color: var(--text-primary);
+      background: var(--bg-surface);
+      border-color: transparent;
+    }
   }
 }

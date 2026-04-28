@@ -1,13 +1,12 @@
-import { ADD_EVENT_LISTENER, BEFOREEND, INSERT_ADJACENT_HTML } from "../alias";
 import { basename } from "../helpers";
 import { loadNode } from "./lazy-load";
 import { SIDEBAR_FOLDER, SIDEBAR_ITEM } from "./template";
 import { FileType, type VFSNode } from "./vfs";
 
 export function renderNode(parent: HTMLElement, node: VFSNode): void {
-  parent[INSERT_ADJACENT_HTML](BEFOREEND, SIDEBAR_FOLDER(node.displayName));
-  parent[INSERT_ADJACENT_HTML](
-    BEFOREEND,
+  parent.insertAdjacentHTML("beforeend", SIDEBAR_FOLDER(node.displayName));
+  parent.insertAdjacentHTML(
+    "beforeend",
     /* HTML */ `<div class="tree-children" style="display:none"></div>`,
   );
 
@@ -17,7 +16,7 @@ export function renderNode(parent: HTMLElement, node: VFSNode): void {
   node.bind(section);
   node.updateCount();
 
-  node.visual?.labelEl?.[ADD_EVENT_LISTENER]("click", () => {
+  node.visual?.labelEl?.addEventListener("click", () => {
     // Fetch on first open if empty.
     if (!node.loaded && node.children.length === 0) {
       loadNode(node).then(() => node.toggle());
@@ -32,8 +31,8 @@ export function renderNode(parent: HTMLElement, node: VFSNode): void {
     for (const child of node.children) {
       if (node.visual?.childrenEl) {
         if (child.nodeType === FileType) {
-          node.visual.childrenEl[INSERT_ADJACENT_HTML](
-            BEFOREEND,
+          node.visual.childrenEl.insertAdjacentHTML(
+            "beforeend",
             SIDEBAR_ITEM(basename(child.path), child.ftype, child.path),
           );
         } else {

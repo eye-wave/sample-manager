@@ -1,4 +1,4 @@
-import { ADD_EVENT_LISTENER, KEYDOWN, w } from "../alias";
+import { w } from "../alias";
 import { isFocusElement } from "../helpers";
 import { PreviewHandler } from "../preview/preview";
 
@@ -8,8 +8,8 @@ export const STOPPED = 2 as const;
 
 export type PlayerState = typeof PAUSED | typeof PLAYING | typeof STOPPED;
 
-declare const time_cur: HTMLSpanElement;
-declare const time_est: HTMLSpanElement;
+declare const time_cur__: HTMLSpanElement;
+declare const time_est__: HTMLSpanElement;
 
 declare const pause_btn: HTMLButtonElement;
 
@@ -24,8 +24,8 @@ function createPlayerHandle() {
       const pos = await invoke("get_audio_position");
       const [fmtCur, fmtEst] = (await invoke("get_audio_position_pretty")).split("/");
 
-      time_cur.textContent = fmtCur;
-      time_est.textContent = fmtEst;
+      time_cur__.textContent = fmtCur;
+      time_est__.textContent = fmtEst;
 
       PreviewHandler.position = +pos;
     }, ms);
@@ -75,7 +75,7 @@ function createPlayerHandle() {
 
   pause_btn.onclick = togglePause;
 
-  w[ADD_EVENT_LISTENER](KEYDOWN, (e) => {
+  w.addEventListener("keydown", (e) => {
     if (isFocusElement(e.target)) return;
     if (e.key === " ") togglePause();
   });

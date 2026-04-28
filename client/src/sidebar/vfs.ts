@@ -1,4 +1,4 @@
-import { APPEND_CHILD, QUERY_SELECTOR, txt } from "../alias";
+import { txt } from "../alias";
 import { basename } from "../helpers";
 
 const FOLDER_CLOSED =
@@ -24,17 +24,17 @@ type VFSFile = {
 
 type VFSVisual = ReturnType<typeof createVisualNode>;
 const createVisualNode = (section: Element) => {
-  const labelEl = section[QUERY_SELECTOR]<HTMLElement>(".tree-label");
+  const labelEl = section.querySelector<HTMLElement>(".tree-label");
   const childrenEl = section.nextElementSibling as HTMLElement | null;
 
-  const arrowClassList = section[QUERY_SELECTOR](".tree-arrow")?.classList ?? null;
+  const arrowClassList = section.querySelector(".tree-arrow")?.classList ?? null;
 
-  const countSpan = section[QUERY_SELECTOR]<HTMLElement>(".tree-count");
+  const countSpan = section.querySelector<HTMLElement>(".tree-count");
   const countEl = countSpan ? txt() : null;
-  if (countSpan && countEl) countSpan[APPEND_CHILD](countEl);
+  if (countSpan && countEl) countSpan.appendChild(countEl);
 
   // biome-ignore lint/style/noNonNullAssertion: trust
-  const iconEl = section[QUERY_SELECTOR]<SVGPathElement>("path")!;
+  const iconEl = section.querySelector<SVGPathElement>("path")!;
 
   iconEl.setAttribute("d", FOLDER_CLOSED);
 

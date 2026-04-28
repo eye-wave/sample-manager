@@ -12,16 +12,16 @@
     <title>SampleVault — Audio Sample Manager</title>
   </head>
   <body>
-    <div id="titlebar">
-      <div id="titlebar_handle"></div>
+    <div class="titlebar">
+      <div id="titlebar_handle__"></div>
       <div class="btn-group">
-        <button id="btn_minimize">
+        <button id="btn_minimize__">
           <load src="assets/icons/minimize.svg" />
         </button>
-        <button id="btn_maximize">
+        <button id="btn_maximize__">
           <load src="assets/icons/maximize.svg" />
         </button>
-        <button id="btn_closeWindow">
+        <button id="btn_closeWindow__">
           <load src="assets/icons/close.svg" />
         </button>
       </div>
@@ -35,23 +35,24 @@
         <div class="search-wrap">
           <load src="assets/icons/search.svg" />
 
-          <div id="search_tags"></div>
-          <input id="search" placeholder="Search samples, tags, packs…" autocomplete="off" />
+          <div id="search_tags__"></div>
+          <input id="search__" placeholder="Search samples, tags, packs…" autocomplete="off" />
         </div>
 
-        <button id="conf_btn" class="topbar-btn"><load src="assets/icons/settings.svg" />Settings</button>
+        <button id="conf_btn__" class="topbar-btn"><load src="assets/icons/settings.svg" />Settings</button>
 
-        <dialog id="conf_dial">
+        <!-- Settings -->
+        <dialog id="conf_dial__">
           <div class="dialog-shell">
             <div class="dialog" role="dialog" aria-labelledby="settings-title">
               <div class="dialog__header">
-                <p class="dialog__title" id="settings-title">
+                <p class="dialog__title">
                   <span class="dialog__title-icon">
                     <load src="assets/icons/settings.svg" />
                   </span>
                   Settings
                 </p>
-                <button id="dialog_close" class="dialog__close-btn" aria-label="Close">
+                <button id="dialog_close__" class="dialog__close-btn" aria-label="Close">
                   <load src="assets/icons/close.svg" />
                 </button>
               </div>
@@ -61,14 +62,14 @@
 
                 <div class="field">
                   <span class="field__label">App Theme</span>
-                  <select id="theme_select"></select>
+                  <select id="theme_select__"></select>
                 </div>
 
               </div>
 
               <div class="dialog__footer">
-                <button id="conf_reset" class="btn btn--ghost">Reset to defaults</button>
-                <button id="conf_save" class="btn btn--primary">Save changes</button>
+                <button id="conf_reset__" class="btn btn--ghost">Reset to defaults</button>
+                <button id="conf_save__" class="btn btn--primary">Save changes</button>
               </div>
             </div>
           </div>
@@ -91,9 +92,9 @@
           </div>
           <div class="sidebar-divider"></div>
           <div class="sidebar-header">File Tree</div>
-          <div id="sidebar" class="sidebar-scroll"></div>
+          <div id="sidebar__" class="sidebar-scroll"></div>
           <div style="padding:8px;border-top:1px solid var(--border)">
-            <button id="add_folder">+ Add Folder</button>
+            <button id="add_folder__" class="add-folder">+ Add Folder</button>
           </div>
         </div>
 
@@ -105,7 +106,11 @@
             <div class="list-col" style="text-align:right">BPM</div>
             <div class="list-col" style="padding-left:8px">Tags</div>
           </div>
-          <div id="list_scroll" class="list-scroll"></div>
+          <div id="list_scroll__" class="list-scroll">
+            <div id="pagination__" style="display:none">
+              <button id="pagi_template__">1</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -113,16 +118,16 @@
       <div class="preview">
         <div class="preview-header">
           <span class="preview-fav">♡</span>
-          <span id="preview_label" class="preview-title"></span>
-          <div id="preview_tags" class="tags"></div>
+          <span id="preview_label__" class="preview-title"></span>
+          <div id="preview_tags__" class="tags"></div>
         </div>
         <div class="preview-body">
-          <div id="waveform"></div>
-          <div id="wave_thumb"></div>
+          <div id="waveform__" class="waveform"></div>
+          <div id="wave_thumb__" class="wave-thumb"></div>
           <div class="controls">
-            <span id="time_cur">00:00</span>
+            <span id="time_cur__">00:00</span>
             <button class="topbar-btn" id="pause_btn">Pause</button>
-            <span id="time_est">00:00</span>
+            <span id="time_est__">00:00</span>
           </div>
         </div>
       </div>
@@ -131,7 +136,7 @@
       <div class="bottombar">
         <div class="bb-item">
           <div class="bb-dot"></div>
-          <span id="s_total"></span> samples
+          <span id="s_total__"></span> samples
         </div>
         <div class="bb-sep"></div>
         <div class="bb-item">Playback mode: <span>Loop</span></div>

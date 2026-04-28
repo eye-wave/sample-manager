@@ -1,11 +1,13 @@
-import { APPEND_CHILD, d } from "../alias";
 import { playerHandle } from "../player/player";
 import { TagInput } from "./input";
 import { BrowseRow } from "./row";
 
-declare const list_scroll: HTMLDivElement;
-declare const search: HTMLInputElement;
-declare const search_tags: HTMLInputElement;
+import "./pagination";
+
+declare const list_scroll__: HTMLDivElement;
+declare const search__: HTMLInputElement;
+declare const search_tags__: HTMLInputElement;
+declare const pagination__: HTMLDivElement;
 
 export const POOL_SIZE = 100;
 
@@ -29,12 +31,9 @@ function onDrag(path: string) {
 const pool: BrowseRow[] = Array.from({ length: POOL_SIZE }, (_, i) =>
   BrowseRow(i, onSelect, onDrag, () => {}),
 );
-const fragment = d.createDocumentFragment();
 
-TagInput(search, search_tags, pool);
+TagInput(search__, search_tags__, pool);
 
-pool.forEach((item) => {
-  fragment[APPEND_CHILD](item.el);
-});
-
-list_scroll[APPEND_CHILD](fragment);
+for (const item of pool) {
+  list_scroll__.insertBefore(item.el, pagination__);
+}

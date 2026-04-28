@@ -1,4 +1,4 @@
-import { $el, APPEND_CHILD, ONCLICK, QUERY_SELECTOR, txt } from "../alias";
+import { $el, txt } from "../alias";
 import { renderTags } from "../helpers";
 
 export type BrowseRow = ReturnType<typeof BrowseRow>;
@@ -26,15 +26,15 @@ export const BrowseRow = (
   const typeEl = txt();
   const bpmEl = txt();
 
-  const labelEl = el[QUERY_SELECTOR](".item-label") as HTMLSpanElement;
-  const favEl = el[QUERY_SELECTOR](".item-fav") as HTMLSpanElement;
-  const tagsEl = el[QUERY_SELECTOR](".item-tags") as HTMLDivElement;
+  const labelEl = el.querySelector(".item-label") as HTMLSpanElement;
+  const favEl = el.querySelector(".item-fav") as HTMLSpanElement;
+  const tagsEl = el.querySelector(".item-tags") as HTMLDivElement;
 
-  labelEl[APPEND_CHILD](labelText);
-  el[QUERY_SELECTOR](".item-type")?.[APPEND_CHILD](typeEl);
-  el[QUERY_SELECTOR](".item-bpm")?.[APPEND_CHILD](bpmEl);
+  labelEl.appendChild(labelText);
+  el.querySelector(".item-type")?.appendChild(typeEl);
+  el.querySelector(".item-bpm")?.appendChild(bpmEl);
 
-  favEl?.[APPEND_CHILD](favElText);
+  favEl?.appendChild(favElText);
 
   let isLiked = false;
   let path: string | null = null;
@@ -67,7 +67,7 @@ export const BrowseRow = (
     el.style.display = "";
   };
 
-  el[ONCLICK] = () => path && onSelect?.(idx, path);
+  el.onclick = () => path && onSelect?.(idx, path);
   el.draggable = true;
   el.ondragstart = () => path && onDrag?.(path);
 
@@ -77,7 +77,7 @@ export const BrowseRow = (
     highlight(false);
   };
 
-  favEl[ONCLICK] = (e) => {
+  favEl.onclick = (e) => {
     setLiked(!isLiked);
     onLike?.();
     e.stopPropagation();
