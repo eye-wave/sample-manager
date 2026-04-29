@@ -21,3 +21,11 @@ btn_closeWindow__.onclick = () => invoke(IPC.CLOSE_WINDOW);
 /// DEV start
 updateCurrentTheme();
 /// DEV end
+
+w.addEventListener(
+  "wheel",
+  (e) => {
+    if (e.ctrlKey) e.preventDefault();
+  },
+  { passive: false },
+);

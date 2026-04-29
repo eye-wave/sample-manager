@@ -87,7 +87,10 @@ function createPlayerHandle() {
 
   w.addEventListener("keydown", (e) => {
     if (isFocusElement(e.target)) return;
-    if (e.key === " ") togglePause();
+    if (e.key === " ") {
+      e.preventDefault();
+      togglePause();
+    }
   });
 
   return {

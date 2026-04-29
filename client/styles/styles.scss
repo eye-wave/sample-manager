@@ -164,7 +164,6 @@ body {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  overflow: hidden;
 
   &-header {
     padding: 12px 14px 8px;
@@ -177,14 +176,8 @@ body {
 
   &-scroll {
     flex: 1;
-    overflow-y: auto;
+    overflow-y: scroll;
     padding-bottom: 8px;
-
-    scrollbar-width: none;
-
-    &::-webkit-scrollbar {
-      display: none;
-    }
   }
 
   &-divider {
@@ -199,34 +192,27 @@ body {
     color: var(--text-secondary);
     margin-bottom: 4px;
     transition: background 0.1s;
-    text-overflow: ellipsis;
     line-height: 1.2;
     word-break: break-all;
-    text-wrap: nowrap;
     overflow: hidden;
-    padding: 2px 0;
+    text-overflow: ellipsis;
+    text-align: left;
+    text-wrap: nowrap;
 
     &.item {
-      margin: 0;
-
-      font-weight: 600;
+      background: var(--bg-base);
+      padding: 1px 6px;
+      margin: 0 0 0 8px;
+      font-weight: 400;
       cursor: grab;
       position: relative;
-
-      &::before{
-        inset: 0;
-        content: "";
-        position: absolute;
-        width: 100%;
-        background: currentColor;
-        opacity: 30%;
-        height: 1px;
-      }
     }
 
-    &:hover {
+    &.popup {
+      position: absolute;
+      top: 0; left: 0;
+      pointer-events: none;
       background: var(--bg-hover);
-      color: var(--text-primary);
     }
   }
 
@@ -234,9 +220,14 @@ body {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 5px 14px;
+    padding: 0 8px;
     cursor: pointer;
     user-select: none;
+
+    &:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
 
     &.active {
       background: var(--accent-glow);
@@ -518,8 +509,6 @@ body {
 
 .bottombar {
   height: 28px;
-  background: var(--bg-bottom-bar);
-  border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
   padding: 0 14px;

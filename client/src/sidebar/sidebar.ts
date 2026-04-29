@@ -1,3 +1,4 @@
+import { $el, d } from "../alias";
 import { search } from "../browse/browse";
 import * as IPC from "../gen/ipc-gen";
 import { basename } from "../helpers";
@@ -10,7 +11,32 @@ import { NodeType, type VFSChild, VFSNode } from "./vfs";
 declare const sidebar__: HTMLDivElement;
 declare const add_folder__: HTMLButtonElement;
 
+const popup = $el("div");
+popup.className = "tree-section item popup";
+
+d.body.appendChild(popup);
+
 const root = VFSNode.root("__root__");
+
+function hidePopup() {
+  popup.style.display = "none";
+}
+
+function onHover(e: Event) {
+  const el = e.target as HTMLDivElement;
+  if (!el?.hasAttribute("data-path")) return hidePopup();
+
+  popup.textContent = el.textContent;
+  popup.style.display = "";
+  popup.style.top = el.offsetTop - sidebar__.scrollTop + "px";
+  popup.style.left = el.offsetLeft - 8 + "px";
+}
+
+hidePopup();
+sidebar__.onmouseenter = onHover;
+sidebar__.onmousemove = onHover;
+sidebar__.onscroll = hidePopup;
+sidebar__.onmouseleave = hidePopup;
 
 invoke(IPC.START_SAMPLE_SCAN);
 invoke(IPC.GET_SAMPLE_FOLDERS).then(async (res) => {

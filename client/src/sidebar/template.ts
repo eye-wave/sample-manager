@@ -4,8 +4,8 @@ export const SIDEBAR_FOLDER = (name: string) =>
       <span class="tree-arrow">▶</span>
       <span class="tree-icon">
       <svg
-        width="18"
-        height="18"
+        width="16"
+        height="16"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
