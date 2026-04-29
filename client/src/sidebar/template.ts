@@ -24,4 +24,4 @@ const itemIcons: Record<number, string> = ["♪", "🎹", "🛠️"];
 itemIcons[ICON_OTHER] = "📄";
 
 export const SIDEBAR_ITEM = (name: string, ftype: number, fullpath: string) =>
-  `<div class="tree-section item" data-path=${encodeURI(fullpath)} title="${name}">${itemIcons[ftype - 1] ?? itemIcons[ICON_OTHER]} ${name}</div>`;
+  `<div class="tree-section item" data-path=${encodeURI(fullpath)}>${itemIcons[ftype - 1] ?? itemIcons[ICON_OTHER]} ${name}</div>`;
