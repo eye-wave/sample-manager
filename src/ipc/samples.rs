@@ -1,11 +1,13 @@
 use std::fs;
+use std::path::{Path, PathBuf};
 
 use fuzzy_matcher::skim::SkimMatcherV2;
+use rayon::iter::Either;
 use rayon::prelude::*;
 
 use crate::ipc::{IPCBody, IPCError, IPCResponse, IntoIPCResponse, Poisoned, ok};
 use crate::ipc_commands;
-use crate::state::samples::{process_directories, tag_string};
+use crate::state::samples::{clean_up_string, process_directories, tag_string};
 
 fn add_sample_folder(body: IPCBody) -> IPCResponse {
     let path = body.req.as_ref();
@@ -59,48 +61,121 @@ fn start_sample_scan(body: IPCBody) -> IPCResponse {
 }
 
 fn search_for_sample(body: IPCBody) -> IPCResponse {
-    let tokens = body.req.to_lowercase();
-    let tokens = tokens.split(",").map(|t| t.trim()).collect::<Vec<_>>();
+    let mut limit = 50;
+    let mut offset = 0;
+    let mut query = None;
+    let mut tags = Vec::new();
+    let mut is_fav = false;
 
-    if tokens.len() < 3 {
-        return Err(Box::new(IPCError::empty()));
+    for (k, v) in url::form_urlencoded::parse(body.req.as_bytes()) {
+        match k.as_ref() {
+            "lim" => {
+                limit = v.parse().unwrap_or(50);
+            }
+            "off" => {
+                offset = v.parse().unwrap_or(0);
+            }
+            "q" => {
+                query = Some(clean_up_string(&v));
+            }
+            "fav" => {
+                is_fav = v == "1";
+            }
+            "t" => {
+                if !v.is_empty() {
+                    tags = v.split(',').map(|x| x.to_string()).collect();
+                }
+            }
+            _ => {}
+        }
     }
 
-    let limit: usize = tokens[0].parse().unwrap_or(50);
-    let offset: usize = tokens[1].parse().unwrap_or(0);
-
-    let query = tokens.last().unwrap();
-    let tags = &tokens[2..tokens.len() - 1];
+    let query = query.ok_or(IPCError::empty())?;
 
     let guard = body.app_state.read().map_err(|_| Poisoned)?;
-    let registry = guard.sample_registry.clone();
 
     let matcher = SkimMatcherV2::default().smart_case();
 
-    let mut scored: Vec<_> = registry
-        .par_iter()
-        .map(|s| (s, s.score(query, tags, &matcher)))
-        .filter(|s| s.1 > 0)
-        .collect();
+    let scored = if is_fav {
+        Either::Left(guard.favorite_samples.iter().filter_map(|f| {
+            let key = Path::new(f);
+            guard.sample_registry.get(key)
+        }))
+    } else {
+        Either::Right(guard.sample_registry.values())
+    };
 
-    scored.sort_by_key(|&(_, score)| std::cmp::Reverse(score));
+    let mut result = scored
+        .par_bridge()
+        .map(|s| {
+            if is_fav && query.is_empty() {
+                return (s, i64::MAX);
+            }
+
+            let score = s.score(&query, &tags, &matcher);
+            (s, score)
+        })
+        .filter(|(_, score)| *score > 0)
+        .collect::<Vec<_>>();
+
+    result.sort_by_key(|&(_, score)| std::cmp::Reverse(score));
 
     let start = offset;
-    let end = (start + limit).min(scored.len());
+    let end = (start + limit).min(result.len());
 
-    let found = if start < scored.len() {
-        &scored[start..end]
+    let found = if start < result.len() {
+        &result[start..end]
     } else {
         &[]
     };
 
     let files = found
         .iter()
-        .map(|(f, _)| f.serialize())
+        .map(|(f, _)| f.serialize(guard.is_sample_fav(&f.path)))
         .intersperse(",\n".into())
         .collect::<String>();
 
-    format!("{{\"count\":{},\"files\":[{files}]}}", scored.len()).finish()
+    format!("{{\"count\":{},\"files\":[{files}]}}", result.len()).finish()
+}
+
+const SET_FAV_ID: &str = "set-fav";
+
+fn add_sample_to_fav(body: IPCBody) -> IPCResponse {
+    let mut guard = body.app_state.write().map_err(|_| Poisoned)?;
+    guard.add_sample_to_fav(body.req.to_string().into());
+
+    body.webview_sender
+        .send(super::IPCMessage {
+            id: SET_FAV_ID,
+            payload: "1".to_string() + &body.req,
+        })
+        .ok();
+
+    ok()
+}
+
+fn remove_sample_from_fav(body: IPCBody) -> IPCResponse {
+    let mut guard = body.app_state.write().map_err(|_| Poisoned)?;
+    guard.remove_sample_from_fav(body.req.to_string().as_ref());
+
+    body.webview_sender
+        .send(super::IPCMessage {
+            id: SET_FAV_ID,
+            payload: "0".to_string() + &body.req,
+        })
+        .ok();
+
+    ok()
+}
+
+fn is_sample_fav(body: IPCBody) -> IPCResponse {
+    let guard = body.app_state.read().map_err(|_| Poisoned)?;
+
+    guard
+        .favorite_samples
+        .contains(&PathBuf::from(body.req.to_string()))
+        .to_string()
+        .finish()
 }
 
 fn tag_path(body: IPCBody) -> IPCResponse {
@@ -114,6 +189,9 @@ fn tag_path(body: IPCBody) -> IPCResponse {
 
 ipc_commands! {
     IPC_SAMPLES = [
+        add_sample_to_fav,
+        remove_sample_from_fav,
+        is_sample_fav,
         add_sample_folder,
         get_sample_folders,
         start_sample_scan,

@@ -44,7 +44,7 @@ function createPlayerHandle() {
     intervalId = -1;
   }
 
-  async function startPlaying(path: string, name: string, tagsList?: string[]) {
+  async function startPlaying(path: string, name: string, fav?: boolean, tagsList?: string[]) {
     invoke(IPC.READ_AUDIO_FILE, path);
     invoke(IPC.PLAY_AUDIO_FILE, path).then(() => {
       playerState = PLAYING;
@@ -53,10 +53,13 @@ function createPlayerHandle() {
     });
 
     const tags = tagsList ? tagsList : (await invoke(IPC.TAG_PATH, path)).split(",");
+    const isFav = fav === undefined ? (await invoke(IPC.IS_SAMPLE_FAV, path)) === "true" : fav;
 
+    PreviewHandler.path = path;
     PreviewHandler.label = name;
     PreviewHandler.img = "";
     PreviewHandler.tags = tags;
+    PreviewHandler.fav = isFav;
   }
 
   function pause() {

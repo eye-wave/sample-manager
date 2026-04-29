@@ -1,3 +1,4 @@
+import { search } from "../browse/browse";
 import * as IPC from "../gen/ipc-gen";
 import { basename } from "../helpers";
 import { invoke } from "../invoke/invoke";
@@ -56,4 +57,30 @@ add_folder__.onclick = async () => {
   const node = VFSNode.root(folder);
   root.add(node);
   renderNode(sidebar__, node);
+};
+
+declare const tlib__: HTMLInputElement;
+declare const tfav__: HTMLInputElement;
+
+export const TabLibrary = 0 as const;
+export const TabFavorites = 1 as const;
+
+export const TabHandle: { tab: 0 | 1 } = {
+  tab: TabLibrary,
+};
+
+tlib__.onchange = () => {
+  const checked = tlib__.checked;
+  if (!checked) return;
+
+  TabHandle.tab = TabLibrary;
+  search("", [], 1, false);
+};
+
+tfav__.onchange = () => {
+  const checked = tfav__.checked;
+  if (!checked) return;
+
+  TabHandle.tab = TabFavorites;
+  search("", [], 1, true);
 };

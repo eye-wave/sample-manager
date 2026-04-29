@@ -1,4 +1,5 @@
-import { renderTags } from "../helpers";
+import { getCurrentSample } from "../browse/browse";
+import { basename, renderTags, setLiked, setLikedView } from "../helpers";
 import { listen } from "../invoke/invoke";
 import { playerHandle } from "../player/player";
 
@@ -7,8 +8,20 @@ declare const wave_thumb__: HTMLDivElement;
 
 declare const preview_label__: HTMLSpanElement;
 declare const preview_tags__: HTMLDivElement;
+declare const preview_fav__: HTMLSpanElement;
 
 declare const s_total__: HTMLSpanElement;
+
+preview_fav__.onclick = () => {
+  const [path, isfav] = getCurrentSample() ?? [PreviewHandler.path, PreviewHandler.fav];
+  if (path !== PreviewHandler.path) {
+    setLiked(PreviewHandler.path, !PreviewHandler.fav);
+    PreviewHandler.fav = !PreviewHandler.fav;
+  } else {
+    setLiked(path, !isfav);
+    PreviewHandler.fav = !isfav;
+  }
+};
 
 function createPreview() {
   waveform__.onclick = (e) => {
@@ -19,7 +32,18 @@ function createPreview() {
     playerHandle.seek(prog);
   };
 
+  let path = "";
+
   return {
+    get path() {
+      return path;
+    },
+    set path(p: string) {
+      path = p;
+    },
+    get label() {
+      return basename(path);
+    },
     set position(pos: number) {
       const margin = 0.1;
       const p = Math.max(Math.min(1, pos), 0) * 100;
@@ -38,6 +62,10 @@ function createPreview() {
     set tags(tags: string[]) {
       renderTags(preview_tags__, tags);
     },
+
+    set fav(state: boolean) {
+      setLikedView(state, preview_fav__);
+    },
   };
 }
 
@@ -48,3 +76,12 @@ listen("read_audio", (uri) => {
 });
 
 listen("s_tick", (n) => (s_total__.textContent = n));
+
+listen("set-fav", (payload) => {
+  const fav = !!+payload.charAt(0);
+  const label = basename(payload.slice(1));
+
+  if (PreviewHandler.label === label) {
+    PreviewHandler.fav = fav;
+  }
+});

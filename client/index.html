@@ -81,14 +81,16 @@
         <!-- Sidebar -->
         <div class="sidebar">
           <div style="padding:10px 8px 4px;display:flex;flex-direction:column;gap:2px">
-            <div class="nav-item active">
+            <input type="radio" name="tab" value="lib" id="tlib__" checked>
+            <input type="radio" name="tab" value="fav" id="tfav__">
+            <label class="nav-item" for="tlib__">
               <load src="assets/icons/library.svg" />
               Library
-            </div>
-            <div class="nav-item">
+            </label>
+            <label class="nav-item" for="tfav__">
               <load src="assets/icons/heart-hollow.svg" />
               Favorites
-            </div>
+            </label>
           </div>
           <div class="sidebar-divider"></div>
           <div class="sidebar-header">File Tree</div>
@@ -117,7 +119,7 @@
       <!-- Preview -->
       <div class="preview">
         <div class="preview-header">
-          <span class="preview-fav">♡</span>
+          <span id="preview_fav__" class="fav">♡</span>
           <span id="preview_label__" class="preview-title"></span>
           <div id="preview_tags__" class="tags"></div>
         </div>

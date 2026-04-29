@@ -4,7 +4,7 @@ use crate::{
     ipc::{IPCBody, IPCError, IPCResponse, IntoIPCResponse},
     ipc_commands,
     state::{
-        AppDirs,
+        app_paths,
         config::{Theme, ThemeType},
     },
 };
@@ -52,10 +52,10 @@ fn get_theme_name(body: IPCBody) -> IPCResponse {
 }
 
 fn list_themes(_: IPCBody) -> IPCResponse {
-    let mut files = fs::read_dir(AppDirs::themes_path())?
+    let mut files = fs::read_dir(app_paths::themes_path())?
         .filter_map(Result::ok)
         .filter_map(|f| {
-            let path = AppDirs::themes_path().join(f.path());
+            let path = app_paths::themes_path().join(f.path());
             let theme: Theme = toml::from_str(&fs::read_to_string(&path).ok()?).ok()?;
 
             Some((

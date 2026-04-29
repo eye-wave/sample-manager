@@ -89,3 +89,12 @@ export function isFocusElement(el?: EventTarget | null) {
   const tags = ["INPUT", "SELECT", "BUTTON"];
   return tags.includes((el as HTMLElement)?.tagName ?? "");
 }
+
+export function setLiked(path: string, state: boolean) {
+  invoke(state ? IPC.ADD_SAMPLE_TO_FAV : IPC.REMOVE_SAMPLE_FROM_FAV, path);
+}
+
+export const setLikedView = (liked: boolean, element: HTMLElement) => {
+  element.textContent = liked ? "♥" : "♡";
+  element.className = `fav ${liked ? "liked" : ""}`;
+};

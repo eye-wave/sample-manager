@@ -1,7 +1,7 @@
-use std::collections::HashSet;
-use std::io;
-use std::path::PathBuf;
-use std::sync::mpsc;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, mpsc};
+use std::{fs, io};
 
 use crate::audio::AudioPlayer;
 use crate::ipc::IPCMessage;
@@ -12,38 +12,47 @@ pub mod samples;
 use config::AppConfig;
 use samples::FsSample;
 
-pub const APP_NAME: &str = "SampleVault";
+pub mod app_paths {
+    use super::*;
 
-pub struct AppDirs;
+    pub const APP_NAME: &str = "SampleVault";
 
-impl AppDirs {
-    fn _cache_path() -> PathBuf {
+    fn cache_path() -> PathBuf {
         dirs::cache_dir().unwrap().join(APP_NAME)
     }
 
-    fn _config_path() -> PathBuf {
+    fn config_path() -> PathBuf {
         dirs::config_local_dir().unwrap().join(APP_NAME)
     }
 
+    pub fn config_file() -> PathBuf {
+        config_path().join("config.toml")
+    }
+
+    pub fn favorites_file() -> PathBuf {
+        cache_path().join(".favorites")
+    }
+
     pub fn themes_path() -> PathBuf {
-        Self::_config_path().join("themes")
+        config_path().join("themes")
     }
 
     pub fn thumbnail_cache_path() -> PathBuf {
-        Self::_cache_path().join(".waves")
+        cache_path().join(".waves")
     }
 
     pub fn create_all_dirs() -> io::Result<()> {
-        std::fs::create_dir_all(Self::thumbnail_cache_path())?;
-        std::fs::create_dir_all(Self::themes_path())?;
+        fs::create_dir_all(thumbnail_cache_path())?;
+        fs::create_dir_all(themes_path())?;
 
         Ok(())
     }
 }
 
 pub struct AppState {
-    pub sample_registry: HashSet<FsSample>,
+    pub sample_registry: HashMap<Arc<Path>, FsSample>,
     pub audio_player: AudioPlayer,
+    pub favorite_samples: HashSet<PathBuf>,
 
     app_config: AppConfig,
 }
@@ -51,18 +60,24 @@ pub struct AppState {
 impl AppState {
     pub fn new(rx: mpsc::Sender<IPCMessage>) -> Self {
         Self {
-            sample_registry: HashSet::new(),
+            sample_registry: HashMap::new(),
             audio_player: AudioPlayer::new(rx),
 
+            favorite_samples: HashSet::new(),
             app_config: AppConfig::default(),
         }
     }
 
     pub fn load(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let conf = std::fs::read(self.config_file())?;
+        let conf = fs::read(app_paths::config_file())?;
         let conf: AppConfig = toml::from_slice(&conf)?;
 
+        let favorite_samples: HashSet<PathBuf> = fs::read_to_string(app_paths::favorites_file())
+            .map(|f| f.lines().map(|l| l.into()).collect())
+            .unwrap_or_default();
+
         self.app_config = conf;
+        self.favorite_samples = favorite_samples;
 
         Ok(())
     }
@@ -71,18 +86,38 @@ impl AppState {
         let result = cb(&mut self.app_config);
 
         if let Ok(contents) = toml::to_string(&self.app_config) {
-            std::fs::write(self.config_file(), contents).ok();
+            fs::write(app_paths::config_file(), contents).ok();
         }
 
         result
     }
 
-    pub fn get_config(&self) -> &AppConfig {
-        &self.app_config
+    fn rewrite_favorites(&mut self) {
+        let _ = fs::write(
+            app_paths::favorites_file(),
+            self.favorite_samples
+                .iter()
+                .map(|f| f.to_string_lossy())
+                .intersperse("\n".into())
+                .collect::<String>(),
+        );
     }
 
-    fn config_file(&self) -> PathBuf {
-        const CONFIG_NAME: &str = "config.toml";
-        AppDirs::_config_path().join(CONFIG_NAME)
+    pub fn add_sample_to_fav(&mut self, path: PathBuf) {
+        self.favorite_samples.insert(path);
+        self.rewrite_favorites();
+    }
+
+    pub fn remove_sample_from_fav(&mut self, path: &Path) {
+        self.favorite_samples.remove(path);
+        self.rewrite_favorites();
+    }
+
+    pub fn is_sample_fav(&self, path: &Path) -> bool {
+        self.favorite_samples.contains(path)
+    }
+
+    pub fn get_config(&self) -> &AppConfig {
+        &self.app_config
     }
 }

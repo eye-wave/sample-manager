@@ -17,6 +17,10 @@ button, input {
   border: 0;
 }
 
+input[type=radio] {
+  display: none;
+}
+
 body {
   background: var(--bg-base);
   color: var(--text-primary);
@@ -278,11 +282,12 @@ body {
     background: var(--bg-hover);
     color: var(--text-secondary);
   }
+}
 
-  &.active {
-    color: var(--accent);
-    background: var(--accent-glow);
-  }
+#tlib__:checked ~ label[for="tlib__"],
+#tfav__:checked ~ label[for="tfav__"] {
+  color: var(--accent);
+  background: var(--accent-glow);
 }
 
 .center {
@@ -353,22 +358,26 @@ body {
   }
 }
 
+.fav {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--love);
+  }
+
+  &.liked {
+    color: var(--love);
+  }
+}
+
 .item {
   &-name {
     display: flex;
     align-items: center;
     gap: 8px;
     overflow: hidden;
-  }
-
-  &-fav {
-    color: var(--text-muted);
-    flex-shrink: 0;
-    cursor: pointer;
-
-    &.liked {
-      color: var(--love);
-    }
   }
 
   &-label {
@@ -436,16 +445,6 @@ body {
     padding: 8px 14px;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
-  }
-
-  &-fav {
-    color: var(--text-muted);
-    font-size: 14px;
-    cursor: pointer;
-
-    &:hover {
-      color: var(--love);
-    }
   }
 
   &-title {

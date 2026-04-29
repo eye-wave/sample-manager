@@ -1,19 +1,19 @@
 import { $el, txt } from "../alias";
-import { renderTags } from "../helpers";
+import { renderTags, setLikedView } from "../helpers";
 
 export type BrowseRow = ReturnType<typeof BrowseRow>;
 export const BrowseRow = (
   idx: number,
   onSelect?: (i: number, p: string) => void,
   onDrag?: (p: string) => void,
-  onLike?: () => void,
+  onLike?: (p: string, s: boolean) => void,
 ) => {
   const el = $el("div");
   el.className = "list-item hidden";
 
   el.innerHTML = /* HTML */ `
     <div class="item-name">
-      <span class="item-fav"></span>
+      <span class="fav"></span>
       <span class="item-label"></span>
     </div>
     <div class="item-type"></div>
@@ -21,37 +21,27 @@ export const BrowseRow = (
     <div class="item-tags"></div>
   `;
 
-  const favElText = txt();
   const labelText = txt();
   const typeEl = txt();
   const bpmEl = txt();
 
   const labelEl = el.querySelector(".item-label") as HTMLSpanElement;
-  const favEl = el.querySelector(".item-fav") as HTMLSpanElement;
+  const favEl = el.querySelector(".fav") as HTMLSpanElement;
   const tagsEl = el.querySelector(".item-tags") as HTMLDivElement;
 
   labelEl.appendChild(labelText);
   el.querySelector(".item-type")?.appendChild(typeEl);
   el.querySelector(".item-bpm")?.appendChild(bpmEl);
 
-  favEl?.appendChild(favElText);
-
   let isLiked = false;
   let path: string | null = null;
-
-  const setLiked = (liked: boolean) => {
-    favElText.nodeValue = liked ? "♥" : "♡";
-    if (favEl) favEl.className = `item-fav ${liked ? "liked" : ""}`;
-    isLiked = liked;
-  };
-
-  const setPath = (p: string) => (path = p);
 
   let storedName = "";
   let storedTags: string[] = [];
 
   const update = (name: string, bpm: number | null, liked: boolean, tags: string[] = []) => {
-    setLiked(liked);
+    isLiked = liked;
+    setLikedView(liked, favEl);
 
     storedName = name;
     storedTags = tags;
@@ -78,8 +68,13 @@ export const BrowseRow = (
   };
 
   favEl.onclick = (e) => {
-    setLiked(!isLiked);
-    onLike?.();
+    if (!path) return;
+
+    onLike?.(path, !isLiked);
+    isLiked = !isLiked;
+
+    setLikedView(isLiked, favEl);
+
     e.stopPropagation();
   };
 
@@ -93,10 +88,18 @@ export const BrowseRow = (
       return storedTags;
     },
     el,
+    favEl,
     update,
     highlight,
     hide,
-    setPath,
-    setLiked,
+    setPath(p: string) {
+      path = p;
+    },
+    get path() {
+      return path;
+    },
+    get isFav() {
+      return isLiked;
+    },
   };
 };

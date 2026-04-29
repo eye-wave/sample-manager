@@ -26,7 +26,7 @@ fn is_sample_file(path: &Path) -> bool {
 
 #[derive(Debug, Clone)]
 pub struct FsSample {
-    pub path: PathBuf,
+    pub path: Arc<Path>,
     pub tags: Vec<&'static str>,
 
     search_str: Arc<str>,
@@ -46,32 +46,35 @@ impl std::hash::Hash for FsSample {
     }
 }
 
-impl FsSample {
-    pub fn new(path: PathBuf) -> Self {
-        let search_str = path
-            .to_string_lossy()
-            .chars()
-            .map(|c| if c.is_alphanumeric() { c } else { ' ' })
-            .collect::<String>()
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ")
-            .to_lowercase();
+pub fn clean_up_string(input: &str) -> String {
+    input
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { ' ' })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
+}
 
+impl FsSample {
+    pub fn new(path: Arc<Path>) -> Self {
+        let search_str = Arc::from(clean_up_string(&path.to_string_lossy()));
         let tags = tag_string(&path.to_string_lossy());
 
         Self {
             path,
-            search_str: Arc::from(search_str),
+            search_str,
             tags,
         }
     }
 
-    pub fn score(&self, query: &str, tags: &[&str], matcher: &SkimMatcherV2) -> i64 {
-        let has_all = tags.iter().all(|t| self.tags.contains(t));
-
-        if !has_all {
-            return 0;
+    pub fn score<T: AsRef<str>>(&self, query: &str, tags: &[T], matcher: &SkimMatcherV2) -> i64 {
+        if !tags.is_empty() {
+            let has_all = tags.iter().all(|t| self.tags.contains(&t.as_ref()));
+            if !has_all {
+                return i64::MIN;
+            }
         }
 
         matcher
@@ -79,9 +82,9 @@ impl FsSample {
             .unwrap_or(i64::MIN)
     }
 
-    pub fn serialize(&self) -> String {
+    pub fn serialize(&self, is_fav: bool) -> String {
         format!(
-            r#"{{"path":"{}","tags":{:?}}}"#,
+            r#"{{"path":"{}","tags":{:?},"fav":{is_fav}}}"#,
             self.path.to_string_lossy().replace("\\", "\\\\"),
             self.tags
         )
@@ -123,7 +126,7 @@ pub fn process_directories<'a>(
             if file_path.is_dir() {
                 stack.push(file_path);
             } else if is_sample_file(&file_path) {
-                sample_registry.push(FsSample::new(file_path));
+                sample_registry.push(FsSample::new(Arc::from(file_path)));
             }
         }
     }
@@ -139,7 +142,7 @@ pub fn process_directories<'a>(
 
     let mut guard = app_state.write().map_err(|_| ())?;
     for s in sample_registry.iter() {
-        guard.sample_registry.insert(s.clone());
+        guard.sample_registry.insert(s.path.clone(), s.clone());
     }
 
     Ok(())

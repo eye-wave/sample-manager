@@ -31,6 +31,7 @@ tao = "0.35.0"
 thiserror = "2.0.18"
 tinyfiledialogs = "3.9.1"
 toml = "1.1.2"
+url = "2.5.8"
 wry = "0.55.0"
 
 [profile.release]

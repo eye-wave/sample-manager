@@ -7,7 +7,7 @@ mod theme;
 
 pub use theme::{Theme, ThemeType};
 
-use crate::state::AppDirs;
+use crate::state::app_paths;
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -17,21 +17,21 @@ pub struct AppConfig {
 
 impl AppConfig {
     pub fn get_current_theme(&self) -> Option<Theme> {
-        let theme_path = AppDirs::themes_path().join(self.color_theme.as_ref()?);
+        let theme_path = app_paths::themes_path().join(self.color_theme.as_ref()?);
         let file = fs::read_to_string(theme_path).ok()?;
 
         toml::from_str(&file).ok()
     }
 
     pub fn get_theme(&self, theme_name: &str) -> Option<Theme> {
-        let theme_path = AppDirs::themes_path().join(theme_name);
+        let theme_path = app_paths::themes_path().join(theme_name);
         let file = fs::read_to_string(theme_path).ok()?;
 
         toml::from_str(&file).ok()
     }
 
     pub fn update_theme(&mut self, theme_name: &str) -> Option<Theme> {
-        let theme_path = AppDirs::themes_path().join(theme_name);
+        let theme_path = app_paths::themes_path().join(theme_name);
         let file = fs::read_to_string(theme_path).ok()?;
 
         toml::from_str(&file).ok().inspect(|_| {

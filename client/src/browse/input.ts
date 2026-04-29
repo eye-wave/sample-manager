@@ -1,17 +1,10 @@
 import { $el, w } from "../alias";
-import * as IPC from "../gen/ipc-gen";
-import { basename } from "../helpers";
-import { invoke } from "../invoke/invoke";
-import { POOL_SIZE } from "./browse";
+import { TabFavorites, TabHandle } from "../sidebar/sidebar";
+import { search } from "./browse";
 import { PaginationHandler } from "./pagination";
 import type { BrowseRow } from "./row";
 
 declare const list_scroll__: HTMLDivElement;
-
-type FSSample = {
-  path: string;
-  tags: string[];
-};
 
 export const TagInput = (
   input: HTMLInputElement,
@@ -70,8 +63,9 @@ export const TagInput = (
 
   input.oninput = () => {
     const query = input.value;
+    const isFav = TabHandle.tab === TabFavorites;
 
-    if (!query.length) {
+    if (!query.length && !isFav) {
       recentQuery = "";
 
       for (const p of pool) p.hide();
@@ -83,41 +77,8 @@ export const TagInput = (
     recentQuery = query;
 
     list_scroll__.scrollTo({ top: 0 });
-    search(query, tags, 1);
+    search(query, tags, 1, isFav);
   };
-
-  async function search(query: string, tags: string[], offset: number) {
-    const PAGE_SIZE = 50;
-
-    const text = await invoke(
-      IPC.SEARCH_FOR_SAMPLE,
-      [PAGE_SIZE, (offset - 1) * PAGE_SIZE, ...tags, query].join(","),
-    );
-    const { files, count }: { files: FSSample[]; count: number } = (() => {
-      try {
-        return JSON.parse(text);
-      } catch (_) {
-        return [];
-      }
-    })();
-
-    PaginationHandler.display(true);
-    PaginationHandler.setPages((count / PAGE_SIZE) | 0);
-    PaginationHandler.setPage(offset);
-
-    for (let i = 0; i < POOL_SIZE; i++) {
-      const row = pool[i];
-
-      if (i < files.length) {
-        const item = files[i];
-
-        row.update(basename(item.path), null, false, item.tags);
-        row.setPath(item.path);
-      } else {
-        row.hide();
-      }
-    }
-  }
 
   PaginationHandler.onClick = (p) => search(recentQuery, tags, p);
 };

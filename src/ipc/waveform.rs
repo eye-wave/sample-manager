@@ -5,7 +5,7 @@ use std::process::Command;
 
 use crate::ipc::{IPCBody, IPCMessage, IPCResponse, ok};
 use crate::ipc_commands;
-use crate::state::AppDirs;
+use crate::state::app_paths;
 
 use crate::window::PROTOCOL;
 
@@ -177,7 +177,7 @@ fn read_audio_file(body: IPCBody) -> IPCResponse {
         let path = body.req.as_ref();
 
         let hashed = hash_path(path);
-        let thumb_path = thumbnail_path(&hashed, &AppDirs::thumbnail_cache_path());
+        let thumb_path = thumbnail_path(&hashed, &app_paths::thumbnail_cache_path());
         let uri = thumbnail_uri(&hashed);
 
         if thumb_path.exists() {

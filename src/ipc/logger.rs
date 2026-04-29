@@ -20,7 +20,7 @@ fn log(body: IPCBody) -> IPCResponse {
         _ => "",
     };
 
-    println!("[🌐WEB] {ansi}{message}{RESET}");
+    println!("[🌐WEB] {ansi}{}{RESET}", message.replace(RESET, ansi));
     ok()
 }
 

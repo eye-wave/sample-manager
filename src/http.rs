@@ -4,13 +4,13 @@ use std::path::{Path, PathBuf};
 
 use wry::http::{Request, Response, StatusCode, Uri};
 
-use crate::state::{AppDirs, config::Theme};
+use crate::state::{app_paths, config::Theme};
 
 pub fn app_handler(theme: Theme, req: Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> {
     let path = req.uri().path();
 
     if path.starts_with("/thumb/") {
-        return thumbnail_handler(&AppDirs::thumbnail_cache_path(), req.uri());
+        return thumbnail_handler(&app_paths::thumbnail_cache_path(), req.uri());
     }
 
     html_handler(theme)
