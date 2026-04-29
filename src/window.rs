@@ -2,6 +2,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use tao::window::Window;
+#[cfg(target_os = "windows")]
+use wry::WebViewBuilderExtWindows;
 use wry::{WebView, WebViewBuilder};
 
 use crate::http::app_handler;
