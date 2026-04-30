@@ -1,5 +1,6 @@
 use ahash::AHasher;
 use std::hash::{Hash, Hasher};
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -22,131 +23,40 @@ fn command(cmd: &str) -> Command {
     Command::new(cmd)
 }
 
-fn decode_audio(path: &str, downsample_factor: usize) -> Option<Vec<u8>> {
+fn draw_waveform_ffmpeg(path: &str, outpath: &str) -> std::io::Result<()> {
+    use std::fs::File;
     use std::io::Read;
+    use std::io::Write;
     use std::process::Stdio;
 
     let mut child = command("ffmpeg")
         .arg("-i")
         .arg(path)
         .args([
-            "-f",
-            "u8",
-            "-ac",
-            "1",
-            "-hide_banner",
-            "-loglevel",
-            "error",
+            "-filter_complex",
+            "color=c=black:s=900x256 [bg]; [0:a] showwavespic=s=900x256:colors=white [fg]; [bg][fg] overlay=format=auto",
+            "-frames:v", "1",
+            "-c:v", "libwebp",
+            "-q:v", "50",
+            "-f", "webp",
             "pipe:1",
         ])
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
-        .spawn()
-        .ok()?;
+        .spawn()?;
 
-    let mut raw_bytes = Vec::new();
-    child.stdout.take()?.read_to_end(&mut raw_bytes).ok()?;
+    let mut output = Vec::new();
+    child.stdout.take().unwrap().read_to_end(&mut output)?;
 
-    if !child.wait().ok()?.success() {
-        return None;
+    let status = child.wait()?;
+    if !status.success() {
+        return Err(std::io::Error::other("FFmpeg command failed"));
     }
 
-    if raw_bytes.is_empty() {
-        return None;
-    }
+    let mut file = File::create(outpath)?;
+    file.write_all(&output)?;
 
-    let mut output = Vec::with_capacity(raw_bytes.len() / downsample_factor);
-
-    for i in (0..raw_bytes.len()).step_by(downsample_factor) {
-        output.push(raw_bytes[i]);
-    }
-
-    Some(output)
-}
-
-pub fn draw_waveform(outpath: &Path, samples: &[u8], width: u32) -> bool {
-    if samples.is_empty() || width < 1 {
-        return false;
-    }
-
-    let slice_size = samples.len() / width as usize;
-    if slice_size == 0 {
-        return false;
-    }
-
-    let mut max_value = 0u8;
-
-    for x in 0..width {
-        let start_idx = x as usize * slice_size;
-        let end_idx = (start_idx + slice_size).min(samples.len());
-
-        let slice = stack_col(&samples[start_idx..end_idx]);
-
-        let mut local_max = 0u8;
-        for item in &slice {
-            if *item > local_max {
-                local_max = *item;
-            }
-        }
-
-        if local_max > max_value {
-            max_value = local_max;
-        }
-    }
-
-    let norm = ((max_value as f32) * 0.6) / 256.0;
-    let inv_norm = if norm != 0.0 { 1.0 / norm } else { 0.0 };
-
-    let bg_color = image::Rgb::from([0, 0, 0]);
-    let mut img = image::ImageBuffer::from_fn(width, 256, |_, _| bg_color);
-
-    for x in 0..width {
-        let start_idx = x as usize * slice_size;
-        let end_idx = (start_idx + slice_size).min(samples.len());
-
-        let slice = stack_col(&samples[start_idx..end_idx]);
-
-        for (y, s) in slice.iter().enumerate() {
-            let shade = (*s as f32 * inv_norm) as u8;
-            let color = image::Rgb::from([shade, shade, shade]);
-
-            img.put_pixel(x, y as u32, color);
-        }
-    }
-
-    img.save_with_format(outpath, image::ImageFormat::WebP)
-        .is_ok()
-}
-
-fn stack_col(samples: &[u8]) -> [u8; 256] {
-    let half: i32 = 128;
-    let size: usize = 256;
-
-    let mut diff = [0i32; 257];
-
-    for &x in samples {
-        let x = x as i32;
-
-        if x > half {
-            let len = x - half;
-            diff[half as usize] += 1;
-            diff[(half + len) as usize] -= 1;
-        } else if x < half {
-            let len = half - x;
-            diff[(half - len + 1) as usize] += 1;
-            diff[(half + 1) as usize] -= 1;
-        }
-    }
-
-    let mut slice = [0u8; 256];
-    let mut cur: i32 = 0;
-
-    for i in 0..size {
-        cur += diff[i];
-        slice[i] = cur.min(255) as u8;
-    }
-
-    slice
+    Ok(())
 }
 
 fn hash_path(path: &str) -> String {
@@ -172,7 +82,7 @@ fn thumbnail_uri(hashed: &str) -> String {
     format!("{PROTOCOL}://_/thumb/{hashed}")
 }
 
-fn read_audio_file(body: IPCBody) -> IPCResponse {
+fn draw_audio_file(body: IPCBody) -> IPCResponse {
     std::thread::spawn(move || {
         let path = body.req.as_ref();
 
@@ -189,15 +99,16 @@ fn read_audio_file(body: IPCBody) -> IPCResponse {
                 .ok();
         }
 
-        if let Some(samples) = decode_audio(path, 3)
-            && draw_waveform(&thumb_path, &samples, 960)
-        {
-            body.webview_sender
-                .send(IPCMessage {
-                    id: "read_audio",
-                    payload: uri,
-                })
-                .ok();
+        match draw_waveform_ffmpeg(path, &thumb_path.to_string_lossy()) {
+            Ok(_) => {
+                body.webview_sender
+                    .send(IPCMessage {
+                        id: "read_audio",
+                        payload: uri,
+                    })
+                    .ok();
+            }
+            Err(err) => eprintln!("{err}"),
         }
     });
 
@@ -206,6 +117,6 @@ fn read_audio_file(body: IPCBody) -> IPCResponse {
 
 ipc_commands! {
     IPC_WAVEFORM = [
-        read_audio_file
+        draw_audio_file
     ]
 }
