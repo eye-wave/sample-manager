@@ -104,10 +104,8 @@ fn draw_audio_file(body: IPCBody) -> IPCResponse {
             return;
         }
 
-        let ffmpeg_path: Option<AStr> = ffmpeg_path
-            .as_ref()
-            .and_then(|p| p.to_str())
-            .map(|p| Arc::from(p));
+        let ffmpeg_path: Option<AStr> =
+            ffmpeg_path.as_ref().and_then(|p| p.to_str()).map(Arc::from);
 
         if ffmpeg_path.is_none() {
             body.webview_sender

@@ -7,13 +7,13 @@ import { createPluginCard } from "./template";
 
 declare const conf_btn__: HTMLButtonElement;
 declare const conf_dial__: HTMLDialogElement;
+declare const conf_dial_body__: HTMLDivElement;
 declare const conf_reset__: HTMLButtonElement;
 declare const conf_save__: HTMLButtonElement;
 declare const dialog_close__: HTMLButtonElement;
-declare const theme_select__: HTMLSelectElement;
-declare const conf_dial_body__: HTMLDivElement;
-
+declare const ffmpeg_path__: HTMLInputElement;
 declare const plugin_settings__: HTMLDivElement;
+declare const theme_select__: HTMLSelectElement;
 
 let newTheme = "";
 
@@ -39,6 +39,9 @@ conf_btn__.onclick = async () => {
     IPC.GET_ALL_PLUGINS_INFO,
     "freesound-search",
   ).then((res) => JSON.parse(res));
+
+  const settings = await invoke(IPC.GET_SETTINGS);
+  console.log(JSON.parse(settings));
 
   plugin_settings__.innerHTML = pluginsInfo.map((i) => createPluginCard(i)).join("");
 
@@ -96,3 +99,13 @@ w.addEventListener("keydown", (e) => {
     conf_dial__.close();
   }
 });
+
+ffmpeg_path__.oninput = () => {
+  invoke(
+    IPC.UPDATE_CONFIG_FIELD,
+    JSON.stringify({
+      type: "FFMpegPath",
+      value: ffmpeg_path__.value,
+    }),
+  );
+};

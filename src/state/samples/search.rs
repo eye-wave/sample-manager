@@ -11,15 +11,10 @@ use crate::{
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SearchRequest {
-    #[serde(rename = "q")]
     query: AStr,
-    #[serde(rename = "lim")]
     limit: usize,
-    #[serde(rename = "off")]
     offset: usize,
-    #[serde(rename = "t")]
     tags: AStr,
-    #[serde(rename = "fav")]
     is_fav: bool,
 }
 

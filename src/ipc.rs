@@ -7,6 +7,7 @@ use crate::state::AppState;
 use crate::{AStr, AnyResult};
 
 mod audio;
+mod config;
 mod fs;
 mod logger;
 mod plugins;
@@ -125,6 +126,7 @@ pub(super) fn ipc_strip_cmd_id(req: &str) -> Option<IPCRequestBody<'_>> {
 
 pub fn commands_iter<'a>() -> impl Iterator<Item = &'a dyn IPCCommand> {
     use crate::ipc::audio::IPC_AUDIO;
+    use crate::ipc::config::IPC_CONFIG;
     use crate::ipc::fs::IPC_FS;
     use crate::ipc::logger::IPC_LOGGER;
     use crate::ipc::plugins::IPC_PLUGINS;
@@ -136,6 +138,7 @@ pub fn commands_iter<'a>() -> impl Iterator<Item = &'a dyn IPCCommand> {
     IPC_WINDOW
         .iter()
         .chain(IPC_AUDIO.iter())
+        .chain(IPC_CONFIG.iter())
         .chain(IPC_FS.iter())
         .chain(IPC_LOGGER.iter())
         .chain(IPC_PLUGINS.iter())

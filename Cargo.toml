@@ -8,10 +8,7 @@ edition = "2024"
 
 [workspace]
 resolver = "3"
-members = [
-  "plugins/*",
-  "tagger/compiler",
-]
+members = ["plugins/*", "tagger/compiler"]
 
 [dependencies]
 ahash = { version = "0.8.12", default-features = false }
@@ -35,7 +32,6 @@ serde = { version = "1.0.228", default-features = false, features = [
 serde_json = { version = "1.0.149", default-features = false, features = [
   "alloc",
 ] }
-serde_urlencoded = "0.7.1"
 symphonia = { version = "0.5.5", features = ["mp3", "wav", "vorbis"] }
 tao = "0.35.0"
 thiserror = "2.0.18"

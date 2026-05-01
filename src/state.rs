@@ -7,7 +7,7 @@ use crate::AnyResult;
 use crate::audio::AudioPlayer;
 use crate::ipc::IPCMessage;
 use crate::plugins::PluginRuntimeHandle;
-use crate::state::config::{find_executable, is_executable};
+use crate::state::config::{ConfigField, find_executable, is_executable};
 
 pub mod config;
 pub mod samples;
@@ -103,12 +103,10 @@ impl AppState {
                 self.app_config.ffmpeg_path = Some(path)
             }
         } else {
-            if !is_executable(&self.app_config.ffmpeg_path.as_ref().unwrap()) {
+            if !is_executable(self.app_config.ffmpeg_path.as_ref().unwrap()) {
                 self.app_config.ffmpeg_path = None
             }
         }
-
-        self.app_config.ffmpeg_path = None;
 
         for name in self.app_config.plugins.iter() {
             let plugin_name = name.to_string() + ".zip";
@@ -160,5 +158,10 @@ impl AppState {
 
     pub fn get_config(&self) -> &AppConfig {
         &self.app_config
+    }
+
+    pub fn mutate_config_field(&mut self, m: ConfigField) {
+        self.app_config.mutate_config_field(m);
+        self.update_config(|_| {});
     }
 }

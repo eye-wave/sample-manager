@@ -150,12 +150,19 @@ dialog::backdrop {
     min-width: 0;
     font-family: inherit;
     transition: border-color 0.15s;
-    width: 140px;
+    width: 100%;
+    max-width: 320px;
 
     &:focus {
       border-color: var(--border-active);
       background: var(--bg-active);
     }
+  }
+
+  & select {
+    width: 180px;
+      text-align: center;
+      text-align-last: center;
   }
 
   & section {

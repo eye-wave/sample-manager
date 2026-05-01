@@ -1,4 +1,5 @@
 import { $el, w } from "../alias";
+import { isFocusElement } from "../helpers";
 import { TabFavorites, TabHandle } from "../sidebar/sidebar";
 import { search } from "./browse";
 import { PaginationHandler } from "./pagination";
@@ -16,6 +17,7 @@ export const TagInput = (
   let recentQuery = "";
 
   w.addEventListener("keydown", (e) => {
+    if (isFocusElement(e.target)) return;
     if (e.key === "/" || ((e.key === "k" || e.key === "K") && e.ctrlKey)) {
       e.preventDefault();
       input.focus();

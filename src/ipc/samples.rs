@@ -60,7 +60,7 @@ fn start_sample_scan(body: IPCBody) -> IPCResponse {
 
 fn search_for_sample(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
-        let req: SearchRequest = serde_urlencoded::from_str(&body.req)?;
+        let req: SearchRequest = serde_json::from_str(&body.req)?;
         search(&req, &state).finish()
     })
 }
