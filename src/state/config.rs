@@ -12,6 +12,7 @@ use crate::state::app_paths;
 #[derive(Default, Serialize, Deserialize)]
 pub struct AppConfig {
     pub tracked_dirs: HashSet<PathBuf>,
+    pub plugins: HashSet<String>,
     pub color_theme: Option<String>,
 }
 

@@ -67,7 +67,7 @@ export type FSSample = {
 export async function search(query: string, tags: string[], offset: number, fav = false) {
   const PAGE_SIZE = 50;
 
-  const params = `q=${query}&lim=${PAGE_SIZE}&off=${(offset - 1) * PAGE_SIZE}&t=${tags.join(",")}&fav=${+fav}`;
+  const params = `q=${query}&lim=${PAGE_SIZE}&off=${(offset - 1) * PAGE_SIZE}&t=${tags.join(",")}&fav=${fav}`;
 
   const text = await invoke(IPC.SEARCH_FOR_SAMPLE, params);
   const { files, count }: { files: FSSample[]; count: number } = (() => {

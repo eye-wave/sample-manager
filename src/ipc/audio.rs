@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::audio::PlaybackState;
-use crate::ipc::{IPCBody, IPCResponse, IntoIPCResponse, Poisoned, ok};
+use crate::ipc::{IPCBody, IPCResponse, IntoIPCResponse, ok};
 
 macro_rules! ipc_action {
     ($name:ident, $state:ident => $body:block) => {

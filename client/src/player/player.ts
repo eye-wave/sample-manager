@@ -45,7 +45,7 @@ function createPlayerHandle() {
   }
 
   async function startPlaying(path: string, name: string, fav?: boolean, tagsList?: string[]) {
-    invoke(IPC.READ_AUDIO_FILE, path);
+    invoke(IPC.DRAW_AUDIO_FILE, path);
     invoke(IPC.PLAY_AUDIO_FILE, path).then(() => {
       playerState = PLAYING;
       svg.innerHTML = PAUSE_ICON;

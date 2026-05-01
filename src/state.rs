@@ -3,8 +3,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, mpsc};
 use std::{fs, io};
 
+use crate::AnyResult;
 use crate::audio::AudioPlayer;
 use crate::ipc::IPCMessage;
+use crate::plugins::PluginRuntimeHandle;
 
 pub mod config;
 pub mod samples;
@@ -16,6 +18,8 @@ pub mod app_paths {
     use super::*;
 
     pub const APP_NAME: &str = "SampleVault";
+
+    const PLUGIN_DIR: &str = "plug-ins";
 
     fn cache_path() -> PathBuf {
         dirs::cache_dir().unwrap().join(APP_NAME)
@@ -41,9 +45,19 @@ pub mod app_paths {
         cache_path().join(".waves")
     }
 
+    pub fn plugin_cache_path() -> PathBuf {
+        cache_path().join(PLUGIN_DIR)
+    }
+
+    pub fn plugin_config_path() -> PathBuf {
+        config_path().join(PLUGIN_DIR)
+    }
+
     pub fn create_all_dirs() -> io::Result<()> {
         fs::create_dir_all(thumbnail_cache_path())?;
         fs::create_dir_all(themes_path())?;
+        fs::create_dir_all(plugin_cache_path())?;
+        fs::create_dir_all(plugin_config_path())?;
 
         Ok(())
     }
@@ -53,6 +67,7 @@ pub struct AppState {
     pub sample_registry: HashMap<Arc<Path>, FsSample>,
     pub audio_player: AudioPlayer,
     pub favorite_samples: HashSet<PathBuf>,
+    pub plugin_handle: PluginRuntimeHandle,
 
     app_config: AppConfig,
 }
@@ -62,13 +77,14 @@ impl AppState {
         Self {
             sample_registry: HashMap::new(),
             audio_player: AudioPlayer::new(rx),
-
             favorite_samples: HashSet::new(),
+            plugin_handle: PluginRuntimeHandle::spawn(),
+
             app_config: AppConfig::default(),
         }
     }
 
-    pub fn load(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn load(&mut self) -> AnyResult<()> {
         let conf = fs::read(app_paths::config_file())?;
         let conf: AppConfig = toml::from_slice(&conf)?;
 
@@ -78,6 +94,17 @@ impl AppState {
 
         self.app_config = conf;
         self.favorite_samples = favorite_samples;
+
+        for name in self.app_config.plugins.iter() {
+            let path = app_paths::plugin_config_path()
+                .join(name)
+                .join("plugin.wasm");
+
+            match fs::read(path) {
+                Ok(bytes) => self.plugin_handle.load(name, bytes),
+                Err(err) => eprintln!("Failed to load plugin '{name}'.\n\t{err}"),
+            }
+        }
 
         Ok(())
     }

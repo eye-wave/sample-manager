@@ -7,6 +7,8 @@ use ringbuf::traits::Consumer;
 use ringbuf::wrap::caching::Caching;
 use ringbuf::{HeapRb, SharedRb, storage::Heap, traits::Split};
 
+use crate::AnyResult;
+
 use super::handle::{PlayerFlags, SharedAudioState};
 
 pub struct AudioDevice {
@@ -29,9 +31,7 @@ pub type RingCons = Caching<Arc<SharedRb<Heap<f32>>>, false, true>;
 pub const RING_CAPACITY: usize = 48_000 * 2 * 4;
 
 impl AudioDevice {
-    pub fn new(
-        shared_state: &Arc<SharedAudioState>,
-    ) -> Result<(RingProd, Self), Box<dyn std::error::Error>> {
+    pub fn new(shared_state: &Arc<SharedAudioState>) -> AnyResult<(RingProd, Self)> {
         let rb = HeapRb::<f32>::new(RING_CAPACITY);
         let (rb_prod, rb_cons) = rb.split();
 

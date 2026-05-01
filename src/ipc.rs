@@ -4,10 +4,12 @@ use std::sync::{Arc, RwLock, mpsc};
 use tao::window::Window;
 
 use crate::state::AppState;
+use crate::{AStr, AnyResult};
 
 mod audio;
 mod fs;
 mod logger;
+mod plugins;
 mod samples;
 mod theme;
 mod waveform;
@@ -72,11 +74,11 @@ impl IntoBytes for &'static [u8] {
 }
 
 pub type IPCRequestBody<'a> = (usize, u32, &'a str);
-pub type IPCResponse = Result<std::borrow::Cow<'static, [u8]>, Box<dyn std::error::Error>>;
+pub type IPCResponse = AnyResult<std::borrow::Cow<'static, [u8]>>;
 
 #[derive(Clone)]
 pub struct IPCBody {
-    pub req: Arc<str>,
+    pub req: AStr,
     pub window_handle: Arc<Window>,
     pub app_state: Arc<RwLock<AppState>>,
     pub webview_sender: mpsc::Sender<IPCMessage>,
@@ -125,6 +127,7 @@ pub fn commands_iter<'a>() -> impl Iterator<Item = &'a dyn IPCCommand> {
     use crate::ipc::audio::IPC_AUDIO;
     use crate::ipc::fs::IPC_FS;
     use crate::ipc::logger::IPC_LOGGER;
+    use crate::ipc::plugins::IPC_PLUGINS;
     use crate::ipc::samples::IPC_SAMPLES;
     use crate::ipc::theme::IPC_THEME;
     use crate::ipc::waveform::IPC_WAVEFORM;
@@ -135,6 +138,7 @@ pub fn commands_iter<'a>() -> impl Iterator<Item = &'a dyn IPCCommand> {
         .chain(IPC_AUDIO.iter())
         .chain(IPC_FS.iter())
         .chain(IPC_LOGGER.iter())
+        .chain(IPC_PLUGINS.iter())
         .chain(IPC_SAMPLES.iter())
         .chain(IPC_THEME.iter())
         .chain(IPC_WAVEFORM.iter())
@@ -174,7 +178,16 @@ macro_rules! ipc_commands {
 #[macro_export]
 macro_rules! with_state {
     ($body:ident, $state:ident, $block:block) => {{
-        let $state = $body.app_state.read().map_err(|_| Poisoned)?;
+        let $state = $body.app_state.read().map_err(|_| crate::ipc::Poisoned)?;
+
+        $block
+    }};
+}
+
+#[macro_export]
+macro_rules! with_state_mut {
+    ($body:ident, $state:ident, $block:block) => {{
+        let mut $state = $body.app_state.write().map_err(|_| crate::ipc::Poisoned)?;
 
         $block
     }};

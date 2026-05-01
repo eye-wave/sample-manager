@@ -5,11 +5,14 @@ use std::sync::{Arc, RwLock};
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 
+use crate::AStr;
 use crate::ipc::IPCMessage;
 use crate::state::AppState;
 
+mod search;
 mod tagger;
 
+pub use search::*;
 pub use tagger::tag_string;
 
 pub const SAMPLE_EXTENSIONS: &[&str] = &[
@@ -29,7 +32,7 @@ pub struct FsSample {
     pub path: Arc<Path>,
     pub tags: Vec<&'static str>,
 
-    search_str: Arc<str>,
+    search_str: AStr,
 }
 
 impl PartialEq for FsSample {

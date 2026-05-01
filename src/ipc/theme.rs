@@ -10,45 +10,49 @@ use crate::{
 };
 
 fn get_theme(body: IPCBody) -> IPCResponse {
-    let guard = body.app_state.read().unwrap();
-    let theme = guard
-        .get_config()
-        .get_current_theme()
-        .unwrap_or_default()
-        .to_css();
+    crate::with_state!(body, state, {
+        let theme = state
+            .get_config()
+            .get_current_theme()
+            .unwrap_or_default()
+            .to_css();
 
-    theme.finish()
+        theme.finish()
+    })
 }
 
 fn preview_theme(body: IPCBody) -> IPCResponse {
     let theme_name = body.req;
-    let guard = body.app_state.write().unwrap();
 
-    guard
-        .get_config()
-        .get_theme(&theme_name)
-        .ok_or(IPCError::empty())?
-        .to_css()
-        .finish()
+    crate::with_state!(body, state, {
+        state
+            .get_config()
+            .get_theme(&theme_name)
+            .ok_or(IPCError::empty())?
+            .to_css()
+            .finish()
+    })
 }
 
 fn update_theme(body: IPCBody) -> IPCResponse {
     let theme_name = body.req;
-    let mut guard = body.app_state.write().unwrap();
 
-    let theme = guard.update_config(|cfg| cfg.update_theme(&theme_name));
-    theme.ok_or(IPCError::empty())?.to_css().finish()
+    crate::with_state_mut!(body, state, {
+        let theme = state.update_config(|cfg| cfg.update_theme(&theme_name));
+        theme.ok_or(IPCError::empty())?.to_css().finish()
+    })
 }
 
 fn get_theme_name(body: IPCBody) -> IPCResponse {
-    let guard = body.app_state.read().unwrap();
-    let theme = guard
-        .get_config()
-        .color_theme
-        .as_ref()
-        .ok_or(IPCError::empty())?;
+    crate::with_state!(body, state, {
+        let theme = state
+            .get_config()
+            .color_theme
+            .as_ref()
+            .ok_or(IPCError::empty())?;
 
-    theme.clone().finish()
+        theme.clone().finish()
+    })
 }
 
 fn list_themes(_: IPCBody) -> IPCResponse {

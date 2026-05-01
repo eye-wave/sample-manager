@@ -1,0 +1,14 @@
+id          = "freesound-search"
+name        = "Freesound"
+description = "Search freesound.org for samples"
+version     = "0.1.0"
+
+[capabilities]
+storage           = true
+encrypted_storage = true
+network           = true
+
+network_allowlist = [
+    "freesound.org",
+    "api.freesound.org",
+]
