@@ -1,4 +1,8 @@
-use std::{collections::HashMap, io::Read, sync::mpsc};
+use std::{
+    collections::HashMap,
+    io::Read,
+    sync::{Arc, mpsc},
+};
 use wasmtime::{Caller, Engine, Linker, Module, Store};
 
 use crate::{
@@ -37,13 +41,14 @@ impl PluginRunner {
                 Ok(Cmd::UnloadPlugin { id }) => {
                     self.plugins.remove(&id);
                 }
-                Ok(Cmd::GetManifest { id, reply_to }) => {
-                    let manifest = self.plugins.get(&id).map(|p| p.manifest.clone());
-                    let _ = reply_to.send(manifest);
-                }
-                Ok(Cmd::ListPlugins { reply_to }) => {
-                    let ids: Vec<AStr> = self.plugins.keys().cloned().collect();
-                    let _ = reply_to.send(ids);
+                Ok(Cmd::GetAllPluginsInfo { reply_to }) => {
+                    let plugin_info_list = self
+                        .plugins
+                        .values()
+                        .map(|p| p.manifest.to_plugin_info(self.store.data()))
+                        .collect();
+
+                    let _ = reply_to.send(plugin_info_list);
                 }
                 Err(err) => eprintln!("Error occured while receiving the command.\n\t{err}"),
                 _ => break,
@@ -322,12 +327,22 @@ fn unpack_plugin_zip(bytes: &[u8]) -> AnyResult<(PluginManifest, Vec<u8>)> {
     let cursor = std::io::Cursor::new(bytes);
     let mut zip = zip::ZipArchive::new(cursor)?;
 
-    let manifest: PluginManifest = {
+    let mut manifest: PluginManifest = {
         let mut f = zip.by_name("Manifest.toml")?;
         let mut s = String::new();
         f.read_to_string(&mut s)?;
         toml::from_str(&s)?
     };
+
+    let svg_icon = manifest.assets.icon.as_ref().and_then(|path| {
+        let mut f = zip.by_name(path.as_ref()).ok()?;
+        let mut s = String::new();
+        f.read_to_string(&mut s).ok()?;
+
+        Some(Arc::from(s))
+    });
+
+    manifest.assets.icon = svg_icon;
 
     let _wasm_path = &manifest.assets.entry;
 

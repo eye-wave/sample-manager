@@ -3,10 +3,11 @@ use std::hash::{Hash, Hasher};
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Arc;
 
 use crate::ipc::{IPCBody, IPCMessage, IPCResponse, ok};
-use crate::ipc_commands;
 use crate::state::app_paths;
+use crate::{AStr, ipc_commands};
 
 use crate::window::PROTOCOL;
 
@@ -23,13 +24,13 @@ fn command(cmd: &str) -> Command {
     Command::new(cmd)
 }
 
-fn draw_waveform_ffmpeg(path: &str, outpath: &str) -> std::io::Result<()> {
+fn draw_waveform_ffmpeg(path: &str, ffpath: &str, outpath: &str) -> std::io::Result<()> {
     use std::fs::File;
     use std::io::Read;
     use std::io::Write;
     use std::process::Stdio;
 
-    let mut child = command("ffmpeg")
+    let mut child = command(ffpath)
         .arg("-i")
         .arg(path)
         .args([
@@ -83,10 +84,12 @@ fn thumbnail_uri(hashed: &str) -> String {
 }
 
 fn draw_audio_file(body: IPCBody) -> IPCResponse {
-    std::thread::spawn(move || {
-        let path = body.req.as_ref();
+    let ffmpeg_path = crate::with_state!(body, state, { state.get_config().ffmpeg_path.clone() });
 
-        let hashed = hash_path(path);
+    std::thread::spawn(move || {
+        let path = body.req.clone();
+
+        let hashed = hash_path(&path);
         let thumb_path = thumbnail_path(&hashed, &app_paths::thumbnail_cache_path());
         let uri = thumbnail_uri(&hashed);
 
@@ -97,9 +100,29 @@ fn draw_audio_file(body: IPCBody) -> IPCResponse {
                     payload: uri.clone(),
                 })
                 .ok();
+
+            return;
         }
 
-        match draw_waveform_ffmpeg(path, &thumb_path.to_string_lossy()) {
+        let ffmpeg_path: Option<AStr> = ffmpeg_path
+            .as_ref()
+            .and_then(|p| p.to_str())
+            .map(|p| Arc::from(p));
+
+        if ffmpeg_path.is_none() {
+            body.webview_sender
+                .send(IPCMessage {
+                    id: "read_audio",
+                    payload: "ff-missing".to_string(),
+                })
+                .ok();
+
+            return;
+        }
+
+        let ffmpeg_path = ffmpeg_path.unwrap().clone();
+
+        match draw_waveform_ffmpeg(&path, &ffmpeg_path, &thumb_path.to_string_lossy()) {
             Ok(_) => {
                 body.webview_sender
                     .send(IPCMessage {

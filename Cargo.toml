@@ -49,6 +49,7 @@ wasmtime = { version = "44.0.1", default-features = false, features = [
   "cranelift",
   "runtime",
 ] }
+which = "8.0.2"
 wry = "0.55.0"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 

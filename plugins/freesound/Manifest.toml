@@ -5,6 +5,7 @@ version     = "0.1.0"
 
 [assets]
 entry = "freesound_plugin.wasm"
+icon = "icon.svg"
 
 [capabilities]
 storage           = true

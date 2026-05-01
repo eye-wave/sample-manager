@@ -45,19 +45,20 @@ function createPlayerHandle() {
   }
 
   async function startPlaying(path: string, name: string, fav?: boolean, tagsList?: string[]) {
-    invoke(IPC.DRAW_AUDIO_FILE, path);
+    PreviewHandler.path = path;
+    PreviewHandler.label = name;
+    PreviewHandler.img = "";
+
     invoke(IPC.PLAY_AUDIO_FILE, path).then(() => {
       playerState = PLAYING;
       svg.innerHTML = PAUSE_ICON;
       startTicker();
     });
+    invoke(IPC.DRAW_AUDIO_FILE, path);
 
     const tags = tagsList ? tagsList : (await invoke(IPC.TAG_PATH, path)).split(",");
     const isFav = fav === undefined ? (await invoke(IPC.IS_SAMPLE_FAV, path)) === "true" : fav;
 
-    PreviewHandler.path = path;
-    PreviewHandler.label = name;
-    PreviewHandler.img = "";
     PreviewHandler.tags = tags;
     PreviewHandler.fav = isFav;
   }

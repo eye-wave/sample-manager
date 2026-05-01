@@ -6,8 +6,9 @@
 
     <theme></theme>
     <link rel='stylesheet' href="/styles/__app__.scss" />
-    <link rel='stylesheet' href="/styles/settings.scss" />
     <link rel='stylesheet' href="/styles/styles.scss" />
+    <link rel='stylesheet' href="/styles/settings.scss" />
+    <link rel='stylesheet' href="/styles/plugin.scss" />
 
     <title>SampleVault — Audio Sample Manager</title>
   </head>
@@ -44,7 +45,7 @@
         <!-- Settings -->
         <dialog id="conf_dial__">
           <div class="dialog-shell">
-            <div class="dialog" role="dialog" aria-labelledby="settings-title">
+            <div class="dialog" id="conf_dial_body__" role="dialog" aria-labelledby="settings-title">
               <div class="dialog__header">
                 <p class="dialog__title">
                   <span class="dialog__title-icon">
@@ -65,11 +66,11 @@
                   <select id="theme_select__"></select>
                 </div>
 
-                <section id="plugin_settings__">
-
-                </section>
-
+                <p class="section-label">Plugins</p>
+                <section id="plugin_settings__"></section>
               </div>
+
+              <div style="flex:1"></div>
 
               <div class="dialog__footer">
                 <button id="conf_reset__" class="btn btn--ghost">Reset to defaults</button>

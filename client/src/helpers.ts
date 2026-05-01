@@ -86,7 +86,7 @@ export async function updateCurrentTheme() {
 }
 
 export function isFocusElement(el?: EventTarget | null) {
-  const tags = ["INPUT", "SELECT", "BUTTON"];
+  const tags = ["INPUT", "SELECT", "BUTTON", "SUMMARY"];
   return tags.includes((el as HTMLElement)?.tagName ?? "");
 }
 

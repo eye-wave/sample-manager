@@ -36,7 +36,7 @@ impl EventSystem {
         let proxy = event_loop.create_proxy();
 
         let mut app_state = AppState::new(tx.clone());
-        app_state.load().ok();
+        app_state.init().ok();
 
         (
             EventRunner {

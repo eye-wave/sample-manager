@@ -13,6 +13,10 @@ impl HostState {
         }
     }
 
+    pub fn get_item(&self, plugin_id: AStr, key: AStr) -> Option<Vec<u8>> {
+        self.storage.get(&(plugin_id, key)).cloned()
+    }
+
     pub(super) fn is_url_allowed(&self, url: &str, allowlist: &[String]) -> bool {
         let Ok(parsed) = url::Url::parse(url) else {
             return false;

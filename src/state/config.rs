@@ -3,15 +3,19 @@ use std::{collections::HashSet, fs, path::PathBuf};
 use serde::{Deserialize, Serialize};
 
 mod color;
+mod ffmpeg;
 mod theme;
 
+pub use ffmpeg::*;
 pub use theme::{Theme, ThemeType};
 
 use crate::state::app_paths;
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct AppConfig {
     pub tracked_dirs: HashSet<PathBuf>,
+    pub ffmpeg_path: Option<PathBuf>,
+
     pub plugins: HashSet<String>,
     pub color_theme: Option<String>,
 }

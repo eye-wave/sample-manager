@@ -7,6 +7,7 @@ use crate::AnyResult;
 use crate::audio::AudioPlayer;
 use crate::ipc::IPCMessage;
 use crate::plugins::PluginRuntimeHandle;
+use crate::state::config::{find_executable, is_executable};
 
 pub mod config;
 pub mod samples;
@@ -84,7 +85,7 @@ impl AppState {
         }
     }
 
-    pub fn load(&mut self) -> AnyResult<()> {
+    pub fn init(&mut self) -> AnyResult<()> {
         let conf = fs::read(app_paths::config_file())?;
         let conf: AppConfig = toml::from_slice(&conf)?;
 
@@ -94,6 +95,20 @@ impl AppState {
 
         self.app_config = conf;
         self.favorite_samples = favorite_samples;
+
+        if self.app_config.ffmpeg_path.is_none() {
+            if let Some(path) = find_executable("ffmpeg")
+                && is_executable(&path)
+            {
+                self.app_config.ffmpeg_path = Some(path)
+            }
+        } else {
+            if !is_executable(&self.app_config.ffmpeg_path.as_ref().unwrap()) {
+                self.app_config.ffmpeg_path = None
+            }
+        }
+
+        self.app_config.ffmpeg_path = None;
 
         for name in self.app_config.plugins.iter() {
             let plugin_name = name.to_string() + ".zip";

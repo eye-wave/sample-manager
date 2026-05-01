@@ -2,6 +2,7 @@ import { getCurrentSample } from "../browse/browse";
 import { basename, renderTags, setLiked, setLikedView } from "../helpers";
 import { listen } from "../invoke/invoke";
 import { playerHandle } from "../player/player";
+import { missingUri } from "./missing";
 
 declare const waveform__: HTMLDivElement;
 declare const wave_thumb__: HTMLDivElement;
@@ -51,8 +52,8 @@ function createPreview() {
       waveform__.style.backgroundSize = `${p}% 100%, ${100 - p}% 100%`;
       wave_thumb__.style.background = `linear-gradient(to right,transparent ${p - margin}%,var(--text-primary) ${p}%,transparent ${p + margin}%)`;
     },
-    set img(uri: string) {
-      waveform__.style.maskImage = `url(${uri})`;
+    set img(uri: string | undefined) {
+      waveform__.style.maskImage = `url("${uri === "ff-missing" ? missingUri("FFMPEG couldn't be found on your system path, install it or set it manually in the app settings.") : uri}")`;
     },
 
     set label(label: string) {

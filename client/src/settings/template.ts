@@ -1,59 +1,37 @@
-import type { PluginManifest } from "@typegen/PluginManifest";
-import type { SchemaField } from "@typegen/SchemaField";
+import type { PluginInfo } from "@typegen/PluginInfo";
 
-export function createPluginSettingsSegment(manifest: PluginManifest) {
-  const fields = Object.entries(manifest.config_schema);
+export function createPluginCard(info: PluginInfo) {
+  return /* HTML */ `<div class="card">
+    ${info.icon ? cardIcon(info.icon) : ""}
 
-  return /* HTML */ `
-    <p class="section-label">Plugin: ${manifest.name}</p>
-    <div class="plugin-config-group" data-plugin-id="${manifest.id}">
-      ${fields.map(([id, field]) => renderField(id, field)).join("")}
+    <div class="card-header">
+      <h2 class="card-name">${info.name}</h2>
+      <span class="card-version">${info.version}</span>
     </div>
-  `;
-}
 
-function renderField(id: string, field: SchemaField): string {
-  return /* HTML */ `
-    <div class="field">
-      <div class="field__label">
-        <span>${field.label}</span>
-      </div>
-      <div class="field__control">
-        ${renderInput(id, field)}
-      </div>
+    <p class="card-description">${info.description}</p>
+
+    <div class="card-capabilities">
+      ${capability(info.capabilities.encrypted_storage && "Safe storage")}
+      ${capability(info.capabilities.network && "Network")}
+      ${capability(info.capabilities.storage && "Storage")}
     </div>
-  `;
+
+    ${info.capabilities.network ? hosts(info.capabilities.network_allowlist) : ""}
+
+    <button class="btn btn--ghost">Configure</button>
+  </div>`;
 }
 
-function renderInput(id: string, field: SchemaField): string {
-  const baseAttr = `id="config-${id}" data-config-key="${id}"`;
+const cardIcon = (icon: string) => /* HTML */ `<div class="card-icon">${icon}</div>`;
+const capability = (name: string | false) =>
+  name ? /* HTML */ `<span class="card-tag">${name}</span>` : "";
 
-  switch (field.type) {
-    case "string":
-      return /* HTML */ `
-        <input type="${field.is_password ? "password" : "text"}"
-               ${baseAttr} value="${field.default}">`;
+const hosts = (hosts: string[]) => {
+  return /* HTML */ `<details class="card-hosts">
+    <summary>Allowed Hosts (${hosts.length})</summary>
+    <ul>${hosts.map(host).join("")}</ul>
+  </details>`;
+};
 
-    case "number":
-      return /* HTML */ `
-        <input type="number" ${baseAttr} value="${field.default}">`;
-
-    case "bool":
-      return /* HTML */ `
-        <input type="checkbox" ${baseAttr} ${field.default ? "checked" : ""}>`;
-
-    case "select":
-      return /* HTML */ `
-        <select ${baseAttr}>
-          ${field.options
-            .map(
-              (opt) =>
-                `<option value="${opt}" ${opt === field.default ? "selected" : ""}>${opt}</option>`,
-            )
-            .join("")}
-        </select>`;
-
-    default:
-      return "";
-  }
-}
+const host = (label: string) => `<li>https://${label}/*</li>`;

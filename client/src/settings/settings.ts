@@ -1,9 +1,9 @@
-import type { PluginManifest } from "@typegen/PluginManifest";
+import type { PluginInfo } from "@typegen/PluginInfo";
 import { w } from "../alias";
 import * as IPC from "../gen/ipc-gen";
-import { isFocusElement, updateCurrentTheme, updateTheme, updateThemeCss } from "../helpers";
+import { updateCurrentTheme, updateTheme, updateThemeCss } from "../helpers";
 import { invoke } from "../invoke/invoke";
-import { createPluginSettingsSegment } from "./template";
+import { createPluginCard } from "./template";
 
 declare const conf_btn__: HTMLButtonElement;
 declare const conf_dial__: HTMLDialogElement;
@@ -11,6 +11,7 @@ declare const conf_reset__: HTMLButtonElement;
 declare const conf_save__: HTMLButtonElement;
 declare const dialog_close__: HTMLButtonElement;
 declare const theme_select__: HTMLSelectElement;
+declare const conf_dial_body__: HTMLDivElement;
 
 declare const plugin_settings__: HTMLDivElement;
 
@@ -32,14 +33,14 @@ function themeSelectionTemplate(type: "light" | "dark", themes: string[]) {
 }
 
 conf_btn__.onclick = async () => {
-  conf_dial__.open = true;
+  conf_dial__.showModal();
 
-  const manifest: PluginManifest = await invoke(
-    IPC.GET_PLUGIN_MANIFEST,
+  const pluginsInfo: PluginInfo[] = await invoke(
+    IPC.GET_ALL_PLUGINS_INFO,
     "freesound-search",
   ).then((res) => JSON.parse(res));
 
-  plugin_settings__.innerHTML = createPluginSettingsSegment(manifest);
+  plugin_settings__.innerHTML = pluginsInfo.map((i) => createPluginCard(i)).join("");
 
   const currentTheme = await invoke(IPC.GET_THEME_NAME);
   const [lightCount, ...themes] = (await invoke(IPC.LIST_THEMES)).split(",");
@@ -62,30 +63,36 @@ theme_select__.onchange = async () => {
   updateThemeCss(css);
 };
 
-conf_dial__.onclick = (e) => {
-  if (isFocusElement(e.target)) return;
+conf_dial__.onclick = (e: MouseEvent) => {
+  const left = conf_dial_body__.offsetLeft;
+  const right = left + conf_dial_body__.offsetWidth;
+  const top = conf_dial_body__.offsetTop;
+  const bottom = top + conf_dial_body__.offsetHeight;
 
-  const cname = (e.target as HTMLElement)?.className ?? "";
-  if (cname === "dialog-shell" || !cname) {
+  const isClickOutside =
+    e.clientX < left || e.clientX > right || e.clientY < top || e.clientY > bottom;
+
+  if (isClickOutside) {
     updateCurrentTheme();
-    conf_dial__.open = false;
+
+    conf_dial__.close();
   }
 };
 
 dialog_close__.onclick = () => {
   updateCurrentTheme();
-  conf_dial__.open = false;
+  conf_dial__.close();
 };
 
-conf_reset__.onclick = () => (conf_dial__.open = false);
+conf_reset__.onclick = () => conf_dial__.close();
 conf_save__.onclick = () => {
   updateTheme(newTheme);
-  conf_dial__.open = false;
+  conf_dial__.close();
 };
 
 w.addEventListener("keydown", (e) => {
   if (conf_dial__.open && e.key === "Escape") {
     updateCurrentTheme();
-    conf_dial__.open = false;
+    conf_dial__.close();
   }
 });

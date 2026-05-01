@@ -6,7 +6,10 @@ use wasmtime::{Instance, TypedFunc};
 
 use crate::{
     AStr,
-    plugins::{manifest::PluginManifest, runner::PluginRunner},
+    plugins::{
+        manifest::{PluginInfo, PluginManifest},
+        runner::PluginRunner,
+    },
     state::samples::SearchRequest,
 };
 
@@ -35,12 +38,8 @@ pub enum PluginRunnerCommand {
     UnloadPlugin {
         id: AStr,
     },
-    GetManifest {
-        id: AStr,
-        reply_to: mpsc::Sender<Option<PluginManifest>>,
-    },
-    ListPlugins {
-        reply_to: mpsc::Sender<Vec<AStr>>,
+    GetAllPluginsInfo {
+        reply_to: mpsc::Sender<Vec<PluginInfo>>,
     },
     Shutdown,
 }
@@ -70,27 +69,12 @@ impl PluginRuntimeHandle {
         });
     }
 
-    pub fn get_manifest(&self, id: &str) -> Option<PluginManifest> {
+    pub fn get_all_plugins_info(&self) -> Vec<PluginInfo> {
         let (tx, rx) = std::sync::mpsc::channel();
 
-        self.sender
-            .send(Cmd::GetManifest {
-                id: Arc::from(id),
-                reply_to: tx,
-            })
-            .ok()?;
+        self.sender.send(Cmd::GetAllPluginsInfo { reply_to: tx });
 
-        rx.recv().ok().flatten()
-    }
-
-    pub fn list_all_ids(&self) -> Vec<AStr> {
-        let (tx, rx) = std::sync::mpsc::channel();
-
-        if self.sender.send(Cmd::ListPlugins { reply_to: tx }).is_ok() {
-            rx.recv().unwrap_or_default()
-        } else {
-            Vec::new()
-        }
+        rx.recv().unwrap_or_default()
     }
 
     pub fn unload(&self, id: impl Into<AStr>) {
