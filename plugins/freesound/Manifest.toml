@@ -3,6 +3,9 @@ name        = "Freesound"
 description = "Search freesound.org for samples"
 version     = "0.1.0"
 
+[assets]
+entry = "freesound_plugin.wasm"
+
 [capabilities]
 storage           = true
 encrypted_storage = true
@@ -12,3 +15,9 @@ network_allowlist = [
     "freesound.org",
     "api.freesound.org",
 ]
+
+[config_schema.api_key]
+type = "string"
+label = "API Key"
+default = ""
+is_password = true

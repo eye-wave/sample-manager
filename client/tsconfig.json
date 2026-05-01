@@ -16,7 +16,8 @@
     "noEmit": true,
 
     "paths": {
-      "@assets/*": ["./assets/*"]
+      "@assets/*": ["./assets/*"],
+      "@typegen/*": ["../bindings/*"]
     },
 
     // Best practices

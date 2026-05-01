@@ -11,4 +11,5 @@ dist/
 Thumbs.db
 
 # Generated
+/bindings
 **/gen

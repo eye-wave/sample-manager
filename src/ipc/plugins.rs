@@ -1,26 +1,43 @@
-use std::{fs, path::PathBuf};
+use crate::ipc::{IPCBody, IPCError, IPCResponse, IntoIPCResponse};
 
-use crate::ipc::{IPCBody, IPCError, IPCResponse, ok};
-
-fn load_plugin(body: IPCBody) -> IPCResponse {
-    let id = PathBuf::from(body.req.to_string());
-    let id = id
-        .file_name()
-        .ok_or(IPCError::empty())?
-        .to_str()
-        .ok_or(IPCError::empty())?;
-
-    let bytes = fs::read(&body.req.as_ref())?;
-
+fn disable_plugin(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
-        state.plugin_handle.load(id, bytes);
+        let id = body.req;
+        state.plugin_handle.unload(id);
 
-        ok()
+        todo!()
+    })
+}
+
+fn get_plugin_manifest(body: IPCBody) -> IPCResponse {
+    crate::with_state!(body, state, {
+        let id = body.req;
+        let manifest = state
+            .plugin_handle
+            .get_manifest(&id)
+            .ok_or(IPCError::empty())?;
+
+        serde_json::to_string(&manifest)?.finish()
+    })
+}
+
+fn list_all_plugin_ids(body: IPCBody) -> IPCResponse {
+    crate::with_state!(body, state, {
+        state
+            .plugin_handle
+            .list_all_ids()
+            .iter()
+            .map(|c| c.to_string())
+            .intersperse(",".into())
+            .collect::<String>()
+            .finish()
     })
 }
 
 crate::ipc_commands! {
     IPC_PLUGINS = [
-        load_plugin
+        disable_plugin,
+        get_plugin_manifest,
+        list_all_plugin_ids
     ]
 }

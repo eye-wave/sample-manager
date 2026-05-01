@@ -4,28 +4,32 @@ use fuzzy_matcher::skim::SkimMatcherV2;
 use rayon::{iter::Either, prelude::*};
 use serde::{Deserialize, Serialize};
 
-use crate::state::{AppState, samples::clean_up_string};
+use crate::{
+    AStr,
+    state::{AppState, samples::clean_up_string},
+};
 
-#[derive(Deserialize, Serialize)]
-pub struct SearchRequest<'a> {
+#[derive(Debug, Deserialize, Serialize)]
+pub struct SearchRequest {
     #[serde(rename = "q")]
-    query: &'a str,
+    query: AStr,
     #[serde(rename = "lim")]
     limit: usize,
     #[serde(rename = "off")]
     offset: usize,
     #[serde(rename = "t")]
-    tags: &'a str,
+    tags: AStr,
     #[serde(rename = "fav")]
     is_fav: bool,
 }
 
+#[allow(unused)]
 #[derive(Deserialize)]
 pub struct SampleResult {}
 
 pub fn search(req: &SearchRequest, state: &AppState) -> String {
     let tags: Vec<&str> = req.tags.split(',').filter(|s| !s.is_empty()).collect();
-    let query = clean_up_string(req.query);
+    let query = clean_up_string(&req.query);
 
     let matcher = SkimMatcherV2::default().smart_case();
 

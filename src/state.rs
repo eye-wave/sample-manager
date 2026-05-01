@@ -96,9 +96,8 @@ impl AppState {
         self.favorite_samples = favorite_samples;
 
         for name in self.app_config.plugins.iter() {
-            let path = app_paths::plugin_config_path()
-                .join(name)
-                .join("plugin.wasm");
+            let plugin_name = name.to_string() + ".zip";
+            let path = app_paths::plugin_config_path().join(plugin_name);
 
             match fs::read(path) {
                 Ok(bytes) => self.plugin_handle.load(name, bytes),

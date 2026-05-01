@@ -128,8 +128,8 @@ dialog {
 
 
   & input[type="text"],
-  & input[type="email"],
   & input[type="number"],
+  & input[type="password"],
   & select {
     appearance: none;
     background: var(--bg-hover);

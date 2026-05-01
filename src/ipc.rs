@@ -178,7 +178,7 @@ macro_rules! ipc_commands {
 #[macro_export]
 macro_rules! with_state {
     ($body:ident, $state:ident, $block:block) => {{
-        let $state = $body.app_state.read().map_err(|_| crate::ipc::Poisoned)?;
+        let $state = $body.app_state.read().map_err(|_| $crate::ipc::Poisoned)?;
 
         $block
     }};
@@ -187,7 +187,7 @@ macro_rules! with_state {
 #[macro_export]
 macro_rules! with_state_mut {
     ($body:ident, $state:ident, $block:block) => {{
-        let mut $state = $body.app_state.write().map_err(|_| crate::ipc::Poisoned)?;
+        let mut $state = $body.app_state.write().map_err(|_| $crate::ipc::Poisoned)?;
 
         $block
     }};

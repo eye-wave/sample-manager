@@ -1,7 +1,9 @@
+import type { PluginManifest } from "@typegen/PluginManifest";
 import { w } from "../alias";
 import * as IPC from "../gen/ipc-gen";
 import { isFocusElement, updateCurrentTheme, updateTheme, updateThemeCss } from "../helpers";
 import { invoke } from "../invoke/invoke";
+import { createPluginSettingsSegment } from "./template";
 
 declare const conf_btn__: HTMLButtonElement;
 declare const conf_dial__: HTMLDialogElement;
@@ -9,6 +11,8 @@ declare const conf_reset__: HTMLButtonElement;
 declare const conf_save__: HTMLButtonElement;
 declare const dialog_close__: HTMLButtonElement;
 declare const theme_select__: HTMLSelectElement;
+
+declare const plugin_settings__: HTMLDivElement;
 
 let newTheme = "";
 
@@ -29,6 +33,13 @@ function themeSelectionTemplate(type: "light" | "dark", themes: string[]) {
 
 conf_btn__.onclick = async () => {
   conf_dial__.open = true;
+
+  const manifest: PluginManifest = await invoke(
+    IPC.GET_PLUGIN_MANIFEST,
+    "freesound-search",
+  ).then((res) => JSON.parse(res));
+
+  plugin_settings__.innerHTML = createPluginSettingsSegment(manifest);
 
   const currentTheme = await invoke(IPC.GET_THEME_NAME);
   const [lightCount, ...themes] = (await invoke(IPC.LIST_THEMES)).split(",");
