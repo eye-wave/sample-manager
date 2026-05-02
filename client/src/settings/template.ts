@@ -37,6 +37,14 @@ const hosts = (hosts: string[]) => {
 
 const host = (label: string) => `<li>https://${label}/*</li>`;
 
+export function renderPluginSettings(config: Record<string, SchemaFieldWithValue>) {
+  const fields = Object.entries(config).map(([key, data]) => {
+    return renderField(key, data);
+  });
+
+  return fields.join("");
+}
+
 export function renderField(key: string, data: SchemaFieldWithValue) {
   const { fieldType, value } = data;
   const currentValue = value ?? fieldType.default;
@@ -44,50 +52,21 @@ export function renderField(key: string, data: SchemaFieldWithValue) {
 
   let inputHtml = "";
 
-  switch (fieldType.type) {
-    case "string":
-      inputHtml = /* HTML */ `
-        <input
-          type="${fieldType.is_password ? "password" : "text"}"
-          id="${id}"
-          value="${currentValue}"
-          data-key="${key}"
-        >`;
-      break;
+  if (fieldType.type === "string") {
+    const inputType = fieldType.is_password ? "password" : "text";
+    inputHtml = /* HTML */ `<input type="${inputType}" id="${id}" value="${currentValue}" data-key="${key}">`;
+  } else if (fieldType.type === "number") {
+    inputHtml = /* HTML */ `<input type="number" id="${id}" value="${currentValue}" data-key="${key}">`;
+  } else if (fieldType.type === "bool") {
+    const checked = currentValue ? "checked" : "";
+    inputHtml = `<input type=checkbox id=${id} ${checked} data-key=${key}>`;
+  } else if (fieldType.type === "select") {
+    const options = fieldType.options.map((opt) => {
+      const selected = opt === currentValue ? "selected" : "";
+      return `<option value="${opt}" ${selected}>${opt}</option>`;
+    });
 
-    case "number":
-      inputHtml = /* HTML */ `
-        <input
-          type="number"
-          id="${id}"
-          value="${currentValue}"
-          data-key="${key}"
-        >`;
-      break;
-
-    case "bool":
-      inputHtml = /* HTML */ `
-        <input
-          type="checkbox"
-          id="${id}"
-          ${currentValue ? "checked" : ""}
-          data-key="${key}"
-        >`;
-      break;
-
-    case "select":
-      inputHtml = /* HTML */ `
-        <select id="${id}" data-key="${key}">
-          ${fieldType.options
-            .map(
-              (opt) => /* HTML */ `
-              <option value="${opt}" ${opt === currentValue ? "selected" : ""}>
-                ${opt}
-              </option>`,
-            )
-            .join("")}
-        </select>`;
-      break;
+    inputHtml = /* HTML */ `<select id="${id}" data-key="${key}">${options.join("")}</select>`;
   }
 
   return /* HTML */ `
