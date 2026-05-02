@@ -30,8 +30,7 @@ fn play_audio_file(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
         let path = Path::new(&*body.req);
 
-        state.audio_player.play(&path)?;
-        ok()
+        state.audio_player.play(&path).map(|_| ok())?
     })
 }
 

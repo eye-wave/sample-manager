@@ -1,7 +1,6 @@
-use std::{
-    path::Path,
-    sync::{atomic::Ordering, mpsc},
-};
+use std::path::Path;
+use std::sync::{atomic::Ordering, mpsc};
+use std::time::Duration;
 
 mod decode;
 mod device;
@@ -13,6 +12,7 @@ use handle::{PlayerHandle, SharedAudioState};
 
 pub use handle::PlaybackState;
 
+use crate::audio::handle::PlayerFlags;
 use crate::ipc::IPCMessage;
 
 pub struct AudioPlayer {
@@ -29,6 +29,9 @@ pub enum AudioError {
 
     #[error("{0}")]
     Decode(#[from] DecodeError),
+
+    #[error("Audio took too long to start")]
+    Timeout,
 }
 
 type AudioResult<T> = std::result::Result<T, AudioError>;
@@ -71,7 +74,10 @@ impl AudioPlayer {
     }
 
     pub fn play(&self, path: &impl AsRef<Path>) -> AudioResult<()> {
-        self.stop().ok();
+        {
+            let (lock, _) = &*self.handle.shared.ready;
+            *lock.lock().unwrap() = false;
+        }
 
         self.handle
             .shared
@@ -83,8 +89,42 @@ impl AudioPlayer {
             .store(0, Ordering::Release);
 
         with_decoder!(self, decoder => {
+
+            decoder.flush_and_signal();
+
+            {
+                let (lock, cvar) = &*self.handle.shared.ready;
+                let ready = lock.lock().unwrap();
+                let result = cvar
+                    .wait_timeout_while(ready, Duration::from_secs(5), |r| !*r)
+                    .unwrap();
+                if result.1.timed_out() {
+                    return Err(AudioError::Timeout);
+                }
+            }
+
+
+            {
+                let (lock, _) = &*self.handle.shared.ready;
+                *lock.lock().unwrap() = false;
+            }
+
             decoder.start(path);
-            self.handle.resume();
+
+
+            {
+                let (lock, cvar) = &*self.handle.shared.ready;
+                let ready = lock.lock().unwrap();
+                let result = cvar
+                    .wait_timeout_while(ready, Duration::from_secs(5), |r| !*r)
+                    .unwrap();
+                if result.1.timed_out() {
+                    return Err(AudioError::Timeout);
+                }
+            }
+
+
+            self.handle.shared.clear_flag(PlayerFlags::FLUSHING);
 
             Ok(())
         })
@@ -123,13 +163,11 @@ impl AudioPlayer {
             .shared
             .estimated_audio_len
             .load(Ordering::Relaxed);
-
         let millis = (len as f64 * pos) as u32;
 
         with_decoder!(self, decoder => {
             decoder.seek(millis);
             self.handle.seek(millis);
-
             Ok(())
         })
     }

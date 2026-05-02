@@ -1,5 +1,5 @@
-use std::sync::atomic::{AtomicU8, AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, mpsc};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
+use std::sync::{Arc, Condvar, Mutex, mpsc};
 
 use atomic_float::AtomicF32;
 
@@ -48,6 +48,8 @@ pub struct SharedAudioState {
     pub samples_played: AtomicU64,
     pub seek_target: AtomicU32,
     pub volume: AtomicF32,
+    pub abort: AtomicBool,
+    pub ready: Arc<(Mutex<bool>, Condvar)>,
 
     pub _event_sender: mpsc::Sender<IPCMessage>,
 }
@@ -61,6 +63,8 @@ impl SharedAudioState {
             samples_played: AtomicU64::new(0),
             seek_target: AtomicU32::new(0),
             volume: AtomicF32::new(1.0),
+            abort: AtomicBool::new(false),
+            ready: Arc::new((Mutex::new(false), Condvar::new())),
             _event_sender: rx,
         })
     }
@@ -107,8 +111,12 @@ impl PlayerHandle {
     }
 
     pub fn stop(&self) {
-        self.shared.clear_flag(PlayerFlags::DRAINING);
+        self.shared.abort.store(true, Ordering::Release);
+
+        let (lock, _) = &*self.shared.ready;
+        *lock.lock().unwrap() = false;
         self.shared.set_state(PlayerFlags::STOPPED);
+        self.shared.clear_flag(PlayerFlags::DRAINING);
         self.shared.set_flag(PlayerFlags::FLUSHING);
     }
 

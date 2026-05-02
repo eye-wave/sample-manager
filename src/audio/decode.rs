@@ -52,6 +52,7 @@ pub enum DecodeCommand {
     Resume,
     Seek { millis: u32 },
     Stop,
+    FlushAndSignal,
 }
 
 pub struct AudioDecoderHandle {
@@ -98,6 +99,10 @@ impl AudioDecoderHandle {
     pub fn stop(&self) {
         let _ = self.tx.send(DecodeCommand::Stop);
     }
+
+    pub fn flush_and_signal(&self) {
+        let _ = self.tx.send(DecodeCommand::FlushAndSignal);
+    }
 }
 
 fn decode_thread_loop(
@@ -112,13 +117,27 @@ fn decode_thread_loop(
         while let Ok(cmd) = rx.try_recv() {
             match cmd {
                 DecodeCommand::Start { path } => {
-                    if let Ok(decoder) = init_decoder(&path, audio_state.clone(), &stream_config) {
-                        current = Some(decoder);
-                        audio_state.clear_flag(PlayerFlags::DRAINING);
-                        audio_state.set_flag(PlayerFlags::FLUSHING);
-                        std::thread::sleep(Duration::from_millis(5));
-                        audio_state.clear_flag(PlayerFlags::FLUSHING);
-                        audio_state.set_state(PlayerFlags::PLAYING);
+                    audio_state.abort.store(false, Ordering::Release);
+
+                    let signal_ready = || {
+                        let (lock, cvar) = &*audio_state.ready;
+                        *lock.lock().unwrap() = true;
+                        cvar.notify_all();
+                    };
+
+                    match init_decoder(&path, audio_state.clone(), &stream_config) {
+                        Ok(decoder) => {
+                            current = Some(decoder);
+                            audio_state.clear_flag(PlayerFlags::DRAINING);
+                            audio_state.clear_flag(PlayerFlags::FLUSHING);
+                            audio_state.set_state(PlayerFlags::PLAYING);
+                            signal_ready();
+                        }
+                        Err(e) => {
+                            eprintln!("init_decoder failed: {e}");
+                            audio_state.set_state(PlayerFlags::STOPPED);
+                            signal_ready();
+                        }
                     }
                 }
 
@@ -138,6 +157,9 @@ fn decode_thread_loop(
                         let sample_rate = audio_state.sample_rate.load(Ordering::Relaxed) as u64;
                         let new_pos = (millis as u64 * sample_rate) / 1000;
                         audio_state.samples_played.store(new_pos, Ordering::Release);
+
+                        std::thread::sleep(Duration::from_millis(20));
+                        audio_state.clear_flag(PlayerFlags::FLUSHING);
                     }
                 }
 
@@ -145,7 +167,23 @@ fn decode_thread_loop(
                     current = None;
                     audio_state.set_state(PlayerFlags::STOPPED);
                 }
+
+                DecodeCommand::FlushAndSignal => {
+                    current = None;
+                    audio_state.set_flag(PlayerFlags::FLUSHING);
+
+                    let (lock, cvar) = &*audio_state.ready;
+                    *lock.lock().unwrap() = true;
+                    cvar.notify_all();
+                }
             }
+        }
+
+        if audio_state.abort.load(Ordering::Acquire) {
+            current = None;
+
+            std::thread::sleep(Duration::from_millis(1));
+            continue;
         }
 
         let Some(decoder_state) = &mut current else {

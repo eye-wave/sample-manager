@@ -48,8 +48,9 @@ function createPlayerHandle() {
     PreviewHandler.path = path;
     PreviewHandler.label = name;
     PreviewHandler.img = "";
+    PreviewHandler.position = 0;
 
-    invoke(IPC.PLAY_AUDIO_FILE, path).then(() => {
+    await invoke(IPC.PLAY_AUDIO_FILE, path).then(() => {
       playerState = PLAYING;
       svg.innerHTML = PAUSE_ICON;
       startTicker();
