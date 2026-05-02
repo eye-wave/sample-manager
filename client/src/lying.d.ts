@@ -12,7 +12,4 @@ declare global {
   interface HTMLButtonElement {
     textContent: Opt<ToStr>;
   }
-  interface Text {
-    nodeValue: Opt<ToStr>;
-  }
 }

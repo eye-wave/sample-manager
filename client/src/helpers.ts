@@ -1,4 +1,4 @@
-import { $el } from "./alias";
+import { d } from "./alias";
 import * as IPC from "./gen/ipc-gen";
 import { invoke } from "./invoke/invoke";
 
@@ -71,7 +71,8 @@ export function updateThemeCss(css: string) {
   devStyle.innerHTML = css;
   /// DEV end
   /// BUILD start
-  $el("style").innerHTML = css;
+  // biome-ignore lint/style/noNonNullAssertion: trust
+  d.querySelector("style")!.innerHTML = css;
   /// BUILD end
 }
 
