@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use std::sync::LazyLock;
 
 use crate::ipc::{IPCBody, IPCResponse, ok};
 use crate::ipc_commands;
@@ -29,8 +28,6 @@ fn drag_window(body: IPCBody) -> IPCResponse {
     ok()
 }
 
-static ICON: LazyLock<Vec<u8>> = LazyLock::new(|| include_bytes!("../../assets/cat.png").to_vec());
-
 fn start_drag_file(body: IPCBody) -> IPCResponse {
     let path = body.req;
 
@@ -43,7 +40,7 @@ fn start_drag_file(body: IPCBody) -> IPCResponse {
         #[cfg(not(target_os = "linux"))]
         &body.window_handle,
         drag::DragItem::Files(vec![PathBuf::from(path.to_string())]),
-        drag::Image::Raw(ICON.to_vec()),
+        drag::Image::Raw(vec![]),
         |_, _| {},
         drag::Options::default(),
     )

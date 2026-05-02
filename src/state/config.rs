@@ -28,7 +28,7 @@ pub struct AppConfig {
 
 #[allow(non_camel_case_types)]
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 pub enum ConfigField {
     TrackedDirs,
     FfmpegPath,

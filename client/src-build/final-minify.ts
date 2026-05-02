@@ -49,7 +49,7 @@ function moveHeadScriptToBodyEnd(html: string) {
 export const idFactory = (prefix: string) => {
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-  let count = -1;
+  let count = 0;
 
   return () => {
     let n = count++;
