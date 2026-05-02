@@ -10,7 +10,7 @@ type PromiseReturn = {
 const pending = new Map<number, PromiseReturn>();
 let nextId = 1;
 
-export const invoke = (id: number, payload?: string) => {
+export const invoke = (id: number, payload?: string | number) => {
   return new Promise<string>((resolve, reject) => {
     const callId = nextId++;
     pending.set(callId, { resolve, reject });

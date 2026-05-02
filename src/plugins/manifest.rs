@@ -1,17 +1,58 @@
 use base64::{Engine as _, engine::general_purpose};
-use std::{collections::HashMap, ops::Deref};
+use std::{collections::HashMap, ops::Deref, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{AStr, plugins::host::HostState};
+use crate::{AStr, AnyResult, plugins::host::HostState};
+
+#[derive(Clone, Debug, Serialize, TS, PartialEq, Eq, Hash)]
+pub struct PluginId(AStr);
+
+impl PluginId {
+    pub fn new(str: impl AsRef<str>) -> AnyResult<Self> {
+        if str
+            .as_ref()
+            .chars()
+            .any(|c| c.is_whitespace() || c == '<' || c == '>')
+        {
+            return Err("invalid plugin id".into());
+        }
+
+        Ok(Self(Arc::from(str.as_ref())))
+    }
+}
+
+impl std::fmt::Display for PluginId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Deref for PluginId {
+    type Target = AStr;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
 pub struct PluginMetadata {
-    pub id: AStr,
+    pub id: PluginId,
     pub name: AStr,
     pub description: AStr,
     pub version: AStr,
+}
+
+impl<'de> Deserialize<'de> for PluginId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        PluginId::new(s.as_str()).map_err(serde::de::Error::custom)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -34,9 +75,12 @@ impl Deref for PluginManifest {
     }
 }
 
-#[derive(Serialize, TS)]
+#[derive(Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct PluginInfo {
+    pub is_enabled: bool,
+
     #[serde(flatten)]
     pub meta: PluginMetadata,
     pub icon: Option<String>,
@@ -48,6 +92,7 @@ pub struct PluginInfo {
 impl PluginManifest {
     pub fn to_plugin_info(&self, state: &HostState) -> PluginInfo {
         PluginInfo {
+            is_enabled: true,
             meta: self.meta.clone(),
             capabilities: self.capabilities.clone(),
             icon: self.assets.icon.as_ref().map(|s| s.to_string()),
@@ -114,7 +159,7 @@ pub enum SchemaField {
 impl SchemaField {
     fn with_fetched_value(
         &self,
-        plugin_id: AStr,
+        plugin_id: PluginId,
         key: AStr,
         state: &HostState,
     ) -> SchemaFieldWithValue {
@@ -125,7 +170,7 @@ impl SchemaField {
     }
 }
 
-#[derive(Serialize, TS)]
+#[derive(Clone, Serialize, TS)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub struct SchemaFieldWithValue {
     field_type: SchemaField,

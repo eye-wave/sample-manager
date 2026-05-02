@@ -1,4 +1,5 @@
 import type { PluginInfo } from "@typegen/PluginInfo";
+import type { SchemaFieldWithValue } from "@typegen/SchemaFieldWithValue";
 
 export function createPluginCard(info: PluginInfo) {
   return /* HTML */ `<div class="card">
@@ -19,7 +20,7 @@ export function createPluginCard(info: PluginInfo) {
 
     ${info.capabilities.network ? hosts(info.capabilities.network_allowlist) : ""}
 
-    <button class="btn btn-ghost">Configure</button>
+    <button data-id="${info.id}" class="btn btn-ghost">Configure</button>
   </div>`;
 }
 
@@ -35,3 +36,63 @@ const hosts = (hosts: string[]) => {
 };
 
 const host = (label: string) => `<li>https://${label}/*</li>`;
+
+export function renderField(key: string, data: SchemaFieldWithValue) {
+  const { fieldType, value } = data;
+  const currentValue = value ?? fieldType.default;
+  const id = `plugin_setting_${key.replace(/\s+/g, "_")}`;
+
+  let inputHtml = "";
+
+  switch (fieldType.type) {
+    case "string":
+      inputHtml = /* HTML */ `
+        <input
+          type="${fieldType.is_password ? "password" : "text"}"
+          id="${id}"
+          value="${currentValue}"
+          data-key="${key}"
+        >`;
+      break;
+
+    case "number":
+      inputHtml = /* HTML */ `
+        <input
+          type="number"
+          id="${id}"
+          value="${currentValue}"
+          data-key="${key}"
+        >`;
+      break;
+
+    case "bool":
+      inputHtml = /* HTML */ `
+        <input
+          type="checkbox"
+          id="${id}"
+          ${currentValue ? "checked" : ""}
+          data-key="${key}"
+        >`;
+      break;
+
+    case "select":
+      inputHtml = /* HTML */ `
+        <select id="${id}" data-key="${key}">
+          ${fieldType.options
+            .map(
+              (opt) => /* HTML */ `
+              <option value="${opt}" ${opt === currentValue ? "selected" : ""}>
+                ${opt}
+              </option>`,
+            )
+            .join("")}
+        </select>`;
+      break;
+  }
+
+  return /* HTML */ `
+    <div class="field">
+      <span class="field-label">${fieldType.label}</span>
+      ${inputHtml}
+    </div>`;
+}

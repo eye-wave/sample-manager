@@ -6,7 +6,7 @@ use std::{fs, io};
 use crate::AnyResult;
 use crate::audio::AudioPlayer;
 use crate::ipc::IPCMessage;
-use crate::plugins::PluginRuntimeHandle;
+use crate::plugins::{PluginInfo, PluginRuntimeHandle};
 use crate::state::config::{AppConfigPatch, find_executable, is_executable};
 
 pub mod config;
@@ -69,6 +69,7 @@ pub struct AppState {
     pub audio_player: AudioPlayer,
     pub favorite_samples: HashSet<PathBuf>,
     pub plugin_handle: PluginRuntimeHandle,
+    pub loaded_plugins_info: Vec<PluginInfo>,
 
     app_config: AppConfig,
 }
@@ -82,6 +83,7 @@ impl AppState {
             plugin_handle: PluginRuntimeHandle::spawn(),
 
             app_config: AppConfig::default(),
+            loaded_plugins_info: Vec::new(),
         }
     }
 
@@ -117,6 +119,8 @@ impl AppState {
                 Err(err) => eprintln!("Failed to load plugin '{name}'.\n\t{err}"),
             }
         }
+
+        self.loaded_plugins_info = self.plugin_handle.get_all_plugins_info();
 
         Ok(())
     }

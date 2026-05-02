@@ -9,12 +9,13 @@ mod theme;
 
 pub use ffmpeg::*;
 pub use theme::{Theme, ThemeType};
+use ts_rs::TS;
 
 use crate::state::app_paths;
 
-#[derive(Debug, Default, Serialize, Deserialize, Patch)]
+#[derive(Debug, Default, Serialize, Deserialize, Patch, TS)]
 #[patch(attribute(derive(Debug, Deserialize)))]
-#[patch(attribute(serde(rename_all = "camelCase")))]
+#[ts(export)]
 pub struct AppConfig {
     pub tracked_dirs: HashSet<PathBuf>,
     pub ffmpeg_path: Option<PathBuf>,

@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use crate::AStr;
+use crate::{AStr, plugins::PluginId};
 
 pub struct HostState {
-    pub storage: HashMap<(AStr, AStr), Vec<u8>>,
+    pub storage: HashMap<(PluginId, AStr), Vec<u8>>,
 }
 
 impl HostState {
@@ -13,7 +13,7 @@ impl HostState {
         }
     }
 
-    pub fn get_item(&self, plugin_id: AStr, key: AStr) -> Option<Vec<u8>> {
+    pub fn get_item(&self, plugin_id: PluginId, key: AStr) -> Option<Vec<u8>> {
         self.storage.get(&(plugin_id, key)).cloned()
     }
 

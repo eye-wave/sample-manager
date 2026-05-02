@@ -6,10 +6,7 @@ use wasmtime::{Instance, TypedFunc};
 
 use crate::{
     AStr,
-    plugins::{
-        manifest::{PluginInfo, PluginManifest},
-        runner::PluginRunner,
-    },
+    plugins::{manifest::PluginManifest, runner::PluginRunner},
     state::samples::SearchRequest,
 };
 
@@ -18,7 +15,9 @@ mod loader;
 mod manifest;
 mod runner;
 
-pub use loader::{unpack_plugin_metadata, unpack_plugin_zip};
+pub(super) use loader::unpack_plugin_zip;
+
+pub use manifest::{PluginId, PluginInfo};
 
 pub struct PluginInstance {
     instance: Instance,
@@ -39,7 +38,7 @@ pub enum PluginRunnerCommand {
         req: SearchRequest,
     },
     UnloadPlugin {
-        id: AStr,
+        id: PluginId,
     },
     GetAllPluginsInfo {
         reply_to: mpsc::Sender<Vec<PluginInfo>>,
@@ -80,7 +79,7 @@ impl PluginRuntimeHandle {
         rx.recv().unwrap_or_default()
     }
 
-    pub fn unload(&self, id: impl Into<AStr>) {
-        let _ = self.sender.send(Cmd::UnloadPlugin { id: id.into() });
+    pub fn unload(&self, id: PluginId) {
+        let _ = self.sender.send(Cmd::UnloadPlugin { id });
     }
 }

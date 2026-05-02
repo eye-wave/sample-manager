@@ -103,7 +103,7 @@ function createPlayerHandle() {
     pause,
     seek(pos: number) {
       if (playerState === PAUSED) resume();
-      invoke(IPC.PLAYER_SEEK, pos as unknown as string);
+      invoke(IPC.PLAYER_SEEK, pos);
     },
   };
 }

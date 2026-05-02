@@ -109,6 +109,7 @@ function commonDictionary(html: string) {
     "style",
     "dataset",
     "preventDefault",
+    "querySelectorAll",
     "querySelector",
     "setAttribute",
     "textContent",

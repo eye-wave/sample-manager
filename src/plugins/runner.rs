@@ -4,6 +4,7 @@ use std::sync::{Arc, mpsc};
 
 use wasmtime::{Caller, Engine, Linker, Module, Store};
 
+use crate::plugins::PluginId;
 use crate::{
     AStr, AnyResult,
     plugins::{
@@ -15,7 +16,7 @@ use crate::{
 pub(super) struct PluginRunner {
     engine: Engine,
     store: Store<HostState>,
-    plugins: HashMap<AStr, PluginInstance>,
+    plugins: HashMap<PluginId, PluginInstance>,
 }
 
 impl PluginRunner {

@@ -46,7 +46,7 @@ const createVisualNode = (section: Element) => {
     iconEl,
 
     updateCount(count: number | null = null) {
-      if (countEl) countEl.nodeValue = count != null ? (count as unknown as string) : "";
+      if (countEl) countEl.nodeValue = count != null ? count : "";
     },
 
     toggle() {

@@ -13,7 +13,7 @@ function createPagination() {
 
   function makeButton(label: string | number, page?: number, cls?: string): HTMLButtonElement {
     const btn = template.cloneNode(true) as HTMLButtonElement;
-    btn.textContent = label as unknown as string;
+    btn.textContent = label;
     if (cls) btn.classList.add(cls);
     if (page !== null) {
       btn.id = `page_${page}`;

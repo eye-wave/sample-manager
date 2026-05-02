@@ -27,6 +27,12 @@ input[type="radio"] {
   display: none;
 }
 
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 // --- Base ------------------------------------
 
 body {
@@ -73,6 +79,7 @@ body {
 }
 
 @mixin form-input {
+  -moz-appearance: textfield;
   appearance: none;
   background: var(--bg-hover);
   border: 1px solid var(--border);
@@ -724,7 +731,7 @@ dialog {
   border: 1px solid var(--border);
   width: 100%;
   max-width: 680px;
-  height: 600px;
+  height: 640px;
   overflow: hidden;
   font-family: var(--font-sans, system-ui, sans-serif);
 
@@ -858,6 +865,19 @@ dialog {
     &:hover {
       background: var(--accent-dim);
       border-color: var(--accent-dim);
+    }
+  }
+
+  &-surface {
+    color: var(--text-muted);
+    background: var(--bg-base);
+    border-color: var(--bg-surface);
+
+    &.active,
+    &:hover {
+      background: var(--bg-surface);
+      border-color: var(--accent);
+      color: var(--text-primary);
     }
   }
 }

@@ -7,6 +7,7 @@ use crate::{
 fn patch_config(body: IPCBody) -> IPCResponse {
     crate::with_state_mut!(body, state, {
         let patch: AppConfigPatch = serde_json::from_str(&body.req)?;
+        println!("received patch: {patch:?}");
 
         state.mutate_config_field(patch);
 
