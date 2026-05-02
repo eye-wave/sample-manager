@@ -114,6 +114,10 @@ fn decode_thread_loop(
                 DecodeCommand::Start { path } => {
                     if let Ok(decoder) = init_decoder(&path, audio_state.clone(), &stream_config) {
                         current = Some(decoder);
+                        audio_state.clear_flag(PlayerFlags::DRAINING);
+                        audio_state.set_flag(PlayerFlags::FLUSHING);
+                        std::thread::sleep(Duration::from_millis(5));
+                        audio_state.clear_flag(PlayerFlags::FLUSHING);
                         audio_state.set_state(PlayerFlags::PLAYING);
                     }
                 }
@@ -154,14 +158,23 @@ fn decode_thread_loop(
             continue;
         }
 
-        if rb_prod.occupied_len() > REFILL_TARGET {
+        let estimated_samples = {
+            let len_ms = audio_state.estimated_audio_len.load(Ordering::Relaxed) as usize;
+            let rate = audio_state.sample_rate.load(Ordering::Relaxed) as usize;
+            let channels = stream_config.channels() as usize;
+            (len_ms * rate * channels) / 1000
+        };
+
+        let effective_target = REFILL_TARGET.min(estimated_samples / 2);
+
+        if rb_prod.occupied_len() > effective_target {
             std::thread::sleep(Duration::from_millis(1));
             continue;
         }
 
         if let Err(e) = decode_one_packet(decoder_state, &mut rb_prod) {
             if let DecodeError::EndOfFile = e {
-                audio_state.set_state(PlayerFlags::STOPPED);
+                audio_state.set_state(PlayerFlags::DRAINING);
             } else {
                 eprintln!("decode error: {e}");
             }

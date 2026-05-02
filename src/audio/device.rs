@@ -3,7 +3,7 @@ use std::sync::atomic::Ordering;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Stream, SupportedStreamConfig};
-use ringbuf::traits::Consumer;
+use ringbuf::traits::{Consumer, Observer};
 use ringbuf::wrap::caching::Caching;
 use ringbuf::{HeapRb, SharedRb, storage::Heap, traits::Split};
 
@@ -95,6 +95,12 @@ fn audio_loop<S>(
 
     let paused = f.contains(PlayerFlags::PAUSED);
     let flushing = f.contains(PlayerFlags::FLUSHING);
+    let draining = f.contains(PlayerFlags::DRAINING);
+
+    if draining && rb_cons.is_empty() {
+        shared_state.set_state(PlayerFlags::STOPPED);
+        shared_state.clear_flag(PlayerFlags::DRAINING);
+    }
 
     if paused || flushing {
         if flushing {
@@ -109,6 +115,7 @@ fn audio_loop<S>(
         for s in data.iter_mut() {
             *s = S::EQUILIBRIUM;
         }
+
         return;
     }
 

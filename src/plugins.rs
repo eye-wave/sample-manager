@@ -14,8 +14,11 @@ use crate::{
 };
 
 mod host;
+mod loader;
 mod manifest;
 mod runner;
+
+pub use loader::{unpack_plugin_metadata, unpack_plugin_zip};
 
 pub struct PluginInstance {
     instance: Instance,

@@ -13,6 +13,7 @@ bitflags::bitflags! {
         const STOPPED      = 1 << 2;
         const SEEK_PENDING = 1 << 3;
         const FLUSHING     = 1 << 4;
+        const DRAINING     = 1 << 5;
     }
 }
 
@@ -106,6 +107,7 @@ impl PlayerHandle {
     }
 
     pub fn stop(&self) {
+        self.shared.clear_flag(PlayerFlags::DRAINING);
         self.shared.set_state(PlayerFlags::STOPPED);
         self.shared.set_flag(PlayerFlags::FLUSHING);
     }
