@@ -22,7 +22,7 @@ fn get_config_as_json(body: IPCBody) -> IPCResponse {
 
 fn get_config_field(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
-        let field: ConfigField = serde_json::from_str(&body.req)?;
+        let field: ConfigField = serde_json::from_str(&format!("\"{}\"", body.req))?;
         state.get_config().get_field_as_json(field)?.finish()
     })
 }

@@ -25,14 +25,15 @@ pub struct AppConfig {
     pub color_theme: Option<String>,
 }
 
-#[derive(Deserialize)]
 #[allow(non_camel_case_types)]
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum ConfigField {
-    tracked_dirs,
-    ffmpeg_path,
-    sidebar_width,
-    plugins,
-    color_theme,
+    TrackedDirs,
+    FfmpegPath,
+    SidebarWidth,
+    Plugins,
+    ColorTheme,
 }
 
 impl AppConfig {
@@ -61,11 +62,11 @@ impl AppConfig {
 
     pub fn get_field_as_json(&self, field: ConfigField) -> Result<String, serde_json::Error> {
         match field {
-            ConfigField::tracked_dirs => serde_json::to_string(&self.tracked_dirs),
-            ConfigField::ffmpeg_path => serde_json::to_string(&self.ffmpeg_path),
-            ConfigField::sidebar_width => serde_json::to_string(&self.sidebar_width),
-            ConfigField::plugins => serde_json::to_string(&self.plugins),
-            ConfigField::color_theme => serde_json::to_string(&self.color_theme),
+            ConfigField::TrackedDirs => serde_json::to_string(&self.tracked_dirs),
+            ConfigField::FfmpegPath => serde_json::to_string(&self.ffmpeg_path),
+            ConfigField::SidebarWidth => serde_json::to_string(&self.sidebar_width),
+            ConfigField::Plugins => serde_json::to_string(&self.plugins),
+            ConfigField::ColorTheme => serde_json::to_string(&self.color_theme),
         }
     }
 

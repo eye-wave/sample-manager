@@ -12,7 +12,7 @@ export async function initSidebarResize() {
   const sidebar = sidebar_container__;
   const handle = sidebar_resize__;
 
-  const saved = +(await invoke(IPC.GET_CONFIG_FIELD, `"SidebarWidth"`));
+  const saved = +(await invoke(IPC.GET_CONFIG_FIELD, `sidebarWidth`));
   if (saved) sidebar.style.width = `${saved}px`;
 
   let startX = 0;
@@ -30,10 +30,7 @@ export async function initSidebarResize() {
     d.body.style.cursor = "";
     d.body.style.userSelect = "";
 
-    await invoke(
-      IPC.UPDATE_CONFIG_FIELD,
-      JSON.stringify({ type: "SidebarWidth", value: width }),
-    );
+    await invoke(IPC.PATCH_CONFIG, `{"sidebarWidth":${width}}`);
 
     w.removeEventListener("mousemove", onMove);
     w.removeEventListener("mouseup", onUp);
