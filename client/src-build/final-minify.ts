@@ -93,6 +93,7 @@ function shortenHtmlIds(html: string): string {
 function commonDictionary(html: string) {
   const keywords = [
     "addEventListener",
+    "removeEventListener",
     "appendChild",
     "beforeend",
     "classList",
@@ -103,13 +104,17 @@ function commonDictionary(html: string) {
     "insertBefore",
     "keydown",
     "onclick",
+    "clientX",
+    "clientY",
+    "style",
+    "dataset",
     "preventDefault",
     "querySelector",
     "setAttribute",
     "textContent",
   ];
 
-  const generateId = (i: number) => "d" + i.toString(36);
+  const generateId = (i: number) => "D" + i.toString(36);
 
   let dictCode = "const ";
 

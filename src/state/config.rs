@@ -1,6 +1,7 @@
 use std::{collections::HashSet, fs, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
+use struct_patch::Patch;
 
 mod color;
 mod ffmpeg;
@@ -11,28 +12,27 @@ pub use theme::{Theme, ThemeType};
 
 use crate::state::app_paths;
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, Patch)]
+#[patch(attribute(derive(Debug, Deserialize)))]
+#[patch(attribute(serde(rename_all = "camelCase")))]
 pub struct AppConfig {
     pub tracked_dirs: HashSet<PathBuf>,
     pub ffmpeg_path: Option<PathBuf>,
+    #[serde(default)]
+    pub sidebar_width: u16,
 
     pub plugins: HashSet<String>,
     pub color_theme: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-pub enum ListModification {
-    Add(String),
-    Remove(String),
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type", content = "value")]
+#[derive(Deserialize)]
+#[allow(non_camel_case_types)]
 pub enum ConfigField {
-    TrackedDirs(ListModification),
-    FFMpegPath(String),
-    Plugins(ListModification),
-    ColorTheme(String),
+    tracked_dirs,
+    ffmpeg_path,
+    sidebar_width,
+    plugins,
+    color_theme,
 }
 
 impl AppConfig {
@@ -59,30 +59,17 @@ impl AppConfig {
         })
     }
 
-    pub fn mutate_config_field(&mut self, m: ConfigField) {
-        use ListModification as M;
-
-        match m {
-            ConfigField::TrackedDirs(s) => {
-                match s {
-                    M::Add(s) => self.tracked_dirs.insert(PathBuf::from(s)),
-                    M::Remove(s) => self.tracked_dirs.remove(&PathBuf::from(s)),
-                };
-            }
-            ConfigField::FFMpegPath(s) => {
-                if s.is_empty() {
-                    self.ffmpeg_path = None;
-                }
-
-                self.ffmpeg_path = Some(PathBuf::from(s));
-            }
-            ConfigField::Plugins(s) => {
-                match s {
-                    M::Add(s) => self.plugins.insert(s),
-                    M::Remove(s) => self.plugins.remove(&s),
-                };
-            }
-            ConfigField::ColorTheme(s) => self.color_theme = Some(s),
+    pub fn get_field_as_json(&self, field: ConfigField) -> Result<String, serde_json::Error> {
+        match field {
+            ConfigField::tracked_dirs => serde_json::to_string(&self.tracked_dirs),
+            ConfigField::ffmpeg_path => serde_json::to_string(&self.ffmpeg_path),
+            ConfigField::sidebar_width => serde_json::to_string(&self.sidebar_width),
+            ConfigField::plugins => serde_json::to_string(&self.plugins),
+            ConfigField::color_theme => serde_json::to_string(&self.color_theme),
         }
+    }
+
+    pub fn mutate_config_field(&mut self, patch: AppConfigPatch) {
+        self.apply(patch);
     }
 }

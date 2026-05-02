@@ -32,6 +32,7 @@ serde = { version = "1.0.228", default-features = false, features = [
 serde_json = { version = "1.0.149", default-features = false, features = [
   "alloc",
 ] }
+struct-patch = "0.11.0"
 symphonia = { version = "0.5.5", features = ["mp3", "wav", "vorbis"] }
 tao = "0.35.0"
 thiserror = "2.0.18"

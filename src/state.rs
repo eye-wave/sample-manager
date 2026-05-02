@@ -7,7 +7,7 @@ use crate::AnyResult;
 use crate::audio::AudioPlayer;
 use crate::ipc::IPCMessage;
 use crate::plugins::PluginRuntimeHandle;
-use crate::state::config::{ConfigField, find_executable, is_executable};
+use crate::state::config::{AppConfigPatch, find_executable, is_executable};
 
 pub mod config;
 pub mod samples;
@@ -160,8 +160,8 @@ impl AppState {
         &self.app_config
     }
 
-    pub fn mutate_config_field(&mut self, m: ConfigField) {
-        self.app_config.mutate_config_field(m);
+    pub fn mutate_config_field(&mut self, patch: AppConfigPatch) {
+        self.app_config.mutate_config_field(patch);
         self.update_config(|_| {});
     }
 }

@@ -4,7 +4,6 @@
   padding: 0;
   font-family: inherit;
   font-size: inherit;
-
   scrollbar-width: none;
 
   &::-webkit-scrollbar {
@@ -18,14 +17,17 @@ body {
   overflow: hidden;
 }
 
-button, input {
+button,
+input {
   outline: none;
   border: 0;
 }
 
-input[type=radio] {
+input[type="radio"] {
   display: none;
 }
+
+// --- Base ------------------------------------
 
 body {
   background: var(--bg-base);
@@ -36,25 +38,97 @@ body {
   flex-direction: column;
 }
 
-#titlebar_handle__ {
-  flex: 1;
+// --- Helpers ---------------------------------
+
+%label-micro {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
+
+%tag-base {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: calc(var(--radius) / 4);
+}
+
+%icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+%list-grid {
+  display: grid;
+  grid-template-columns: 2fr 60px 60px 120px;
+  padding: 0 14px;
+}
+
+@mixin form-input {
+  appearance: none;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 5px 10px;
+  outline: none;
+  min-width: 0;
+  font-family: inherit;
+  transition: border-color 0.15s;
+  width: 100%;
+  max-width: 320px;
+
+  &:focus {
+    border-color: var(--border-active);
+    background: var(--bg-active);
+  }
+}
+
+// --- Layout ----------------------------------
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+// --- Titlebar --------------------------------
 
 .titlebar {
   display: flex;
   background: var(--bg-base);
+
+  #titlebar_handle__ {
+    flex: 1;
+  }
 }
 
 .btn-group {
   display: flex;
   background: var(--bg-panel);
-  border-radius: calc(var(--radius) /3 );
+  border-radius: calc(var(--radius) / 3);
   margin: 2px;
 
   button {
     font-weight: 600;
     border: 0;
-    border-radius: calc(var(--radius) /3 );
+    border-radius: calc(var(--radius) / 3);
     background: var(--bg-panel);
     color: var(--accent);
     width: 16px;
@@ -67,12 +141,7 @@ body {
   }
 }
 
-.app {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
-}
+// --- Topbar ----------------------------------
 
 .topbar {
   display: flex;
@@ -100,6 +169,7 @@ body {
   &-btn {
     display: flex;
     gap: 4px;
+    align-items: center;
     background: var(--bg-surface);
     border: 1px solid var(--border);
     color: var(--text-secondary);
@@ -114,6 +184,8 @@ body {
     }
   }
 }
+
+// --- Search ----------------------------------
 
 .search-wrap {
   display: flex;
@@ -143,7 +215,7 @@ body {
     background: none;
     color: var(--text-primary);
     min-width: 80px;
-    flex:1;
+    flex: 1;
 
     &::placeholder {
       color: var(--text-muted);
@@ -151,27 +223,50 @@ body {
   }
 }
 
-.main {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-}
+// --- Sidebar ---------------------------------
 
 .sidebar {
   width: 220px;
+  min-width: 140px;
+  max-width: 480px;
   background: var(--bg-panel);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  position: relative;
+
+  &-resize {
+    position: absolute;
+    top: 0;
+    right: -3px;
+    width: 6px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 10;
+
+    &::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 2px;
+      height: 100%;
+      background: var(--accent);
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    &:hover::after,
+    &.dragging::after {
+      opacity: 1;
+    }
+  }
 
   &-header {
+    @extend %label-micro;
     padding: 12px 14px 8px;
-    font-size: 10px;
-    font-weight: 500;
-    color: var(--text-muted);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
   }
 
   &-scroll {
@@ -186,6 +281,45 @@ body {
     margin: 8px 0;
   }
 }
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  color: var(--text-muted);
+  border-radius: var(--radius);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+  }
+}
+
+#tlib__:checked ~ label[for="tlib__"],
+#tfav__:checked ~ label[for="tfav__"] {
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.add-folder {
+  width: 100%;
+  background: var(--bg-surface);
+  border: 1px dashed var(--border);
+  color: var(--text-muted);
+  border-radius: var(--radius);
+  padding: 6px;
+  font-size: 11px;
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--accent-dim);
+    color: var(--accent-dim);
+  }
+}
+
+// --- Tree ------------------------------------
 
 .tree {
   &-section {
@@ -210,7 +344,8 @@ body {
 
     &.popup {
       position: absolute;
-      top: 0; left: 0;
+      top: 0;
+      left: 0;
       pointer-events: none;
       background: var(--bg-hover);
     }
@@ -250,7 +385,6 @@ body {
   &-icon {
     font-size: 13px;
   }
-
   &-name {
     flex: 1;
   }
@@ -260,7 +394,7 @@ body {
     color: var(--text-muted);
     background: var(--bg-surface);
     padding: 1px 5px;
-    border-radius: calc(var(--radius) /2);
+    border-radius: calc(var(--radius) / 2);
   }
 
   &-children {
@@ -272,26 +406,7 @@ body {
   }
 }
 
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  color: var(--text-muted);
-  border-radius: var(--radius);
-  cursor: pointer;
-
-  &:hover {
-    background: var(--bg-hover);
-    color: var(--text-secondary);
-  }
-}
-
-#tlib__:checked ~ label[for="tlib__"],
-#tfav__:checked ~ label[for="tfav__"] {
-  color: var(--accent);
-  background: var(--accent-glow);
-}
+// --- Center / List ---------------------------
 
 .center {
   flex: 1;
@@ -302,9 +417,7 @@ body {
 
 .list {
   &-header {
-    display: grid;
-    grid-template-columns: 2fr 60px 60px 120px;
-    padding: 0 14px;
+    @extend %list-grid;
     height: 36px;
     align-items: center;
     border-bottom: 1px solid var(--border);
@@ -313,15 +426,20 @@ body {
   }
 
   &-col {
-    font-size: 10px;
-    font-weight: 500;
-    color: var(--text-muted);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    @extend %label-micro;
     cursor: pointer;
 
     &:hover {
       color: var(--text-secondary);
+    }
+
+    &:nth-child(2),
+    &:nth-child(3) {
+      text-align: right;
+    }
+
+    &:nth-child(4) {
+      padding-left: 8px;
     }
   }
 
@@ -331,9 +449,7 @@ body {
   }
 
   &-item {
-    display: grid;
-    grid-template-columns: 2fr 60px 60px 120px;
-    padding: 0 14px;
+    @extend %list-grid;
     height: 36px;
     align-items: center;
     border-bottom: 1px solid var(--border);
@@ -353,25 +469,10 @@ body {
       .item-label {
         color: var(--text-primary);
       }
-
       .item-bpm {
         color: var(--accent);
       }
     }
-  }
-}
-
-.fav {
-  color: var(--text-muted);
-  flex-shrink: 0;
-  cursor: pointer;
-
-  &:hover {
-    color: var(--love);
-  }
-
-  &.liked {
-    color: var(--love);
   }
 }
 
@@ -410,6 +511,8 @@ body {
   }
 }
 
+// --- Tags ------------------------------------
+
 .tags {
   display: flex;
   gap: 5px;
@@ -417,9 +520,7 @@ body {
 }
 
 .tag {
-  font-size: 10px;
-  padding: 2px 7px;
-  border-radius: calc(var(--radius) / 4);
+  @extend %tag-base;
   background: var(--tag-bg);
   color: var(--tag-text);
 
@@ -432,6 +533,34 @@ body {
     }
   }
 }
+
+.add-tag {
+  @extend %tag-base;
+  border: 1px dashed var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  background: none;
+
+  &:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+}
+
+.fav {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--love);
+  }
+  &.liked {
+    color: var(--love);
+  }
+}
+
+// --- Preview ---------------------------------
 
 .preview {
   height: 160px;
@@ -473,13 +602,12 @@ body {
   width: 100%;
   height: 80px;
   background-image:
-    linear-gradient(var(--wave-a),var(--wave-b)),
-    linear-gradient(var(--bg-surface),var(--bg-hover));
+    linear-gradient(var(--wave-a), var(--wave-b)),
+    linear-gradient(var(--bg-surface), var(--bg-hover));
   background-position: left, right;
   background-repeat: no-repeat;
-
   mask-mode: luminance;
-  mask-image: linear-gradient( #000);
+  mask-image: linear-gradient(#000);
   mask-size: 100% 80px;
   mask-position: center;
 }
@@ -488,24 +616,28 @@ body {
   inset: 0;
   position: absolute;
   height: 80px;
-  width: 100%px;
+  width: 100%;
   pointer-events: none;
 }
 
-.add-tag {
-  font-size: 10px;
-  padding: 2px 8px;
-  border-radius: calc(var(--radius) / 4);
-  border: 1px dashed var(--border);
-  color: var(--text-muted);
-  cursor: pointer;
-  background: none;
+.controls {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
 
-  &:hover {
-    border-color: var(--accent);
-    color: var(--accent);
+  span {
+    width: 64px;
+  }
+
+  #time_cur__ {
+    text-align: right;
   }
 }
+
+// --- Bottom bar ------------------------------
 
 .bottombar {
   height: 28px;
@@ -543,38 +675,7 @@ body {
   }
 }
 
-.add-folder {
-  width: 100%;
-  background: var(--bg-surface);
-  border: 1px dashed var(--border);
-  color: var(--text-muted);
-  border-radius: var(--radius);
-  padding: 6px;
-  font-size: 11px;
-  cursor: pointer;
-
-  &:hover {
-    border-color: var(--accent-dim);
-    color: var(--accent-dim);
-  }
-}
-
-.controls {
-  border-top: 1px solid var(--border);
-  padding-top: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: center;
-
-  & span {
-    width: 64px;
-  }
-
-  & #time_cur__ {
-    text-align: right;
-  }
-}
+// --- Pagination ------------------------------
 
 #pagination__ {
   padding: 4px;
@@ -582,7 +683,7 @@ body {
   justify-content: center;
   gap: 4px;
 
-  & button {
+  button {
     padding: 4px 10px;
     border-radius: calc(var(--radius) / 4);
     color: var(--text-muted);
@@ -598,5 +699,300 @@ body {
       background: var(--bg-surface);
       border-color: transparent;
     }
+  }
+}
+
+// --- Dialog ----------------------------------
+
+dialog {
+  padding: 0;
+  border: none;
+  background: transparent;
+  max-width: 100vw;
+  max-height: 100vh;
+
+  &::backdrop {
+    background: #0000008c;
+  }
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  width: 100%;
+  max-width: 680px;
+  height: 600px;
+  overflow: hidden;
+  font-family: var(--font-sans, system-ui, sans-serif);
+
+  section {
+    padding: 8px;
+    background: var(--bg-base);
+    border-radius: var(--radius);
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+    height: 300px;
+    overflow-y: auto;
+  }
+
+  input[type="text"],
+  input[type="number"],
+  input[type="password"] {
+    @include form-input;
+  }
+
+  select {
+    @include form-input;
+    width: 180px;
+    max-width: 180px;
+    text-align: center;
+    text-align-last: center;
+  }
+
+  &-shell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    width: 100vw;
+    height: 100vh;
+  }
+
+  &-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 22px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  &-title {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    &-icon {
+      width: 20px;
+      height: 20px;
+      background: var(--accent-glow);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border-active);
+
+      svg {
+        display: block;
+      }
+    }
+  }
+
+  &-close-btn {
+    @extend %icon-btn;
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    color: var(--text-muted);
+
+    &:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+  }
+
+  &-body {
+    padding: 20px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  &-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 14px 22px 16px;
+    border-top: 1px solid var(--border);
+  }
+}
+
+// --- Buttons ---------------------------------
+
+.btn {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  font-family: inherit;
+  transition:
+    background 0.15s,
+    color 0.15s;
+
+  &-ghost {
+    background: none;
+    color: var(--text-muted);
+
+    &:hover {
+      background: var(--bg-hover);
+      color: var(--text-secondary);
+    }
+  }
+
+  &-primary {
+    background: var(--accent);
+    color: var(--bg-base);
+    border-color: var(--accent);
+
+    &:hover {
+      background: var(--accent-dim);
+      border-color: var(--accent-dim);
+    }
+  }
+}
+
+// --- Section label ---------------------------
+
+.section-label {
+  @extend %label-micro;
+  margin: 10px 0 4px;
+
+  &:first-child {
+    margin-top: 0;
+  }
+}
+
+// --- Field row -------------------------------
+
+.field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  background: var(--bg-surface);
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  gap: 16px;
+  transition: border-color 0.15s;
+
+  &:focus-within {
+    border-color: var(--border-active);
+  }
+
+  &-label {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    font-size: 13px;
+    color: var(--text-primary);
+    flex: 1;
+    white-space: nowrap;
+  }
+
+  &-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 1px;
+  }
+}
+
+// --- Plugin card -----------------------------
+
+.card {
+  color: var(--text-primary);
+  background: var(--bg-panel);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  width: 280px;
+  padding: 16px;
+  position: relative;
+
+  &-icon {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 32px;
+    height: 32px;
+    border-radius: calc(var(--radius) / 2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+
+    svg {
+      width: 32px;
+      height: 32px;
+    }
+  }
+
+  &-header {
+    margin-bottom: 8px;
+    padding-right: 40px;
+  }
+
+  &-name {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  &-version {
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+
+  &-description {
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.4;
+    margin: 0 0 12px 0;
+  }
+
+  &-capabilities {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  &-tag {
+    background: var(--bg-surface);
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+
+  &-hosts {
+    margin-bottom: 12px;
+    background: var(--bg-surface);
+    border-radius: 6px;
+    padding: 8px 10px;
+
+    ul {
+      max-height: 80px;
+      overflow-y: auto;
+      margin: 8px 0 0 0;
+      padding: 0 0 0 16px;
+      color: var(--text-secondary);
+      font-size: 11px;
+      line-height: 1.6;
+    }
+  }
+
+  button {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
   }
 }

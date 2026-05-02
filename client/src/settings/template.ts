@@ -19,7 +19,7 @@ export function createPluginCard(info: PluginInfo) {
 
     ${info.capabilities.network ? hosts(info.capabilities.network_allowlist) : ""}
 
-    <button class="btn btn--ghost">Configure</button>
+    <button class="btn btn-ghost">Configure</button>
   </div>`;
 }
 

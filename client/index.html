@@ -7,8 +7,6 @@
     <theme></theme>
     <link rel='stylesheet' href="/styles/__app__.scss" />
     <link rel='stylesheet' href="/styles/styles.scss" />
-    <link rel='stylesheet' href="/styles/settings.scss" />
-    <link rel='stylesheet' href="/styles/plugin.scss" />
 
     <title>SampleVault — Audio Sample Manager</title>
   </head>
@@ -46,28 +44,28 @@
         <dialog id="conf_dial__">
           <div class="dialog-shell">
             <div class="dialog" id="conf_dial_body__" role="dialog" aria-labelledby="settings-title">
-              <div class="dialog__header">
-                <p class="dialog__title">
-                  <span class="dialog__title-icon">
+              <div class="dialog-header">
+                <p class="dialog-title">
+                  <span class="dialog-title-icon">
                     <load src="assets/icons/settings.svg" />
                   </span>
                   Settings
                 </p>
-                <button id="dialog_close__" class="dialog__close-btn" aria-label="Close">
+                <button id="dialog_close__" class="dialog-close-btn" aria-label="Close">
                   <load src="assets/icons/close.svg" />
                 </button>
               </div>
 
-              <div class="dialog__body">
+              <div class="dialog-body">
                 <p class="section-label">Preferences</p>
 
                 <div class="field">
-                  <span class="field__label">App Theme</span>
+                  <span class="field-label">App Theme</span>
                   <select id="theme_select__"></select>
                 </div>
 
                 <div class="field">
-                  <span class="field__label">FFmpeg path</span>
+                  <span class="field-label">FFmpeg path</span>
                   <input type="text" id="ffmpeg_path__">
                 </div>
 
@@ -77,9 +75,9 @@
 
               <div style="flex:1"></div>
 
-              <div class="dialog__footer">
-                <button id="conf_reset__" class="btn btn--ghost">Reset to defaults</button>
-                <button id="conf_save__" class="btn btn--primary">Save changes</button>
+              <div class="dialog-footer">
+                <button id="conf_reset__" class="btn btn-ghost">Reset to defaults</button>
+                <button id="conf_save__" class="btn btn-primary">Save changes</button>
               </div>
             </div>
           </div>
@@ -89,7 +87,7 @@
 
       <div class="main">
         <!-- Sidebar -->
-        <div class="sidebar">
+        <div class="sidebar" id="sidebar_container__">
           <div style="padding:10px 8px 4px;display:flex;flex-direction:column;gap:2px">
             <input type="radio" name="tab" value="lib" id="tlib__" checked>
             <input type="radio" name="tab" value="fav" id="tfav__">
@@ -108,6 +106,7 @@
           <div style="padding:8px;border-top:1px solid var(--border)">
             <button id="add_folder__" class="add-folder">+ Add Folder</button>
           </div>
+          <div class="sidebar-resize" id="sidebar_resize__"></div>
         </div>
 
         <!-- Center panel -->

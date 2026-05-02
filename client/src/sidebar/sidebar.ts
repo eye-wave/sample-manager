@@ -6,7 +6,10 @@ import { invoke } from "../invoke/invoke";
 import { playerHandle } from "../player/player";
 import { parseVFS } from "./parse";
 import { renderNode } from "./render";
+import { initSidebarResize } from "./resize";
 import { NodeType, type VFSChild, VFSNode } from "./vfs";
+
+initSidebarResize();
 
 declare const sidebar__: HTMLDivElement;
 declare const add_folder__: HTMLButtonElement;
@@ -28,7 +31,8 @@ function onHover(e: Event) {
 
   popup.textContent = el.textContent;
   popup.style.display = "";
-  popup.style.top = el.offsetTop - sidebar__.scrollTop + "px";
+  // Temporary fix i will need to look into why 65.5 offset was needed
+  popup.style.top = el.offsetTop - sidebar__.scrollTop + 65.5 + "px";
   popup.style.left = el.offsetLeft - 8 + "px";
 }
 

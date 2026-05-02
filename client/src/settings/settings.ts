@@ -35,12 +35,11 @@ function themeSelectionTemplate(type: "light" | "dark", themes: string[]) {
 conf_btn__.onclick = async () => {
   conf_dial__.showModal();
 
-  const pluginsInfo: PluginInfo[] = await invoke(
-    IPC.GET_ALL_PLUGINS_INFO,
-    "freesound-search",
-  ).then((res) => JSON.parse(res));
+  const pluginsInfo: PluginInfo[] = await invoke(IPC.GET_ALL_PLUGINS_INFO).then((res) =>
+    JSON.parse(res),
+  );
 
-  const settings = await invoke(IPC.GET_SETTINGS);
+  const settings = await invoke(IPC.GET_CONFIG_AS_JSON);
   console.log(JSON.parse(settings));
 
   plugin_settings__.innerHTML = pluginsInfo.map((i) => createPluginCard(i)).join("");
@@ -101,11 +100,5 @@ w.addEventListener("keydown", (e) => {
 });
 
 ffmpeg_path__.oninput = () => {
-  invoke(
-    IPC.UPDATE_CONFIG_FIELD,
-    JSON.stringify({
-      type: "FFMpegPath",
-      value: ffmpeg_path__.value,
-    }),
-  );
+  invoke(IPC.PATCH_CONFIG, JSON.stringify({ ffmpegPath: ffmpeg_path__.value }));
 };

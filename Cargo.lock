@@ -2698,6 +2698,7 @@ dependencies = [
  "secrecy",
  "serde",
  "serde_json",
+ "struct-patch",
  "symphonia",
  "tao",
  "thiserror 2.0.18",
@@ -2934,6 +2935,26 @@ dependencies = [
  "phf_shared",
  "proc-macro2",
  "quote",
+]
+
+[[package]]
+name = "struct-patch"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6647f17706475257679fb9a4a71d85b222633d398d685010d7cc2f4c99de375"
+dependencies = [
+ "struct-patch-derive",
+]
+
+[[package]]
+name = "struct-patch-derive"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "203b436d4379c929ff3e7340b89c3a57ca3be8a76b3376448176575e8ca3f258"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
 ]
 
 [[package]]
