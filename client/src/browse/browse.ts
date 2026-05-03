@@ -71,7 +71,7 @@ export async function search(query: string, tags: string[], offset: number, fav 
     query,
     limit: PAGE_SIZE,
     offset: (offset - 1) * PAGE_SIZE,
-    tags: tags.join(","),
+    tags,
     is_fav: fav,
   });
 

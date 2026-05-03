@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, mpsc};
-use std::{fs, io};
 
 use crate::AnyResult;
 use crate::audio::AudioPlayer;
@@ -9,60 +9,12 @@ use crate::ipc::IPCMessage;
 use crate::plugins::{PluginInfo, PluginRuntimeHandle};
 use crate::state::config::{AppConfigPatch, find_executable, is_executable};
 
+pub mod app_paths;
 pub mod config;
 pub mod samples;
 
 use config::AppConfig;
 use samples::FsSample;
-
-pub mod app_paths {
-    use super::*;
-
-    pub const APP_NAME: &str = "SampleVault";
-
-    const PLUGIN_DIR: &str = "plug-ins";
-
-    fn cache_path() -> PathBuf {
-        dirs::cache_dir().unwrap().join(APP_NAME)
-    }
-
-    fn config_path() -> PathBuf {
-        dirs::config_local_dir().unwrap().join(APP_NAME)
-    }
-
-    pub fn config_file() -> PathBuf {
-        config_path().join("config.toml")
-    }
-
-    pub fn favorites_file() -> PathBuf {
-        cache_path().join(".favorites")
-    }
-
-    pub fn themes_path() -> PathBuf {
-        config_path().join("themes")
-    }
-
-    pub fn thumbnail_cache_path() -> PathBuf {
-        cache_path().join(".waves")
-    }
-
-    pub fn plugin_cache_path() -> PathBuf {
-        cache_path().join(PLUGIN_DIR)
-    }
-
-    pub fn plugin_config_path() -> PathBuf {
-        config_path().join(PLUGIN_DIR)
-    }
-
-    pub fn create_all_dirs() -> io::Result<()> {
-        fs::create_dir_all(thumbnail_cache_path())?;
-        fs::create_dir_all(themes_path())?;
-        fs::create_dir_all(plugin_cache_path())?;
-        fs::create_dir_all(plugin_config_path())?;
-
-        Ok(())
-    }
-}
 
 pub struct AppState {
     pub sample_registry: HashMap<Arc<Path>, FsSample>,

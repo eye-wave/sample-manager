@@ -10,7 +10,7 @@ pub fn app_handler(theme: Theme, req: Request<Vec<u8>>) -> Response<Cow<'static,
     let path = req.uri().path();
 
     if path.starts_with("/thumb/") {
-        return thumbnail_handler(&app_paths::thumbnail_cache_path(), req.uri());
+        return thumbnail_handler(app_paths::thumbnail_cache_path(), req.uri());
     }
 
     html_handler(theme)

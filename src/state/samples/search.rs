@@ -6,28 +6,22 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     AStr,
-    state::{AppState, samples::clean_up_string},
+    state::{
+        AppState,
+        samples::{SampleEntry, clean_up_string},
+    },
 };
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SearchRequest {
-    query: AStr,
-    limit: usize,
-    offset: usize,
-    tags: AStr,
-    is_fav: bool,
+    pub query: AStr,
+    pub limit: usize,
+    pub offset: usize,
+    pub tags: Vec<AStr>,
+    pub is_fav: bool,
 }
 
-#[allow(unused)]
-#[derive(Deserialize)]
-pub struct SampleResult {}
-
-pub fn search(req: &SearchRequest, state: &AppState) -> String {
-    let tags: Vec<&str> = req.tags.split(',').filter(|s| !s.is_empty()).collect();
-    let query = clean_up_string(&req.query);
-
-    let matcher = SkimMatcherV2::default().smart_case();
-
+pub fn search_local(req: &SearchRequest, state: &AppState) -> String {
     let scored = if req.is_fav {
         Either::Left(state.favorite_samples.iter().filter_map(|f| {
             let key = Path::new(f);
@@ -37,35 +31,41 @@ pub fn search(req: &SearchRequest, state: &AppState) -> String {
         Either::Right(state.sample_registry.values())
     };
 
-    let mut result = scored
-        .par_bridge()
-        .map(|s| {
-            if req.is_fav && query.is_empty() {
-                return (s, i64::MAX);
-            }
+    let found = filter_samples(scored.par_bridge(), req);
 
-            let score = s.score(&query, &tags, &matcher);
+    let files = found
+        .iter()
+        .map(|f| f.serialize(state.is_sample_fav(&f.path)))
+        .intersperse(",\n".into())
+        .collect::<String>();
+
+    format!("{{\"count\":{},\"files\":[{files}]}}", found.len())
+}
+
+pub fn filter_samples<'a, T: SampleEntry + Sync>(
+    entries: impl ParallelIterator<Item = &'a T>,
+    req: &SearchRequest,
+) -> Vec<&'a T> {
+    let query = clean_up_string(&req.query);
+    let matcher = SkimMatcherV2::default().smart_case();
+
+    let mut result: Vec<(&T, i64)> = entries
+        .map(|s| {
+            let score = if req.is_fav && query.is_empty() {
+                i64::MAX
+            } else {
+                s.score(&query, &req.tags, &matcher)
+            };
+
             (s, score)
         })
         .filter(|(_, score)| *score > 0)
-        .collect::<Vec<_>>();
+        .collect();
 
     result.sort_by_key(|&(_, score)| std::cmp::Reverse(score));
 
     let start = req.offset;
     let end = (start + req.limit).min(result.len());
 
-    let found = if start < result.len() {
-        &result[start..end]
-    } else {
-        &[]
-    };
-
-    let files = found
-        .iter()
-        .map(|(f, _)| f.serialize(state.is_sample_fav(&f.path)))
-        .intersperse(",\n".into())
-        .collect::<String>();
-
-    format!("{{\"count\":{},\"files\":[{files}]}}", result.len())
+    result[start..end].iter().map(|(s, _)| *s).collect()
 }

@@ -9,10 +9,13 @@ use crate::AStr;
 use crate::ipc::IPCMessage;
 use crate::state::AppState;
 
+mod data;
 mod search;
 mod tagger;
 
-pub use search::*;
+pub use data::*;
+
+pub use search::{SearchRequest, filter_samples, search_local};
 pub use tagger::tag_string;
 
 pub const SAMPLE_EXTENSIONS: &[&str] = &[
@@ -60,19 +63,25 @@ pub fn clean_up_string(input: &str) -> String {
         .to_lowercase()
 }
 
-impl FsSample {
-    pub fn new(path: Arc<Path>) -> Self {
-        let search_str = Arc::from(clean_up_string(&path.to_string_lossy()));
-        let tags = tag_string(&path.to_string_lossy());
+impl SampleEntry for FsSample {
+    // fn name(&self) -> &str {
+    //     self.path.file_name().and_then(|s| s.to_str()).unwrap_or("")
+    // }
 
-        Self {
-            path,
-            search_str,
-            tags,
-        }
-    }
+    // fn path(&self) -> &Path {
+    //     &self.path
+    // }
 
-    pub fn score<T: AsRef<str>>(&self, query: &str, tags: &[T], matcher: &SkimMatcherV2) -> i64 {
+    // fn meta<'a>(&'a self) -> SampleMetadataRef<'_, impl Iterator<Item = &str>> {
+    //     SampleMetadataRef {
+    //         bpm: None,
+    //         description: "",
+    //         sample_type: SampleType::OneShot,
+    //         tags: self.tags.iter().map(|s| s.as_ref()),
+    //     }
+    // }
+
+    fn score<T: AsRef<str>>(&self, query: &str, tags: &[T], matcher: &SkimMatcherV2) -> i64 {
         if !tags.is_empty() {
             let has_all = tags.iter().all(|t| self.tags.contains(&t.as_ref()));
             if !has_all {
@@ -83,6 +92,19 @@ impl FsSample {
         matcher
             .fuzzy_match(&self.search_str, query)
             .unwrap_or(i64::MIN)
+    }
+}
+
+impl FsSample {
+    pub fn new(path: Arc<Path>) -> Self {
+        let search_str = Arc::from(clean_up_string(&path.to_string_lossy()));
+        let tags = tag_string(&path.to_string_lossy());
+
+        Self {
+            path,
+            search_str,
+            tags,
+        }
     }
 
     pub fn serialize(&self, is_fav: bool) -> String {

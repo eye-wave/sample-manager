@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use crate::ipc::{IPCBody, IPCError, IPCResponse, IntoIPCResponse, Poisoned, ok};
 use crate::ipc_commands;
-use crate::state::samples::{SearchRequest, process_directories, search, tag_string};
+use crate::state::samples::{SearchRequest, process_directories, search_local, tag_string};
 
 fn add_sample_folder(body: IPCBody) -> IPCResponse {
     let path = body.req.as_ref();
@@ -61,7 +61,7 @@ fn start_sample_scan(body: IPCBody) -> IPCResponse {
 fn search_for_sample(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
         let req: SearchRequest = serde_json::from_str(&body.req)?;
-        search(&req, &state).finish()
+        search_local(&req, &state).finish()
     })
 }
 

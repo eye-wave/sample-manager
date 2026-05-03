@@ -37,14 +37,6 @@ impl Deref for PluginId {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, TS)]
-pub struct PluginMetadata {
-    pub id: PluginId,
-    pub name: AStr,
-    pub description: AStr,
-    pub version: AStr,
-}
-
 impl<'de> Deserialize<'de> for PluginId {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -53,6 +45,14 @@ impl<'de> Deserialize<'de> for PluginId {
         let s = String::deserialize(deserializer)?;
         PluginId::new(s.as_str()).map_err(serde::de::Error::custom)
     }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, TS)]
+pub struct PluginMetadata {
+    pub id: PluginId,
+    pub name: AStr,
+    pub description: AStr,
+    pub version: AStr,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -65,6 +65,11 @@ pub struct PluginManifest {
     pub capabilities: PluginCapabilities,
     #[serde(default)]
     pub config_schema: HashMap<AStr, SchemaField>,
+
+    /// Controls whether the plugin handles search itself (API call inside wasm)
+    /// or provides a flat index that the host searches.
+    #[serde(default)]
+    pub search_mode: SearchMode,
 }
 
 impl Deref for PluginManifest {
@@ -73,6 +78,32 @@ impl Deref for PluginManifest {
     fn deref(&self) -> &Self::Target {
         &self.meta
     }
+}
+
+/// How a plugin surfaces samples to the host.
+///
+/// `Delegated`  — plugin receives the `SearchRequest` and returns matching
+///                samples directly. Suitable for remote API plugins.
+///
+/// `HostIndexed` — plugin exposes `get_index()` which returns the full
+///                 sample list. The host caches it and handles searching
+///                 locally with the fuzzy matcher. Suitable for local
+///                 file-registry plugins.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SearchMode {
+    #[default]
+    Delegated,
+    HostIndexed {
+        /// How many seconds the host index cache is valid for.
+        /// After expiry the host calls `get_index()` again.
+        #[serde(default = "default_ttl")]
+        ttl_secs: u64,
+    },
+}
+
+fn default_ttl() -> u64 {
+    300 // 5 minutes
 }
 
 #[derive(Clone, Serialize, TS)]
@@ -117,15 +148,13 @@ pub struct PluginAssets {
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, TS)]
+#[serde(default)]
 pub struct PluginCapabilities {
-    #[serde(default)]
     pub storage: bool,
-    #[serde(default)]
     pub encrypted_storage: bool,
-    #[serde(default)]
     pub network: bool,
-    #[serde(default)]
     pub network_allowlist: Vec<String>,
+    pub filesystem: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
@@ -148,7 +177,6 @@ pub enum SchemaField {
         #[serde(default)]
         default: bool,
     },
-
     Select {
         label: AStr,
         options: Vec<AStr>,
@@ -157,7 +185,7 @@ pub enum SchemaField {
 }
 
 impl SchemaField {
-    fn with_fetched_value(
+    pub fn with_fetched_value(
         &self,
         plugin_id: PluginId,
         key: AStr,
@@ -165,7 +193,7 @@ impl SchemaField {
     ) -> SchemaFieldWithValue {
         SchemaFieldWithValue {
             field_type: self.clone(),
-            value: state.get_item(plugin_id, key).map(stringify_bytes),
+            value: state.get_item((plugin_id, key)).map(stringify_bytes),
         }
     }
 }
@@ -183,7 +211,6 @@ pub fn stringify_bytes(bytes: Vec<u8>) -> String {
         Err(err) => {
             let original_bytes = err.into_bytes();
             let encoded = general_purpose::STANDARD.encode(original_bytes);
-
             format!("base64:{}", encoded)
         }
     }

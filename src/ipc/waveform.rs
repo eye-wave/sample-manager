@@ -98,7 +98,7 @@ fn draw_audio_file(body: IPCBody) -> IPCResponse {
         let path = body.req.clone();
 
         let hashed = hash_path(&path);
-        let thumb_path = thumbnail_path(&hashed, &app_paths::thumbnail_cache_path());
+        let thumb_path = thumbnail_path(&hashed, app_paths::thumbnail_cache_path());
         let uri = thumbnail_uri(&hashed);
 
         if thumb_path.exists() {

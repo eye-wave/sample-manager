@@ -7,7 +7,7 @@ use wasmtime::{Instance, TypedFunc};
 use crate::{
     AStr,
     plugins::{manifest::PluginManifest, runner::PluginRunner},
-    state::samples::SearchRequest,
+    state::samples::{RawSampleEntry, SampleEntrySerialize, SearchRequest},
 };
 
 mod host;
@@ -20,11 +20,12 @@ pub(super) use loader::unpack_plugin_zip;
 pub use manifest::{PluginId, PluginInfo};
 
 pub struct PluginInstance {
-    instance: Instance,
+    pub instance: Instance,
     pub manifest: PluginManifest,
-    fn_search: TypedFunc<(u32, u32), u32>,
-    fn_alloc: TypedFunc<u32, u32>,
-    fn_free: TypedFunc<(u32, u32), ()>,
+    pub fn_search: TypedFunc<(u32, u32), u32>,
+    pub fn_get_index: Option<TypedFunc<(u32, u32), u32>>,
+    pub fn_alloc: TypedFunc<u32, u32>,
+    pub fn_free: TypedFunc<(u32, u32), ()>,
 }
 
 #[derive(Debug)]
@@ -34,8 +35,9 @@ pub enum PluginRunnerCommand {
         bytes: Vec<u8>,
     },
     Search {
-        id: AStr,
+        id: PluginId,
         req: SearchRequest,
+        reply_to: mpsc::SyncSender<Result<Vec<SampleEntrySerialize>, String>>,
     },
     UnloadPlugin {
         id: PluginId,
@@ -71,15 +73,34 @@ impl PluginRuntimeHandle {
         });
     }
 
+    pub fn search(
+        &self,
+        id: PluginId,
+        req: SearchRequest,
+    ) -> Result<Vec<SampleEntrySerialize>, String> {
+        let (tx, rx) = mpsc::sync_channel(1);
+        self.sender
+            .send(Cmd::Search {
+                id,
+                req,
+                reply_to: tx,
+            })
+            .map_err(|e| e.to_string())?;
+
+        rx.recv().map_err(|e| e.to_string())?
+    }
+
     pub fn get_all_plugins_info(&self) -> Vec<PluginInfo> {
         let (tx, rx) = std::sync::mpsc::channel();
-
-        self.sender.send(Cmd::GetAllPluginsInfo { reply_to: tx });
-
+        let _ = self.sender.send(Cmd::GetAllPluginsInfo { reply_to: tx });
         rx.recv().unwrap_or_default()
     }
 
     pub fn unload(&self, id: PluginId) {
         let _ = self.sender.send(Cmd::UnloadPlugin { id });
+    }
+
+    pub fn shutdown(&self) {
+        let _ = self.sender.send(Cmd::Shutdown);
     }
 }

@@ -1,15 +1,8 @@
-use std::{fs, io::Read, path::Path, sync::Arc};
+use std::{io::Read, sync::Arc};
 
-use crate::{
-    AnyResult,
-    plugins::{
-        host::{self, HostState},
-        manifest::{PluginInfo, PluginManifest},
-    },
-};
+use crate::{AnyResult, plugins::manifest::PluginManifest};
 
 pub fn unpack_plugin_zip(bytes: &[u8]) -> AnyResult<(PluginManifest, Vec<u8>)> {
-    use std::io::Read;
     let cursor = std::io::Cursor::new(bytes);
     let mut zip = zip::ZipArchive::new(cursor)?;
 
@@ -24,13 +17,10 @@ pub fn unpack_plugin_zip(bytes: &[u8]) -> AnyResult<(PluginManifest, Vec<u8>)> {
         let mut f = zip.by_name(path.as_ref()).ok()?;
         let mut s = String::new();
         f.read_to_string(&mut s).ok()?;
-
         Some(Arc::from(s))
     });
 
     manifest.assets.icon = svg_icon;
-
-    let _wasm_path = &manifest.assets.entry;
 
     let wasm_bytes = if let Some(path) = &manifest.assets.entry {
         let mut f = zip.by_name(path)?;
