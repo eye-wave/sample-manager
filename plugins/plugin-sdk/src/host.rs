@@ -3,11 +3,9 @@ unsafe extern "C" {
     pub fn log(ptr: *const u8, len: u32);
 
     pub fn storage_get(key_ptr: *const u8, key_len: u32, out_ptr: *mut u8, out_cap: u32) -> u32;
-
     pub fn storage_set(key_ptr: *const u8, key_len: u32, val_ptr: *const u8, val_len: u32);
 
     pub fn secret_get(key_ptr: *const u8, key_len: u32, out_ptr: *mut u8, out_cap: u32) -> u32;
-
     pub fn secret_set(key_ptr: *const u8, key_len: u32, val_ptr: *const u8, val_len: u32);
 
     pub fn http_fetch(
@@ -18,4 +16,12 @@ unsafe extern "C" {
         out_ptr: *mut u8,
         out_cap: u32,
     ) -> i32;
+
+    /// Read a file from the host filesystem.
+    /// Returns bytes written (>= 0) or a negative error code:
+    ///   -1  capability not granted
+    ///   -2  path is not valid utf-8
+    ///   -3  path traversal detected
+    ///   -4  file not found or read error
+    pub fn fs_read(path_ptr: *const u8, path_len: u32, out_ptr: *mut u8, out_cap: u32) -> i32;
 }

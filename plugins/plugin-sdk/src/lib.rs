@@ -1,20 +1,24 @@
 mod host;
 
+pub mod fs;
 pub mod http;
 pub mod json;
 pub mod mem;
 pub mod storage;
-pub mod types;
+
+pub mod plugin_wire {
+    pub use plugin_wire::*;
+}
 
 pub use json::JsonValue;
-pub use types::{SampleResult, SearchRequest};
 
 pub mod prelude {
+    pub use super::fs::*;
     pub use super::http::*;
     pub use super::json::*;
     pub use super::mem::*;
+    pub use super::plugin_wire::*;
     pub use super::storage::*;
-    pub use super::types::*;
 }
 
 pub fn log(msg: &str) {

@@ -758,6 +758,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "discord"
+version = "0.1.0"
+dependencies = [
+ "plugin_sdk",
+]
+
+[[package]]
 name = "dispatch2"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1000,15 +1007,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
-]
-
-[[package]]
-name = "freesound-plugin"
-version = "0.1.0"
-dependencies = [
- "plugin_base",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -2332,11 +2330,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
-name = "plugin_base"
+name = "plugin_sdk"
 version = "0.1.0"
 dependencies = [
+ "plugin_wire",
  "tinyjson",
 ]
+
+[[package]]
+name = "plugin_wire"
+version = "0.1.0"
 
 [[package]]
 name = "portable-atomic"
@@ -2708,6 +2711,7 @@ dependencies = [
  "drag",
  "fuzzy-matcher",
  "paste",
+ "plugin_wire",
  "postcard",
  "rayon",
  "ringbuf",
@@ -2906,6 +2910,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
 dependencies = [
  "lock_api",
+]
+
+[[package]]
+name = "splice"
+version = "0.1.0"
+dependencies = [
+ "plugin_sdk",
 ]
 
 [[package]]

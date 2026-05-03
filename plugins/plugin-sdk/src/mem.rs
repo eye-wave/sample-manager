@@ -1,10 +1,10 @@
-/// Write [u32 len LE][bytes] into a new allocation and return the pointer.
-/// The host reads this layout from every `search` call return value.
-pub fn write_response(data: &[u8]) -> u32 {
-    let total = 4 + data.len();
-    let mut buf = Vec::with_capacity(total);
-    buf.extend_from_slice(&(data.len() as u32).to_le_bytes());
-    buf.extend_from_slice(data);
+use plugin_wire::{WireEntry, write_frame};
+
+/// Serialize `entries` into a frame buffer, leak it, and return the pointer.
+/// The host reads this pointer as the return value of `search` / `get_index`,
+/// then calls `free(ptr, frame_size)` once it has parsed the frame.
+pub fn write_frame_ptr(entries: &[WireEntry]) -> u32 {
+    let buf = write_frame(entries);
     let ptr = buf.as_ptr() as u32;
     std::mem::forget(buf);
     ptr
@@ -19,7 +19,7 @@ pub unsafe fn read_request<'a>(ptr: u32, len: u32) -> &'a [u8] {
 }
 
 /// Macro that emits the `alloc` and `free` exports every plugin must have.
-/// Put `plugin_base::export_allocator!()` at the crate root.
+/// Put `plugin_sdk::export_allocator!()` at the crate root.
 #[macro_export]
 macro_rules! export_allocator {
     () => {
