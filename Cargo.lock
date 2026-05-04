@@ -758,13 +758,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "discord"
-version = "0.1.0"
-dependencies = [
- "plugin_sdk",
-]
-
-[[package]]
 name = "dispatch2"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2333,13 +2326,17 @@ checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 name = "plugin_sdk"
 version = "0.1.0"
 dependencies = [
+ "paste",
  "plugin_wire",
- "tinyjson",
 ]
 
 [[package]]
 name = "plugin_wire"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "ts-rs",
+]
 
 [[package]]
 name = "portable-atomic"
@@ -2913,13 +2910,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "splice"
-version = "0.1.0"
-dependencies = [
- "plugin_sdk",
-]
-
-[[package]]
 name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3350,12 +3340,6 @@ dependencies = [
  "cc",
  "libc",
 ]
-
-[[package]]
-name = "tinyjson"
-version = "2.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ab95735ea2c8fd51154d01e39cf13912a78071c2d89abc49a7ef102a7dd725a"
 
 [[package]]
 name = "tinystr"

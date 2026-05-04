@@ -37,7 +37,7 @@ const pool: BrowseRow[] = Array.from({ length: POOL_SIZE }, (_, i) =>
 TagInput(search__, search_tags__, pool);
 
 for (const item of pool) {
-  list_scroll__.insertBefore(item.el, pagination__);
+  list_scroll__.insertBefore(item.el as Node, pagination__);
 }
 
 export function getCurrentSample(): [string, boolean] | null {
@@ -59,14 +59,14 @@ listen("set-fav", (payload) => {
 });
 
 export type FSSample = {
+  name: string;
   path: string;
   tags: string[];
   fav: boolean;
 };
 
+const PAGE_SIZE = 50;
 export async function search(query: string, tags: string[], offset: number, fav = false) {
-  const PAGE_SIZE = 50;
-
   const params = JSON.stringify({
     query,
     limit: PAGE_SIZE,
@@ -75,18 +75,23 @@ export async function search(query: string, tags: string[], offset: number, fav 
     is_fav: fav,
   });
 
-  const text = await invoke(IPC.SEARCH_FOR_SAMPLE, params);
+  invoke(IPC.PLUGIN_SEARCH_FOR_SAMPLE, params);
+
+  PaginationHandler.display(true);
+
+  PaginationHandler.setPage(offset);
+}
+
+listen("search", (payload) => {
   const { files, count }: { files: FSSample[]; count: number } = (() => {
     try {
-      return JSON.parse(text);
+      return JSON.parse(payload);
     } catch (_) {
-      return [];
+      return { count: 0, files: [] };
     }
   })();
 
-  PaginationHandler.display(true);
   PaginationHandler.setPages((count / PAGE_SIZE) | 0);
-  PaginationHandler.setPage(offset);
 
   for (let i = 0; i < POOL_SIZE; i++) {
     const row = pool[i];
@@ -94,10 +99,10 @@ export async function search(query: string, tags: string[], offset: number, fav 
     if (i < files.length) {
       const item = files[i];
 
-      row.update(basename(item.path), null, item.fav, item.tags);
+      row.update(basename(item.name), null, item.fav, item.tags);
       row.setPath(item.path);
     } else {
       row.hide();
     }
   }
-}
+});

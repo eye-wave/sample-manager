@@ -1,4 +1,8 @@
+#[cfg(not(feature = "std"))]
 use alloc::string::String;
+
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
 
 /// wire layout (LE, host -> plugin):
 ///   [0..4]   u32  limit
@@ -10,6 +14,7 @@ use alloc::string::String;
 ///
 /// Tags are handled by the host - plugins never see them.
 #[derive(Debug)]
+#[repr(C)]
 pub struct SearchRequestWire {
     pub limit: usize,
     pub offset: usize,
@@ -48,15 +53,10 @@ pub fn decode_search_request(bytes: &[u8]) -> Option<SearchRequestWire> {
 
 /// Encode a SearchRequest into the binary wire format.
 /// Used by the host before writing the buffer into wasm memory.
-pub fn encode_search_request(
-    limit: usize,
-    offset: usize,
-    is_fav: bool,
-    query: &str,
-) -> alloc::vec::Vec<u8> {
+pub fn encode_search_request(limit: usize, offset: usize, is_fav: bool, query: &str) -> Vec<u8> {
     let query_bytes = query.as_bytes();
 
-    let mut buf = alloc::vec::Vec::with_capacity(16 + query_bytes.len());
+    let mut buf = Vec::with_capacity(16 + query_bytes.len());
     buf.extend_from_slice(&(limit as u32).to_le_bytes());
     buf.extend_from_slice(&(offset as u32).to_le_bytes());
     buf.push(is_fav as u8);

@@ -73,3 +73,60 @@ pub fn secret_get_str(key: &str) -> Option<String> {
 pub fn secret_set_str(key: &str, value: &str) {
     secret_set(key, value.as_bytes());
 }
+
+use paste::paste;
+
+macro_rules! impl_storage_num {
+    ($t:ty, $len:expr) => {
+        paste! {
+            pub fn [<storage_get_ $t>](key: &str) -> Option<$t> {
+                storage_get(key).and_then(|b| {
+                    if b.len() != $len {
+                        return None;
+                    }
+                    let arr: [u8; $len] = b.try_into().ok()?;
+                    Some(<$t>::from_le_bytes(arr))
+                })
+            }
+
+            pub fn [<storage_set_ $t>](key: &str, value: $t) {
+                storage_set(key, &value.to_le_bytes());
+            }
+
+            pub fn [<secret_get_ $t>](key: &str) -> Option<$t> {
+                secret_get(key).and_then(|b| {
+                    if b.len() != $len {
+                        return None;
+                    }
+                    let arr: [u8; $len] = b.try_into().ok()?;
+                    Some(<$t>::from_le_bytes(arr))
+                })
+            }
+
+            pub fn [<secret_set_ $t>](key: &str, value: $t) {
+                secret_set(key, &value.to_le_bytes());
+            }
+        }
+    };
+}
+
+impl_storage_num!(u8, 1);
+impl_storage_num!(u16, 2);
+impl_storage_num!(u32, 4);
+impl_storage_num!(u64, 8);
+
+impl_storage_num!(i8, 1);
+impl_storage_num!(i16, 2);
+impl_storage_num!(i32, 4);
+impl_storage_num!(i64, 8);
+
+impl_storage_num!(f32, 4);
+impl_storage_num!(f64, 8);
+
+pub fn storage_get_string(key: &str) -> Option<String> {
+    storage_get(key).and_then(|b| String::from_utf8(b).ok())
+}
+
+pub fn storage_set_string(key: &str, value: &str) {
+    storage_set(key, value.as_bytes());
+}

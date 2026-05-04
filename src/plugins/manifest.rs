@@ -4,7 +4,10 @@ use std::{collections::HashMap, ops::Deref, sync::Arc};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{AStr, AnyResult, plugins::host::HostState};
+use crate::{
+    AStr, AnyResult,
+    plugins::host::{HostState, StorageKey},
+};
 
 #[derive(Clone, Debug, Serialize, TS, PartialEq, Eq, Hash)]
 pub struct PluginId(AStr);
@@ -133,7 +136,7 @@ impl PluginManifest {
                 .map(|(key, field)| {
                     (
                         key.to_string(),
-                        field.with_fetched_value(self.id.clone(), key.clone(), state),
+                        field.with_fetched_value(self.id.clone(), key, state),
                     )
                 })
                 .collect(),
@@ -188,21 +191,30 @@ impl SchemaField {
     pub fn with_fetched_value(
         &self,
         plugin_id: PluginId,
-        key: AStr,
+        key: &str,
         state: &HostState,
     ) -> SchemaFieldWithValue {
         SchemaFieldWithValue {
             field_type: self.clone(),
-            value: state.get_item((plugin_id, key)).map(stringify_bytes),
+            value: state
+                .get_item(config_key(&plugin_id, key))
+                .map(stringify_bytes),
         }
     }
 }
 
-#[derive(Clone, Serialize, TS)]
+pub fn config_key(id: &PluginId, key: &str) -> StorageKey {
+    (
+        id.clone(),
+        Arc::from(("CONFIG:".to_string() + key).as_str()),
+    )
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub struct SchemaFieldWithValue {
-    field_type: SchemaField,
-    value: Option<String>,
+    pub field_type: SchemaField,
+    pub value: Option<String>,
 }
 
 pub fn stringify_bytes(bytes: Vec<u8>) -> String {
@@ -213,5 +225,15 @@ pub fn stringify_bytes(bytes: Vec<u8>) -> String {
             let encoded = general_purpose::STANDARD.encode(original_bytes);
             format!("base64:{}", encoded)
         }
+    }
+}
+
+pub fn parse_string_to_bytes(s: String) -> Vec<u8> {
+    if let Some(stripped) = s.strip_prefix("base64:") {
+        general_purpose::STANDARD
+            .decode(stripped)
+            .unwrap_or_default()
+    } else {
+        s.into_bytes()
     }
 }

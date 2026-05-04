@@ -1,4 +1,5 @@
 use crate::types::SampleType;
+#[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
 // -- byte offsets within a record's fixed header -------------------------------

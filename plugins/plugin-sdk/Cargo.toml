@@ -5,5 +5,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-tinyjson = "2.5.1"
 plugin_wire = { path = "../plugin-wire" }
+paste = "1.0.15"

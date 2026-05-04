@@ -13,6 +13,7 @@ pub type StorageKey = (PluginId, AStr);
 pub struct HostState {
     pub storage: HashMap<StorageKey, Vec<u8>>,
     pub secrets: HashMap<StorageKey, Vec<u8>>,
+    pub pending_download_path: Option<PathBuf>,
     #[serde(skip, default)]
     storage_path: PathBuf,
 }
@@ -22,6 +23,7 @@ impl HostState {
         let mut state = Self {
             storage: HashMap::new(),
             secrets: HashMap::new(),
+            pending_download_path: None,
             storage_path,
         };
         // Best-effort load — if it fails we start fresh

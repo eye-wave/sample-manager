@@ -7,7 +7,7 @@ use std::{
 };
 
 use plugin_wire::{
-    WireEntry, encode_search_request, parse_frame, types::SampleType as WireSampleType,
+    WireEntry, encode_search_request, parse_frame, sample::SampleEntryBase, types::SampleType,
 };
 use rayon::prelude::*;
 use wasmtime::{Caller, Engine, Linker, Module, Store};
@@ -15,24 +15,21 @@ use wasmtime::{Caller, Engine, Linker, Module, Store};
 use crate::{
     AStr, AnyResult,
     plugins::{
-        PluginId, PluginInstance, PluginRunnerCommand as Cmd,
+        PluginId, PluginInstance, PluginRunnerCommand as Cmd, config_key,
         host::HostState,
         manifest::{PluginManifest, SearchMode},
         unpack_plugin_zip,
     },
     state::{
         app_paths,
-        samples::{
-            RawSampleEntry, RawSampleIndices, SampleEntrySerialize, SampleType, SearchRequest,
-            filter_samples,
-        },
+        samples::{SearchRequest, filter_samples},
     },
 };
 
 // -- index cache ---------------------------------------------------------------
 
 struct IndexCache {
-    entries: Vec<RawSampleEntry>,
+    entries: Vec<WireEntry>,
     fetched_at: Instant,
 }
 
@@ -67,6 +64,9 @@ impl PluginRunner {
                         eprintln!("[plugins] failed to load {name}: {e}");
                     }
                 }
+                Ok(Cmd::SetConfigField { id, name, data }) => {
+                    self.store.data_mut().set_item(config_key(&id, &name), data);
+                }
                 Ok(Cmd::UnloadPlugin { id }) => {
                     self.plugins.remove(&id);
                     self.index_cache.remove(&id);
@@ -83,7 +83,16 @@ impl PluginRunner {
                         .collect();
                     let _ = reply_to.send(plugin_info_list);
                 }
-                Ok(Cmd::Shutdown) | Err(_) => break,
+                Ok(Cmd::Download {
+                    plugin_id,
+                    url,
+                    save_path,
+                    reply_to,
+                }) => {
+                    let result = self.call_wasm_download(&plugin_id, &url, save_path);
+                    let _ = reply_to.send(result);
+                }
+                Err(_) => break,
             }
         }
     }
@@ -128,7 +137,7 @@ impl PluginRunner {
         &mut self,
         id: &PluginId,
         req: &SearchRequest,
-    ) -> Result<Vec<SampleEntrySerialize>, String> {
+    ) -> Result<Vec<SampleEntryBase>, String> {
         let search_mode = self
             .plugins
             .get(id)
@@ -140,7 +149,7 @@ impl PluginRunner {
         match search_mode {
             SearchMode::Delegated => {
                 let raw = self.call_wasm_search(id, req)?;
-                Ok(raw.into_iter().map(SampleEntrySerialize::from).collect())
+                Ok(raw.into_iter().map(SampleEntryBase::from).collect())
             }
             SearchMode::HostIndexed { ttl_secs } => {
                 let ttl = Duration::from_secs(ttl_secs);
@@ -164,7 +173,7 @@ impl PluginRunner {
                 let cache = self.index_cache.get(id).unwrap();
                 Ok(filter_samples(cache.entries.par_iter(), req)
                     .into_iter()
-                    .map(SampleEntrySerialize::from)
+                    .map(SampleEntryBase::from)
                     .collect())
             }
         }
@@ -176,7 +185,7 @@ impl PluginRunner {
         &mut self,
         id: &PluginId,
         req: &SearchRequest,
-    ) -> Result<Vec<RawSampleEntry>, String> {
+    ) -> Result<Vec<WireEntry>, String> {
         let plugin = self.plugins.get(id).ok_or("plugin not loaded")?;
 
         let req_bytes = encode_search_request(req.limit, req.offset, req.is_fav, &req.query);
@@ -207,7 +216,7 @@ impl PluginRunner {
         Ok(entries)
     }
 
-    fn call_wasm_get_index(&mut self, id: &PluginId) -> Result<Vec<RawSampleEntry>, String> {
+    fn call_wasm_get_index(&mut self, id: &PluginId) -> Result<Vec<WireEntry>, String> {
         let plugin = self.plugins.get(id).ok_or("plugin not loaded")?;
 
         let fn_get_index = plugin
@@ -246,6 +255,43 @@ impl PluginRunner {
 
         Ok(entries)
     }
+
+    fn call_wasm_download(
+        &mut self,
+        id: &PluginId,
+        url: &str,
+        save_path: PathBuf,
+    ) -> Result<(), String> {
+        let plugin = self.plugins.get(id).ok_or("plugin not loaded")?;
+
+        let fn_download = plugin
+            .instance
+            .get_typed_func::<(u32, u32), i32>(&mut self.store, "download")
+            .map_err(|_| "plugin does not export download")?;
+
+        self.store.data_mut().pending_download_path = Some(save_path);
+
+        let (url_ptr, url_len) =
+            wasm_alloc_write(&mut self.store, plugin, url.as_bytes()).map_err(|e| e.to_string())?;
+
+        let status = fn_download
+            .call(&mut self.store, (url_ptr, url_len))
+            .map_err(|e| e.to_string())?;
+
+        let plugin = self.plugins.get(id).unwrap();
+        plugin
+            .fn_free
+            .call(&mut self.store, (url_ptr, url_len))
+            .map_err(|e| e.to_string())?;
+
+        self.store.data_mut().pending_download_path = None;
+
+        if status == 0 {
+            Ok(())
+        } else {
+            Err(format!("download failed with code {status}"))
+        }
+    }
 }
 
 // -- wasm memory helpers -------------------------------------------------------
@@ -272,7 +318,7 @@ fn read_frame_at(
     store: &mut Store<HostState>,
     plugin: &PluginInstance,
     frame_ptr: u32,
-) -> AnyResult<(Vec<RawSampleEntry>, usize)> {
+) -> AnyResult<(Vec<WireEntry>, usize)> {
     let mem = plugin
         .instance
         .get_memory(&mut *store, "memory")
@@ -295,20 +341,18 @@ fn read_frame_at(
     Ok((entries, bytes_consumed))
 }
 
-/// Convert a `plugin_wire::WireEntry` into the host's `RawSampleEntry`.
-fn wire_entry_to_raw(e: WireEntry) -> RawSampleEntry {
-    RawSampleEntry {
+/// Convert a `plugin_wire::WireEntry` into the host's `WireEntry`.
+fn wire_entry_to_raw(e: WireEntry) -> WireEntry {
+    WireEntry {
         str_content: e.str_content,
-        indices: RawSampleIndices {
-            name_end: e.name_end,
-            path_end: e.path_end,
-            description_end: e.description_end,
-            tags_end: e.tags_end,
-        },
+        name_end: e.name_end,
+        path_end: e.path_end,
+        description_end: e.description_end,
+        tags_end: e.tags_end,
         bpm: e.bpm,
         sample_type: match e.sample_type {
-            WireSampleType::OneShot => SampleType::OneShot,
-            WireSampleType::Loop => SampleType::Loop,
+            SampleType::OneShot => SampleType::OneShot,
+            SampleType::Loop => SampleType::Loop,
         },
     }
 }
@@ -492,6 +536,71 @@ fn define_host_imports(linker: &mut Linker<HostState>, manifest: &PluginManifest
         )?;
     }
 
+    // fs_read(path_ptr, path_len, out_ptr, out_cap) -> i32
+    //   >= 0  : bytes written into out_ptr
+    //     -1  : filesystem capability not granted
+    //     -2  : path is not valid utf-8
+    //     -3  : path traversal / outside allowed roots
+    //     -4  : file not found or read error
+    //
+    // The host does not restrict which absolute paths are readable beyond
+    // checking for traversal sequences — the user configured the path
+    // explicitly in the plugin's config UI, so they own the choice.
+    {
+        let fs_caps = caps.clone();
+        let fs_id = id.clone();
+        linker.func_wrap(
+            "host",
+            "fs_read",
+            move |mut caller: Caller<'_, HostState>,
+                  path_ptr: u32,
+                  path_len: u32,
+                  out_ptr: u32,
+                  out_cap: u32|
+                  -> i32 {
+                if !fs_caps.filesystem {
+                    eprintln!("[plugin/{fs_id}] denied fs_read: capability missing");
+                    return -1;
+                }
+
+                let mem = caller
+                    .get_export("memory")
+                    .and_then(|e| e.into_memory())
+                    .unwrap();
+
+                let path = {
+                    let data = mem.data(&caller);
+                    match std::str::from_utf8(
+                        &data[path_ptr as usize..(path_ptr + path_len) as usize],
+                    ) {
+                        Ok(s) => s.to_owned(),
+                        Err(_) => return -2,
+                    }
+                };
+
+                // Reject traversal attempts
+                if path.contains("..") {
+                    eprintln!("[plugin/{fs_id}] denied fs_read: path traversal in {path:?}");
+                    return -3;
+                }
+
+                let contents = match std::fs::read(&path) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        eprintln!("[plugin/{fs_id}] fs_read error for {path:?}: {e}");
+                        return -4;
+                    }
+                };
+
+                let n = contents.len().min(out_cap as usize);
+                mem.data_mut(&mut caller)[out_ptr as usize..out_ptr as usize + n]
+                    .copy_from_slice(&contents[..n]);
+
+                n as i32
+            },
+        )?;
+    }
+
     // http_fetch(url_ptr, url_len, headers_ptr, n_headers, out_ptr, out_cap) -> i32
     //   >= 0  : bytes written
     //     -1  : invalid utf-8 in url
@@ -508,6 +617,8 @@ fn define_host_imports(linker: &mut Linker<HostState>, manifest: &PluginManifest
                   url_len: u32,
                   headers_ptr: u32,
                   n_headers: u32,
+                  body_ptr: u32,
+                  body_len: u32,
                   out_ptr: u32,
                   out_cap: u32|
                   -> i32 {
@@ -520,9 +631,9 @@ fn define_host_imports(linker: &mut Linker<HostState>, manifest: &PluginManifest
                     .and_then(|e| e.into_memory())
                     .unwrap();
 
-                let (url, headers) = {
+                let (uri, body, headers) = {
                     let data = mem.data(&caller);
-                    let url = match std::str::from_utf8(
+                    let uri = match std::str::from_utf8(
                         &data[url_ptr as usize..(url_ptr + url_len) as usize],
                     ) {
                         Ok(s) => s.to_owned(),
@@ -549,23 +660,41 @@ fn define_host_imports(linker: &mut Linker<HostState>, manifest: &PluginManifest
                             .to_owned();
                         headers.push((k, v));
                     }
-                    (url, headers)
+                    let body = if body_len > 0 {
+                        Some(&data[body_ptr as usize..(body_ptr + body_len) as usize])
+                    } else {
+                        None
+                    };
+                    (uri, body, headers)
                 };
 
-                if !caller.data().is_url_allowed(&url, &allowlist) {
-                    eprintln!("[plugin] blocked request to {url}");
+                if !caller.data().is_url_allowed(&uri, &allowlist) {
+                    eprintln!("[plugin] blocked request to {uri}");
                     return -2;
                 }
 
                 let response = (|| -> AnyResult<Vec<u8>> {
-                    let mut req = ureq::get(&url);
-                    for (k, v) in &headers {
-                        req = req.header(k, v);
-                    }
-                    let mut res = req.call()?;
-                    let mut body = vec![];
-                    res.body_mut().as_reader().read_to_end(&mut body)?;
-                    Ok(body)
+                    let mut res_body = vec![];
+
+                    if let Some(body) = body {
+                        let mut req = ureq::post(uri);
+                        for (k, v) in &headers {
+                            req = req.header(k, v);
+                        }
+                        let mut res = req.send(body)?;
+
+                        res.body_mut().as_reader().read_to_end(&mut res_body)?;
+                    } else {
+                        let mut req = ureq::get(uri);
+                        for (k, v) in &headers {
+                            req = req.header(k, v);
+                        }
+                        let mut res = req.call()?;
+
+                        res.body_mut().as_reader().read_to_end(&mut res_body)?;
+                    };
+
+                    Ok(res_body)
                 })();
 
                 match response {
@@ -583,6 +712,48 @@ fn define_host_imports(linker: &mut Linker<HostState>, manifest: &PluginManifest
             },
         )?;
     }
+
+    // In define_host_imports
+    linker.func_wrap(
+        "host",
+        "emit_download",
+        move |mut caller: Caller<'_, HostState>,
+              bytes_ptr: u32,
+              bytes_len: u32,
+              filename_ptr: u32,
+              filename_len: u32|
+              -> i32 {
+            let save_path = match caller.data().pending_download_path.clone() {
+                Some(p) => p,
+                None => return -1,
+            };
+
+            let mem = caller
+                .get_export("memory")
+                .and_then(|e| e.into_memory())
+                .unwrap();
+            let (bytes, filename) = {
+                let data = mem.data(&caller);
+                let bytes = data[bytes_ptr as usize..(bytes_ptr + bytes_len) as usize].to_vec();
+                let filename = std::str::from_utf8(
+                    &data[filename_ptr as usize..(filename_ptr + filename_len) as usize],
+                )
+                .unwrap_or("sample.wav")
+                .to_owned();
+                (bytes, filename)
+            };
+
+            // save_path is the directory; filename comes from the plugin
+            let full_path = save_path.join(&filename);
+            match std::fs::write(&full_path, &bytes) {
+                Ok(_) => 0,
+                Err(e) => {
+                    eprintln!("[plugin] emit_download write error: {e}");
+                    -2
+                }
+            }
+        },
+    )?;
 
     Ok(())
 }

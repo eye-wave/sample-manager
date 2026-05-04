@@ -1,13 +1,15 @@
-#![allow(unused)]
+use std::{
+    path::PathBuf,
+    sync::{Arc, mpsc},
+};
 
-use std::sync::{Arc, mpsc};
-
+use plugin_wire::sample::SampleEntryBase;
 use wasmtime::{Instance, TypedFunc};
 
 use crate::{
     AStr,
     plugins::{manifest::PluginManifest, runner::PluginRunner},
-    state::samples::{RawSampleEntry, SampleEntrySerialize, SearchRequest},
+    state::{app_paths, samples::SearchRequest},
 };
 
 mod host;
@@ -17,7 +19,7 @@ mod runner;
 
 pub(super) use loader::unpack_plugin_zip;
 
-pub use manifest::{PluginId, PluginInfo};
+pub use manifest::{PluginId, PluginInfo, config_key, parse_string_to_bytes};
 
 pub struct PluginInstance {
     pub instance: Instance,
@@ -37,7 +39,12 @@ pub enum PluginRunnerCommand {
     Search {
         id: PluginId,
         req: SearchRequest,
-        reply_to: mpsc::SyncSender<Result<Vec<SampleEntrySerialize>, String>>,
+        reply_to: mpsc::SyncSender<Result<Vec<SampleEntryBase>, String>>,
+    },
+    SetConfigField {
+        id: PluginId,
+        name: AStr,
+        data: Vec<u8>,
     },
     UnloadPlugin {
         id: PluginId,
@@ -45,7 +52,12 @@ pub enum PluginRunnerCommand {
     GetAllPluginsInfo {
         reply_to: mpsc::Sender<Vec<PluginInfo>>,
     },
-    Shutdown,
+    Download {
+        plugin_id: PluginId,
+        url: String,
+        save_path: PathBuf,
+        reply_to: mpsc::SyncSender<Result<(), String>>,
+    },
 }
 
 use PluginRunnerCommand as Cmd;
@@ -73,11 +85,31 @@ impl PluginRuntimeHandle {
         });
     }
 
-    pub fn search(
-        &self,
-        id: PluginId,
-        req: SearchRequest,
-    ) -> Result<Vec<SampleEntrySerialize>, String> {
+    pub fn set_config_field(&self, id: PluginId, name: AStr, data: Vec<u8>) {
+        let _ = self.sender.send(Cmd::SetConfigField {
+            id,
+            name: name.clone(),
+            data,
+        });
+    }
+
+    pub fn download(&self, plugin_id: PluginId, url: &str) -> Result<(), String> {
+        let (tx, rx) = mpsc::sync_channel(1);
+        let save_path = app_paths::plugin_sync_path().join("audio.mp3");
+
+        self.sender
+            .send(Cmd::Download {
+                plugin_id,
+                url: url.to_string(),
+                save_path,
+                reply_to: tx,
+            })
+            .map_err(|e| e.to_string())?;
+
+        rx.recv().map_err(|e| e.to_string())?
+    }
+
+    pub fn search(&self, id: PluginId, req: SearchRequest) -> Result<Vec<SampleEntryBase>, String> {
         let (tx, rx) = mpsc::sync_channel(1);
         self.sender
             .send(Cmd::Search {
@@ -98,9 +130,5 @@ impl PluginRuntimeHandle {
 
     pub fn unload(&self, id: PluginId) {
         let _ = self.sender.send(Cmd::UnloadPlugin { id });
-    }
-
-    pub fn shutdown(&self) {
-        let _ = self.sender.send(Cmd::Shutdown);
     }
 }
