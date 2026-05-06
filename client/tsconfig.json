@@ -32,8 +32,5 @@
     "noPropertyAccessFromIndexSignature": false
   },
   "include": ["src/**/*.ts", "src-build/**/*.ts", "vite.config.ts"],
-  "files": [
-    "src/invoke/types.d.ts",
-    "src/lying.d.ts",
-  ]
+  "files": ["src/invoke/types.d.ts", "src/lying.d.ts"]
 }

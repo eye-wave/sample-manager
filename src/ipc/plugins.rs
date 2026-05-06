@@ -64,14 +64,20 @@ struct SearchResult {
     count: usize,
 }
 
+#[derive(Debug, Deserialize)]
+struct SearchRequestWithId {
+    id: PluginId,
+    #[serde(flatten)]
+    search: SearchRequest,
+}
+
 fn plugin_search_for_sample(body: IPCBody) -> IPCResponse {
+    let req: SearchRequestWithId = serde_json::from_str(&body.req)?;
+
     std::thread::spawn(
         move || -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-            let req: SearchRequest = serde_json::from_str(&body.req)?;
-            let id = PluginId::new("plugin-id").unwrap();
-
             let state = body.app_state.read().unwrap();
-            let files = state.plugin_handle.search(id, req)?;
+            let files = state.plugin_handle.search(req.id, req.search)?;
             let count = files.len();
             let res = SearchResult { files, count };
 
@@ -87,13 +93,18 @@ fn plugin_search_for_sample(body: IPCBody) -> IPCResponse {
     ok()
 }
 
+#[derive(Deserialize)]
+struct IdWithPath<'a> {
+    id: PluginId,
+    url: &'a str,
+}
+
 fn plugin_download_file(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
-        // let id = PluginId::new("plugin-id").unwrap();
-        let _ = state.plugin_handle.download(id, &body.req);
-    });
+        let IdWithPath { id, url } = serde_json::from_str(&body.req)?;
 
-    ok()
+        state.plugin_handle.download(id, url)?.finish()
+    })
 }
 
 crate::ipc_commands! {

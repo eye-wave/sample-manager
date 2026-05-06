@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::fs::{self, File};
+use std::io::{BufWriter, Write};
+use std::path::Path;
 use std::sync::{Arc, mpsc};
 
 use crate::AnyResult;
@@ -19,7 +20,7 @@ use samples::FsSample;
 pub struct AppState {
     pub sample_registry: HashMap<Arc<Path>, FsSample>,
     pub audio_player: AudioPlayer,
-    pub favorite_samples: HashSet<PathBuf>,
+    pub favorite_samples: HashSet<String>,
     pub plugin_handle: PluginRuntimeHandle,
     pub loaded_plugins_info: Vec<PluginInfo>,
 
@@ -43,7 +44,7 @@ impl AppState {
         let conf = fs::read(app_paths::config_file())?;
         let conf: AppConfig = toml::from_slice(&conf)?;
 
-        let favorite_samples: HashSet<PathBuf> = fs::read_to_string(app_paths::favorites_file())
+        let favorite_samples: HashSet<_> = fs::read_to_string(app_paths::favorites_file())
             .map(|f| f.lines().map(|l| l.into()).collect())
             .unwrap_or_default();
 
@@ -87,29 +88,27 @@ impl AppState {
         result
     }
 
-    fn rewrite_favorites(&mut self) {
-        let _ = fs::write(
-            app_paths::favorites_file(),
-            self.favorite_samples
-                .iter()
-                .map(|f| f.to_string_lossy())
-                .intersperse("\n".into())
-                .collect::<String>(),
-        );
+    fn flush_favorites(&mut self) -> std::io::Result<()> {
+        let file = File::create(app_paths::favorites_file())?;
+        let mut writer = BufWriter::new(file);
+
+        for f in self.favorite_samples.iter() {
+            writeln!(writer, "{f}")?;
+        }
+
+        writer.flush()?;
+
+        Ok(())
     }
 
-    pub fn add_sample_to_fav(&mut self, path: PathBuf) {
-        self.favorite_samples.insert(path);
-        self.rewrite_favorites();
+    pub fn add_sample_to_fav(&mut self, path: &str) {
+        self.favorite_samples.insert(path.to_string());
+        let _ = self.flush_favorites();
     }
 
-    pub fn remove_sample_from_fav(&mut self, path: &Path) {
+    pub fn remove_sample_from_fav(&mut self, path: &str) {
         self.favorite_samples.remove(path);
-        self.rewrite_favorites();
-    }
-
-    pub fn is_sample_fav(&self, path: &Path) -> bool {
-        self.favorite_samples.contains(path)
+        let _ = self.flush_favorites();
     }
 
     pub fn get_config(&self) -> &AppConfig {

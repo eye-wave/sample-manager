@@ -1,6 +1,4 @@
 #[cfg(feature = "std")]
-use std::path::PathBuf;
-#[cfg(feature = "std")]
 use std::sync::Arc;
 
 #[cfg(feature = "std")]
@@ -20,16 +18,10 @@ use alloc::vec::Vec;
 use crate::{SampleType, WireEntry};
 
 #[cfg_attr(feature = "std", derive(Debug, Clone, Serialize, TS))]
-#[cfg_attr(feature = "std", ts(export, rename = "SampleEntry"))]
 pub struct SampleEntryBase {
     pub name: String,
-
-    #[cfg(feature = "std")]
-    pub path: Option<PathBuf>,
-
-    #[cfg(not(feature = "std"))]
     pub path: Option<String>,
-
+    pub url: Option<String>,
     #[cfg_attr(feature = "std", serde(flatten))]
     pub meta: SampleMetadata,
 }
@@ -50,19 +42,17 @@ impl From<SampleEntryBase> for WireEntry {
         str_content.push_str(&entry.name);
         let name_end = str_content.len();
 
-        #[cfg(not(feature = "std"))]
-        let path_str = entry.path.as_ref();
-        #[cfg(feature = "std")]
-        let path_str = entry.path.as_ref().map(|p| p.to_string_lossy());
-
-        if let Some(p) = &path_str {
+        if let Some(p) = &entry.path {
             str_content.push_str(p);
         }
         let path_end = str_content.len();
 
-        let desc_str = entry.meta.description.as_ref();
+        if let Some(u) = &entry.url {
+            str_content.push_str(u);
+        }
+        let url_end = str_content.len();
 
-        if let Some(d) = desc_str {
+        if let Some(d) = entry.meta.description.as_ref() {
             str_content.push_str(d.as_ref());
         }
         let description_end = str_content.len();
@@ -82,6 +72,7 @@ impl From<SampleEntryBase> for WireEntry {
             str_content,
             name_end,
             path_end,
+            url_end,
             description_end,
             tags_end,
             bpm: entry.meta.bpm,
@@ -94,16 +85,22 @@ impl From<&WireEntry> for SampleEntryBase {
     fn from(raw: &WireEntry) -> Self {
         let s = &raw.str_content;
 
-        let name = s[0..raw.name_end].to_string();
+        let name = s[..raw.name_end].to_string();
 
         let path = if raw.path_end > raw.name_end {
-            Some(s[raw.name_end..raw.path_end].into())
+            Some(s[raw.name_end..raw.path_end].to_string())
         } else {
             None
         };
 
-        let description = if raw.description_end > raw.path_end {
-            Some(s[raw.path_end..raw.description_end].to_string().into())
+        let url = if raw.url_end > raw.path_end {
+            Some(s[raw.path_end..raw.url_end].to_string())
+        } else {
+            None
+        };
+
+        let description = if raw.description_end > raw.url_end {
+            Some(s[raw.url_end..raw.description_end].to_string().into())
         } else {
             None
         };
@@ -121,6 +118,7 @@ impl From<&WireEntry> for SampleEntryBase {
         Self {
             name,
             path,
+            url,
             meta: SampleMetadata {
                 description,
                 tags,

@@ -27,10 +27,5 @@ unsafe extern "C" {
     ///   -4  file not found or read error
     pub fn fs_read(path_ptr: *const u8, path_len: u32, out_ptr: *mut u8, out_cap: u32) -> i32;
 
-    pub fn emit_download(
-        bytes_ptr: *const u8,
-        bytes_len: u32,
-        filename_ptr: *const u8,
-        filename_len: u32,
-    ) -> i32;
+    pub fn emit_download(bytes_ptr: *const u8, bytes_len: u32) -> i32;
 }

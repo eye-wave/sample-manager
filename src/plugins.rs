@@ -3,13 +3,13 @@ use std::{
     sync::{Arc, mpsc},
 };
 
-use plugin_wire::sample::SampleEntryBase;
+use plugin_wire::{WireEntry, sample::SampleEntryBase};
 use wasmtime::{Instance, TypedFunc};
 
 use crate::{
-    AStr,
+    AStr, AnyResult,
     plugins::{manifest::PluginManifest, runner::PluginRunner},
-    state::{app_paths, samples::SearchRequest},
+    state::samples::SearchRequest,
 };
 
 mod host;
@@ -55,8 +55,11 @@ pub enum PluginRunnerCommand {
     Download {
         plugin_id: PluginId,
         url: String,
-        save_path: PathBuf,
-        reply_to: mpsc::SyncSender<Result<(), String>>,
+        reply_to: mpsc::SyncSender<Result<PathBuf, String>>,
+    },
+    SearchLocalRegistry {
+        req: SearchRequest,
+        reply_to: mpsc::SyncSender<Arc<Vec<WireEntry>>>,
     },
 }
 
@@ -72,7 +75,12 @@ impl PluginRuntimeHandle {
 
         std::thread::Builder::new()
             .name("plugin-runner".into())
-            .spawn(move || PluginRunner::new().run(rx))
+            .spawn(move || match PluginRunner::new() {
+                Ok(plug) => plug.run(rx),
+                Err(err) => {
+                    eprintln!("{err}");
+                }
+            })
             .expect("failed to spawn plugin runner thread");
 
         Self { sender: tx }
@@ -93,15 +101,24 @@ impl PluginRuntimeHandle {
         });
     }
 
-    pub fn download(&self, plugin_id: PluginId, url: &str) -> Result<(), String> {
+    pub fn search_local_registry(&self, req: &SearchRequest) -> AnyResult<Arc<Vec<WireEntry>>> {
         let (tx, rx) = mpsc::sync_channel(1);
-        let save_path = app_paths::plugin_sync_path().join("audio.mp3");
+
+        self.sender.send(Cmd::SearchLocalRegistry {
+            req: req.clone(),
+            reply_to: tx,
+        })?;
+
+        Ok(rx.recv()?)
+    }
+
+    pub fn download(&self, plugin_id: PluginId, url: &str) -> Result<PathBuf, String> {
+        let (tx, rx) = mpsc::sync_channel(1);
 
         self.sender
             .send(Cmd::Download {
                 plugin_id,
                 url: url.to_string(),
-                save_path,
                 reply_to: tx,
             })
             .map_err(|e| e.to_string())?;

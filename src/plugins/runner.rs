@@ -1,14 +1,12 @@
 use std::{
     collections::HashMap,
+    fs,
     io::Read,
-    path::PathBuf,
     sync::mpsc,
     time::{Duration, Instant},
 };
 
-use plugin_wire::{
-    WireEntry, encode_search_request, parse_frame, sample::SampleEntryBase, types::SampleType,
-};
+use plugin_wire::{WireEntry, encode_search_request, parse_frame, sample::SampleEntryBase};
 use rayon::prelude::*;
 use wasmtime::{Caller, Engine, Linker, Module, Store};
 
@@ -16,14 +14,11 @@ use crate::{
     AStr, AnyResult,
     plugins::{
         PluginId, PluginInstance, PluginRunnerCommand as Cmd, config_key,
-        host::HostState,
+        host::{HostState, PendingDownload},
         manifest::{PluginManifest, SearchMode},
         unpack_plugin_zip,
     },
-    state::{
-        app_paths,
-        samples::{SearchRequest, filter_samples},
-    },
+    state::samples::{SearchRequest, filter_samples},
 };
 
 // -- index cache ---------------------------------------------------------------
@@ -43,17 +38,16 @@ pub(super) struct PluginRunner {
 }
 
 impl PluginRunner {
-    pub fn new() -> Self {
-        let storage_path = app_paths::plugin_cache_path().join("store.db");
+    pub fn new() -> AnyResult<Self> {
         let engine = Engine::default();
-        let store = Store::new(&engine, HostState::new(storage_path));
+        let store = Store::new(&engine, HostState::new());
 
-        Self {
+        Ok(Self {
             engine,
             store,
             plugins: HashMap::new(),
             index_cache: HashMap::new(),
-        }
+        })
     }
 
     pub fn run(mut self, rx: mpsc::Receiver<Cmd>) {
@@ -73,7 +67,17 @@ impl PluginRunner {
                 }
                 Ok(Cmd::Search { id, req, reply_to }) => {
                     let result = self.run_search(&id, &req);
-                    let _ = reply_to.send(result);
+                    if let Ok(results) = result.as_ref() {
+                        self.store
+                            .data_mut()
+                            .write_sample_cache(&id, results.iter());
+                    }
+
+                    let res = result
+                        .as_ref()
+                        .map(|r| r.iter().map(|f| f.into()).collect::<Vec<SampleEntryBase>>());
+
+                    let _ = reply_to.send(res.map_err(|e| e.to_string()));
                 }
                 Ok(Cmd::GetAllPluginsInfo { reply_to }) => {
                     let plugin_info_list = self
@@ -86,11 +90,25 @@ impl PluginRunner {
                 Ok(Cmd::Download {
                     plugin_id,
                     url,
-                    save_path,
                     reply_to,
                 }) => {
-                    let result = self.call_wasm_download(&plugin_id, &url, save_path);
-                    let _ = reply_to.send(result);
+                    use crate::state::samples::utils::*;
+
+                    let response = (|| -> AnyResult<_> {
+                        let bytes = self.call_wasm_download(&plugin_id, &url)?;
+                        let hashed = hash_path(&url);
+                        let save_path = sync_path(&plugin_id, &hashed)?;
+
+                        fs::write(&save_path, bytes)?;
+                        Ok(save_path)
+                    })();
+
+                    let _ = reply_to.send(response.map_err(|e| e.to_string()));
+                }
+                Ok(Cmd::SearchLocalRegistry { reply_to, req }) => {
+                    let res = self.store.data().search_local_registry(&req);
+
+                    let _ = reply_to.send(res);
                 }
                 Err(_) => break,
             }
@@ -133,11 +151,7 @@ impl PluginRunner {
 
     // -- search dispatch -------------------------------------------------------
 
-    fn run_search(
-        &mut self,
-        id: &PluginId,
-        req: &SearchRequest,
-    ) -> Result<Vec<SampleEntryBase>, String> {
+    fn run_search(&mut self, id: &PluginId, req: &SearchRequest) -> Result<Vec<WireEntry>, String> {
         let search_mode = self
             .plugins
             .get(id)
@@ -147,10 +161,7 @@ impl PluginRunner {
             .clone();
 
         match search_mode {
-            SearchMode::Delegated => {
-                let raw = self.call_wasm_search(id, req)?;
-                Ok(raw.into_iter().map(SampleEntryBase::from).collect())
-            }
+            SearchMode::Delegated => self.call_wasm_search(id, req),
             SearchMode::HostIndexed { ttl_secs } => {
                 let ttl = Duration::from_secs(ttl_secs);
                 let needs_refresh = self
@@ -172,9 +183,9 @@ impl PluginRunner {
 
                 let cache = self.index_cache.get(id).unwrap();
                 Ok(filter_samples(cache.entries.par_iter(), req)
-                    .into_iter()
-                    .map(SampleEntryBase::from)
-                    .collect())
+                    .iter()
+                    .map(|f| (**f).clone())
+                    .collect::<Vec<WireEntry>>())
             }
         }
     }
@@ -256,20 +267,13 @@ impl PluginRunner {
         Ok(entries)
     }
 
-    fn call_wasm_download(
-        &mut self,
-        id: &PluginId,
-        url: &str,
-        save_path: PathBuf,
-    ) -> Result<(), String> {
+    fn call_wasm_download(&mut self, id: &PluginId, url: &str) -> AnyResult<Vec<u8>> {
         let plugin = self.plugins.get(id).ok_or("plugin not loaded")?;
 
         let fn_download = plugin
             .instance
             .get_typed_func::<(u32, u32), i32>(&mut self.store, "download")
             .map_err(|_| "plugin does not export download")?;
-
-        self.store.data_mut().pending_download_path = Some(save_path);
 
         let (url_ptr, url_len) =
             wasm_alloc_write(&mut self.store, plugin, url.as_bytes()).map_err(|e| e.to_string())?;
@@ -284,13 +288,16 @@ impl PluginRunner {
             .call(&mut self.store, (url_ptr, url_len))
             .map_err(|e| e.to_string())?;
 
-        self.store.data_mut().pending_download_path = None;
-
-        if status == 0 {
-            Ok(())
-        } else {
-            Err(format!("download failed with code {status}"))
+        if status != 0 {
+            return Err(format!("plugin download failed with code {status}").into());
         }
+
+        self.store
+            .data_mut()
+            .pending_download
+            .take()
+            .map(|p| p.bytes)
+            .ok_or_else(|| "plugin returned ok but never called emit_download".into())
     }
 }
 
@@ -336,25 +343,7 @@ fn read_frame_at(
     let (wire_entries, bytes_consumed) =
         parse_frame(&frame_data).map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
 
-    let entries = wire_entries.into_iter().map(wire_entry_to_raw).collect();
-
-    Ok((entries, bytes_consumed))
-}
-
-/// Convert a `plugin_wire::WireEntry` into the host's `WireEntry`.
-fn wire_entry_to_raw(e: WireEntry) -> WireEntry {
-    WireEntry {
-        str_content: e.str_content,
-        name_end: e.name_end,
-        path_end: e.path_end,
-        description_end: e.description_end,
-        tags_end: e.tags_end,
-        bpm: e.bpm,
-        sample_type: match e.sample_type {
-            SampleType::OneShot => SampleType::OneShot,
-            SampleType::Loop => SampleType::Loop,
-        },
-    }
+    Ok((wire_entries, bytes_consumed))
 }
 
 // -- host imports --------------------------------------------------------------
@@ -578,7 +567,6 @@ fn define_host_imports(linker: &mut Linker<HostState>, manifest: &PluginManifest
                     }
                 };
 
-                // Reject traversal attempts
                 if path.contains("..") {
                     eprintln!("[plugin/{fs_id}] denied fs_read: path traversal in {path:?}");
                     return -3;
@@ -713,45 +701,20 @@ fn define_host_imports(linker: &mut Linker<HostState>, manifest: &PluginManifest
         )?;
     }
 
-    // In define_host_imports
     linker.func_wrap(
         "host",
         "emit_download",
-        move |mut caller: Caller<'_, HostState>,
-              bytes_ptr: u32,
-              bytes_len: u32,
-              filename_ptr: u32,
-              filename_len: u32|
-              -> i32 {
-            let save_path = match caller.data().pending_download_path.clone() {
-                Some(p) => p,
-                None => return -1,
-            };
-
+        move |mut caller: Caller<'_, HostState>, bytes_ptr: u32, bytes_len: u32| -> i32 {
             let mem = caller
                 .get_export("memory")
                 .and_then(|e| e.into_memory())
                 .unwrap();
-            let (bytes, filename) = {
-                let data = mem.data(&caller);
-                let bytes = data[bytes_ptr as usize..(bytes_ptr + bytes_len) as usize].to_vec();
-                let filename = std::str::from_utf8(
-                    &data[filename_ptr as usize..(filename_ptr + filename_len) as usize],
-                )
-                .unwrap_or("sample.wav")
-                .to_owned();
-                (bytes, filename)
-            };
 
-            // save_path is the directory; filename comes from the plugin
-            let full_path = save_path.join(&filename);
-            match std::fs::write(&full_path, &bytes) {
-                Ok(_) => 0,
-                Err(e) => {
-                    eprintln!("[plugin] emit_download write error: {e}");
-                    -2
-                }
-            }
+            let data = mem.data(&caller);
+            let bytes = data[bytes_ptr as usize..(bytes_ptr + bytes_len) as usize].to_vec();
+
+            caller.data_mut().pending_download = Some(PendingDownload { bytes });
+            0
         },
     )?;
 

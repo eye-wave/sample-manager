@@ -67,18 +67,17 @@ export type FSSample = {
 
 const PAGE_SIZE = 50;
 export async function search(query: string, tags: string[], offset: number, fav = false) {
-  const params = JSON.stringify({
+  const params = {
     query,
     limit: PAGE_SIZE,
     offset: (offset - 1) * PAGE_SIZE,
     tags,
     is_fav: fav,
-  });
+  };
 
-  invoke(IPC.PLUGIN_SEARCH_FOR_SAMPLE, params);
+  invoke(IPC.SEARCH_FOR_SAMPLE, params);
 
   PaginationHandler.display(true);
-
   PaginationHandler.setPage(offset);
 }
 

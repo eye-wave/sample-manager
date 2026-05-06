@@ -6,7 +6,7 @@ const PLUGIN_DIR: &str = "plug-ins";
 macro_rules! define_paths {
     (
         $(
-            fn $name:ident => $base:ident $(.join($segment:expr))*
+            fn $name:ident => $base:ident $(.join($segment:expr))* = $kind:ident
         )*
     ) => {
 
@@ -31,20 +31,31 @@ macro_rules! define_paths {
 
         pub fn create_all_dirs() -> std::io::Result<()> {
             $(
-                std::fs::create_dir_all($name())?;
+                let path = $name();
+
+                if stringify!($kind) == "path" {
+                    if !path.exists() {
+                        std::fs::create_dir_all(path)?;
+                    }
+                }
             )*
+
             Ok(())
         }
     };
 }
 
 define_paths! {
-    fn config_file => config.join("config.toml")
-    fn favorites_file => cache.join(".favorites")
-    fn themes_path => config.join("themes")
-    fn thumbnail_cache_path => cache.join(".waves")
+    fn config_file => config.join("config.toml") = file
+    fn favorites_file => cache.join(".favorites") = file
+    fn themes_path => config.join("themes") = file
+    fn thumbnail_cache_path => cache.join(".waves") = file
 
-    fn plugin_sync_path => data.join("Samples")
-    fn plugin_cache_path => cache.join(PLUGIN_DIR)
-    fn plugin_config_path => config.join(PLUGIN_DIR)
+    fn plugin_storage_file => cache.join("plugin-storage.db") = file
+    fn plugin_secret_storage_file => cache.join("plugin-secret-store.db") = file
+    fn plugin_entry_cache_file => cache.join("plugin-entry-cache.db") = file
+
+    fn plugin_sync_path => data.join("Samples") = path
+    fn plugin_cache_path => cache.join(PLUGIN_DIR) = path
+    fn plugin_config_path => config.join(PLUGIN_DIR) = path
 }

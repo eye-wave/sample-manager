@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock, mpsc};
 
 use tao::window::Window;
@@ -71,6 +72,13 @@ impl IntoBytes for &'static str {
 impl IntoBytes for &'static [u8] {
     fn into_bytes(self) -> Cow<'static, [u8]> {
         Cow::Borrowed(self)
+    }
+}
+
+impl IntoBytes for PathBuf {
+    fn into_bytes(self) -> Cow<'static, [u8]> {
+        let str = self.to_string_lossy().to_string();
+        Cow::Owned(str.into_bytes())
     }
 }
 

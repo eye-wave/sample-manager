@@ -1,55 +1,89 @@
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::Path;
+use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
+use plugin_wire::WireEntry;
 
+use rayon::iter::ParallelBridge;
+use serde::{Serialize, de::DeserializeOwned};
+
+use crate::state::samples::{SearchRequest, filter_samples};
 use crate::{
     AStr, AnyResult,
     plugins::{PluginId, manifest::SchemaField},
+    state::app_paths,
 };
 
 pub type StorageKey = (PluginId, AStr);
 
-#[derive(Serialize, Deserialize)]
+pub struct PendingDownload {
+    pub bytes: Vec<u8>,
+}
+
 pub struct HostState {
     pub storage: HashMap<StorageKey, Vec<u8>>,
     pub secrets: HashMap<StorageKey, Vec<u8>>,
-    pub pending_download_path: Option<PathBuf>,
-    #[serde(skip, default)]
-    storage_path: PathBuf,
+    pub pending_download: Option<PendingDownload>,
+
+    entry_cache: HashMap<PluginId, HashSet<WireEntry>>,
+}
+
+impl Drop for HostState {
+    fn drop(&mut self) {
+        let _ = self.flush_storage();
+        let _ = self.flush_secret();
+        let _ = self.flush_cache();
+    }
 }
 
 impl HostState {
-    pub(super) fn new(storage_path: PathBuf) -> Self {
+    pub(super) fn new() -> Self {
         let mut state = Self {
             storage: HashMap::new(),
             secrets: HashMap::new(),
-            pending_download_path: None,
-            storage_path,
+            entry_cache: HashMap::new(),
+            pending_download: None,
         };
         // Best-effort load — if it fails we start fresh
         let _ = state.load_from_disk();
         state
     }
 
-    fn load_from_disk(&mut self) -> AnyResult<()> {
-        if !self.storage_path.exists() {
-            return Ok(());
-        }
+    fn load<T: DeserializeOwned>(target: &mut T, path: &Path) -> AnyResult<()> {
+        let bytes = fs::read(path)?;
+        *target = postcard::from_bytes(&bytes)?;
 
-        let bytes = std::fs::read(&self.storage_path)?;
-        let host: Self = postcard::from_bytes(&bytes)?;
-
-        self.storage = host.storage;
-        self.secrets = host.secrets;
         Ok(())
     }
 
-    pub fn flush(&self) -> AnyResult<()> {
-        let bytes = postcard::to_allocvec(&self)?;
-        let tmp = self.storage_path.with_extension("tmp");
-        fs::write(&tmp, &bytes)?;
-        fs::rename(&tmp, &self.storage_path)?;
+    fn load_from_disk(&mut self) -> AnyResult<()> {
+        Self::load(&mut self.storage, app_paths::plugin_storage_file())?;
+        Self::load(&mut self.secrets, app_paths::plugin_secret_storage_file())?;
+        Self::load(&mut self.entry_cache, app_paths::plugin_entry_cache_file())?;
+
         Ok(())
+    }
+
+    fn flush<T: Serialize>(&self, target: &T, path: &Path) -> AnyResult<()> {
+        let bytes = postcard::to_allocvec(target)?;
+        let tmp = path.with_extension("tmp");
+        fs::write(&tmp, &bytes)?;
+        fs::rename(&tmp, path)?;
+
+        Ok(())
+    }
+
+    fn flush_storage(&self) -> AnyResult<()> {
+        self.flush(&self.storage, app_paths::plugin_storage_file())
+    }
+
+    fn flush_secret(&self) -> AnyResult<()> {
+        self.flush(&self.secrets, app_paths::plugin_secret_storage_file())
+    }
+
+    fn flush_cache(&self) -> AnyResult<()> {
+        self.flush(&self.entry_cache, app_paths::plugin_entry_cache_file())
     }
 
     pub fn get_item(&self, key: StorageKey) -> Option<Vec<u8>> {
@@ -58,7 +92,6 @@ impl HostState {
 
     pub fn set_item(&mut self, key: StorageKey, data: Vec<u8>) {
         self.storage.insert(key, data);
-        let _ = self.flush();
     }
 
     pub fn get_secret_item(&self, key: StorageKey) -> Option<Vec<u8>> {
@@ -67,7 +100,30 @@ impl HostState {
 
     pub fn set_secret_item(&mut self, key: StorageKey, data: Vec<u8>) {
         self.secrets.insert(key, data);
-        let _ = self.flush();
+    }
+
+    pub fn write_sample_cache<'a>(
+        &mut self,
+        plugin_id: &PluginId,
+        results: impl Iterator<Item = &'a WireEntry>,
+    ) {
+        if let Some(container) = self.entry_cache.get_mut(plugin_id) {
+            for r in results {
+                container.insert(r.clone());
+            }
+        }
+    }
+
+    pub fn search_local_registry(&self, req: &SearchRequest) -> Arc<Vec<WireEntry>> {
+        let entries = self
+            .entry_cache
+            .values()
+            .flat_map(|c| c.iter())
+            .par_bridge();
+
+        let results = filter_samples(entries, req);
+
+        Arc::new(results.iter().map(|c| (*c).clone()).collect())
     }
 
     /// Assembles the current stored config values for a plugin as a

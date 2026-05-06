@@ -1,9 +1,11 @@
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, RwLock};
 
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
+use plugin_wire::sample::{SampleEntryBase, SampleMetadata};
 
 use crate::AStr;
 use crate::ipc::IPCMessage;
@@ -12,6 +14,8 @@ use crate::state::AppState;
 mod data;
 mod search;
 mod tagger;
+
+pub mod utils;
 
 pub use data::*;
 
@@ -64,26 +68,9 @@ pub fn clean_up_string(input: &str) -> String {
 }
 
 impl SampleEntry for FsSample {
-    // fn name(&self) -> &str {
-    //     self.path.file_name().and_then(|s| s.to_str()).unwrap_or("")
-    // }
-
-    // fn path(&self) -> &Path {
-    //     &self.path
-    // }
-
-    // fn meta<'a>(&'a self) -> SampleMetadataRef<'_, impl Iterator<Item = &str>> {
-    //     SampleMetadataRef {
-    //         bpm: None,
-    //         description: "",
-    //         sample_type: SampleType::OneShot,
-    //         tags: self.tags.iter().map(|s| s.as_ref()),
-    //     }
-    // }
-
-    fn score<T: AsRef<str>>(&self, query: &str, tags: &[T], matcher: &SkimMatcherV2) -> i64 {
+    fn score(&self, query: &str, tags: &[&str], matcher: &SkimMatcherV2) -> i64 {
         if !tags.is_empty() {
-            let has_all = tags.iter().all(|t| self.tags.contains(&t.as_ref()));
+            let has_all = tags.iter().all(|t| self.tags.contains(t));
             if !has_all {
                 return i64::MIN;
             }
@@ -92,6 +79,35 @@ impl SampleEntry for FsSample {
         matcher
             .fuzzy_match(&self.search_str, query)
             .unwrap_or(i64::MIN)
+    }
+
+    fn to_hash<'a>(&'a self) -> Cow<'a, str> {
+        self.path.to_string_lossy()
+    }
+
+    fn to_base(&self) -> plugin_wire::sample::SampleEntryBase {
+        self.into()
+    }
+}
+
+impl From<&FsSample> for SampleEntryBase {
+    fn from(value: &FsSample) -> Self {
+        Self {
+            name: value
+                .path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string(),
+            path: Some(value.path.to_string_lossy().to_string()),
+            url: None,
+            meta: SampleMetadata {
+                bpm: None,
+                description: None,
+                sample_type: plugin_wire::SampleType::OneShot,
+                tags: value.tags.iter().map(|s| Arc::from(*s)).collect(),
+            },
+        }
     }
 }
 
@@ -105,14 +121,6 @@ impl FsSample {
             search_str,
             tags,
         }
-    }
-
-    pub fn serialize(&self, is_fav: bool) -> String {
-        format!(
-            r#"{{"path":"{}","tags":{:?},"fav":{is_fav}}}"#,
-            self.path.to_string_lossy().replace("\\", "\\\\"),
-            self.tags
-        )
     }
 }
 

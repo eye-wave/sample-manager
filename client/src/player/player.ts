@@ -50,6 +50,11 @@ function createPlayerHandle() {
     PreviewHandler.img = "";
     PreviewHandler.position = 0;
 
+    // const savedPath = await invoke(IPC.PLUGIN_DOWNLOAD_FILE, {
+    //   id: "plugin-id",
+    //   url: PreviewHandler.path,
+    // });
+
     await invoke(IPC.PLAY_AUDIO_FILE, path).then(() => {
       playerState = PLAYING;
       svg.innerHTML = PAUSE_ICON;

@@ -1,10 +1,10 @@
 #[cfg(feature = "std")]
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 #[cfg(feature = "std")]
 use ts_rs::TS;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "std", derive(Serialize, TS))]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize, TS))]
 #[repr(u8)]
 pub enum SampleType {
     OneShot = 0,

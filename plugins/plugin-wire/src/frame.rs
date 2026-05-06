@@ -2,6 +2,9 @@ use crate::types::SampleType;
 #[cfg(not(feature = "std"))]
 use alloc::{string::String, vec::Vec};
 
+#[cfg(feature = "std")]
+use serde::{Deserialize, Serialize};
+
 // -- byte offsets within a record's fixed header -------------------------------
 //
 // Result frame layout (little-endian, plugin → host):
@@ -12,54 +15,75 @@ use alloc::{string::String, vec::Vec};
 //   [+0 .. +4]          u32  str_len
 //   [+4 .. +8]          u32  name_end
 //   [+8 .. +12]         u32  path_end
-//   [+12.. +16]         u32  description_end
-//   [+16.. +20]         u32  tags_end
-//   [+20.. +22]         u16  bpm  (0 when has_bpm = 0)
-//   [+22]               u8   has_bpm  (0 or 1)
-//   [+23]               u8   sample_type
-//   [+24.. +24+str_len] u8[str_len]  str_content utf-8
+//   [+12.. +16]         u32  url_end
+//   [+16.. +20]         u32  description_end
+//   [+20.. +24]         u32  tags_end
+//   [+24.. +26]         u16  bpm  (0 when has_bpm = 0)
+//   [+26]               u8   has_bpm  (0 or 1)
+//   [+27]               u8   sample_type
+//   [+28.. +28+str_len] u8[str_len]  str_content utf-8
 //
-// str_content packs: name | path | description | comma-separated tags
-// The four _end offsets are byte positions within str_content.
+// str_content packs: name | path | url | description | comma-separated tags
+// The five _end offsets are byte positions within str_content.
 
 const OFF_STR_LEN: usize = 0;
 const OFF_NAME_END: usize = 4;
 const OFF_PATH_END: usize = 8;
-const OFF_DESC_END: usize = 12;
-const OFF_TAGS_END: usize = 16;
-const OFF_BPM: usize = 20;
-const OFF_HAS_BPM: usize = 22;
-const OFF_STYPE: usize = 23;
-const REC_FIXED: usize = 24;
+const OFF_URL_END: usize = 12;
+const OFF_DESC_END: usize = 16;
+const OFF_TAGS_END: usize = 20;
+const OFF_BPM: usize = 24;
+const OFF_HAS_BPM: usize = 26;
+const OFF_STYPE: usize = 27;
+const REC_FIXED: usize = 28;
 const FRAME_HEADER: usize = 4; // u32 record_count
 
 // -- WireEntry — the in-memory representation of one record --------------------
 
 /// One sample entry in the wire format, ready to be written or just parsed.
 ///
-/// `str_content` is the packed string: `name || path || description || tags`
-/// where `||` means concatenation. The four `*_end` fields are byte offsets
+/// `str_content` is the packed string: `name || path || url || description || tags`
+/// where `||` means concatenation. The five `*_end` fields are byte offsets
 /// into `str_content` marking where each section ends.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 pub struct WireEntry {
-    /// name[0..name_end] | path[name_end..path_end] |
-    /// description[path_end..description_end] | tags[description_end..tags_end]
+    /// name[0..name_end] | path[name_end..path_end] | url[path_end..url_end] |
+    /// description[url_end..description_end] | tags[description_end..tags_end]
     ///
     /// Tags are comma-separated within their slice.
     pub str_content: String,
     pub name_end: usize,
     pub path_end: usize,
+    pub url_end: usize,
     pub description_end: usize,
     pub tags_end: usize,
     pub bpm: Option<u16>,
     pub sample_type: SampleType,
 }
 
+#[cfg(feature = "std")]
+impl std::hash::Hash for WireEntry {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name().hash(state);
+        self.url().hash(state);
+    }
+}
+
+impl PartialEq for WireEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.name() == other.name() && self.url() == other.url()
+    }
+}
+
+impl Eq for WireEntry {}
+
 impl WireEntry {
     /// Convenience constructor — builds the packed `str_content` from parts.
     pub fn new(
         name: &str,
         path: &str,
+        url: &str,
         description: &str,
         tags: &[&str],
         bpm: Option<u16>,
@@ -68,6 +92,7 @@ impl WireEntry {
         let mut str_content = String::with_capacity(
             name.len()
                 + path.len()
+                + url.len()
                 + description.len()
                 + tags.iter().map(|t| t.len() + 1).sum::<usize>(),
         );
@@ -77,6 +102,9 @@ impl WireEntry {
 
         str_content.push_str(path);
         let path_end = str_content.len();
+
+        str_content.push_str(url);
+        let url_end = str_content.len();
 
         str_content.push_str(description);
         let description_end = str_content.len();
@@ -93,6 +121,7 @@ impl WireEntry {
             str_content,
             name_end,
             path_end,
+            url_end,
             description_end,
             tags_end,
             bpm,
@@ -103,11 +132,17 @@ impl WireEntry {
     pub fn name(&self) -> &str {
         &self.str_content[..self.name_end]
     }
-    pub fn path(&self) -> &str {
-        &self.str_content[self.name_end..self.path_end]
+    pub fn path(&self) -> Option<&str> {
+        let s = &self.str_content[self.name_end..self.path_end];
+        if s.is_empty() { None } else { Some(s) }
     }
-    pub fn description(&self) -> &str {
-        &self.str_content[self.path_end..self.description_end]
+    pub fn url(&self) -> Option<&str> {
+        let s = &self.str_content[self.path_end..self.url_end];
+        if s.is_empty() { None } else { Some(s) }
+    }
+    pub fn description(&self) -> Option<&str> {
+        let s = &self.str_content[self.url_end..self.description_end];
+        if s.is_empty() { None } else { Some(s) }
     }
     pub fn tags(&self) -> impl Iterator<Item = &str> {
         self.str_content[self.description_end..self.tags_end].split(',')
@@ -121,6 +156,7 @@ impl WireEntry {
         buf.extend_from_slice(&(str_len as u32).to_le_bytes());
         buf.extend_from_slice(&(self.name_end as u32).to_le_bytes());
         buf.extend_from_slice(&(self.path_end as u32).to_le_bytes());
+        buf.extend_from_slice(&(self.url_end as u32).to_le_bytes());
         buf.extend_from_slice(&(self.description_end as u32).to_le_bytes());
         buf.extend_from_slice(&(self.tags_end as u32).to_le_bytes());
         buf.extend_from_slice(&self.bpm.unwrap_or(0).to_le_bytes());
@@ -133,9 +169,6 @@ impl WireEntry {
 // -- frame I/O -----------------------------------------------------------------
 
 /// Serialize a slice of `WireEntry` into a complete frame buffer.
-///
-/// Returns the owned `Vec<u8>` — the plugin side calls this then passes the
-/// pointer back to the host via `mem::write_frame_ptr`.
 pub fn write_frame(entries: &[WireEntry]) -> Vec<u8> {
     let capacity = FRAME_HEADER
         + entries
@@ -153,9 +186,6 @@ pub fn write_frame(entries: &[WireEntry]) -> Vec<u8> {
 
 /// Parse a frame from a raw byte slice (starting at the count prefix).
 /// Returns `(entries, bytes_consumed)`.
-///
-/// `bytes_consumed` is the total number of bytes that make up this frame —
-/// the host passes this back to `free(frame_ptr, bytes_consumed)`.
 pub fn parse_frame(data: &[u8]) -> Result<(Vec<WireEntry>, usize), &'static str> {
     if data.len() < FRAME_HEADER {
         return Err("frame too short for count prefix");
@@ -178,6 +208,8 @@ pub fn parse_frame(data: &[u8]) -> Result<(Vec<WireEntry>, usize), &'static str>
             u32::from_le_bytes(h[OFF_NAME_END..OFF_NAME_END + 4].try_into().unwrap()) as usize;
         let path_end =
             u32::from_le_bytes(h[OFF_PATH_END..OFF_PATH_END + 4].try_into().unwrap()) as usize;
+        let url_end =
+            u32::from_le_bytes(h[OFF_URL_END..OFF_URL_END + 4].try_into().unwrap()) as usize;
         let description_end =
             u32::from_le_bytes(h[OFF_DESC_END..OFF_DESC_END + 4].try_into().unwrap()) as usize;
         let tags_end =
@@ -187,7 +219,8 @@ pub fn parse_frame(data: &[u8]) -> Result<(Vec<WireEntry>, usize), &'static str>
         let stype_byte = h[OFF_STYPE];
 
         if name_end > path_end
-            || path_end > description_end
+            || path_end > url_end
+            || url_end > description_end
             || description_end > tags_end
             || tags_end > str_len
         {
@@ -212,6 +245,7 @@ pub fn parse_frame(data: &[u8]) -> Result<(Vec<WireEntry>, usize), &'static str>
             str_content,
             name_end,
             path_end,
+            url_end,
             description_end,
             tags_end,
             bpm: has_bpm.then_some(bpm_raw),

@@ -1,7 +1,6 @@
 use std::fs;
-use std::path::PathBuf;
 
-use crate::ipc::{IPCBody, IPCError, IPCResponse, IntoIPCResponse, Poisoned, ok};
+use crate::ipc::{IPCBody, IPCError, IPCMessage, IPCResponse, IntoIPCResponse, Poisoned, ok};
 use crate::ipc_commands;
 use crate::state::samples::{SearchRequest, process_directories, search_local, tag_string};
 
@@ -59,17 +58,26 @@ fn start_sample_scan(body: IPCBody) -> IPCResponse {
 }
 
 fn search_for_sample(body: IPCBody) -> IPCResponse {
-    crate::with_state!(body, state, {
-        let req: SearchRequest = serde_json::from_str(&body.req)?;
-        search_local(&req, &state).finish()
-    })
+    let req: SearchRequest = serde_json::from_str(&body.req)?;
+
+    std::thread::spawn(move || {
+        let state = body.app_state.read().unwrap();
+        if let Ok(payload) = search_local(&req, &state) {
+            let _ = body.webview_sender.send(IPCMessage {
+                id: "search",
+                payload,
+            });
+        }
+    });
+
+    ok()
 }
 
 const SET_FAV_ID: &str = "set-fav";
 
 fn add_sample_to_fav(body: IPCBody) -> IPCResponse {
     crate::with_state_mut!(body, state, {
-        state.add_sample_to_fav(body.req.to_string().into());
+        state.add_sample_to_fav(&body.req);
 
         body.webview_sender
             .send(super::IPCMessage {
@@ -101,7 +109,7 @@ fn is_sample_fav(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
         state
             .favorite_samples
-            .contains(&PathBuf::from(body.req.to_string()))
+            .contains(body.req.as_ref())
             .to_string()
             .finish()
     })

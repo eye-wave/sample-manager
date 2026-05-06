@@ -10,7 +10,7 @@ type PromiseReturn = {
 const pending = new Map<number, PromiseReturn>();
 let nextId = 1;
 
-export const invoke = (id: number, payload?: string | number) => {
+export const invoke = <T>(id: number, payload?: T) => {
   return new Promise<string>((resolve, reject) => {
     const callId = nextId++;
     pending.set(callId, { resolve, reject });
@@ -18,7 +18,12 @@ export const invoke = (id: number, payload?: string | number) => {
     if (typeof ipc === "undefined")
       return console.warn(`Trying to call IPC command: "${id}" in the browser window.`);
     /// DEV end
-    ipc.postMessage(`${id}:${callId}:${payload ?? ""}`);
+
+    let data = "";
+    if (typeof payload === "object") data = JSON.stringify(payload);
+    else data = payload as string;
+
+    ipc.postMessage(`${id}:${callId}:${data ?? ""}`);
   });
 };
 
