@@ -1,8 +1,5 @@
 use std::fs;
-use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
-
-use ahash::AHasher;
 
 use crate::AnyResult;
 #[cfg(not(target_os = "windows"))]
@@ -10,13 +7,16 @@ use crate::plugins::PluginId;
 use crate::state::app_paths;
 use crate::window::PROTOCOL;
 
-pub fn hash_path(path: &str) -> String {
+pub fn hash_path(plugin_id: Option<&PluginId>, path: &str) -> String {
     use base64::Engine;
 
-    let mut hasher = AHasher::default();
-    path.hash(&mut hasher);
+    let mut hasher = blake3::Hasher::new();
+    if let Some(id) = plugin_id {
+        hasher.update(id.as_ref().as_bytes());
+    }
+    hasher.update(path.as_bytes());
 
-    base64::prelude::BASE64_URL_SAFE_NO_PAD.encode(hasher.finish().to_be_bytes())
+    base64::prelude::BASE64_URL_SAFE_NO_PAD.encode(hasher.finalize().as_bytes())
 }
 
 pub fn thumbnail_path(hashed: &str) -> PathBuf {

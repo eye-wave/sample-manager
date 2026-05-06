@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use plugin_wire::sample::SampleSerialize;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -103,7 +105,14 @@ fn plugin_download_file(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
         let IdWithPath { id, url } = serde_json::from_str(&body.req)?;
 
-        state.plugin_handle.download(id, url)?.finish()
+        let ffmpeg_path = state.get_config().ffmpeg_path.clone();
+        let ffmpeg_path: Option<AStr> =
+            ffmpeg_path.as_ref().and_then(|p| p.to_str()).map(Arc::from);
+
+        state
+            .plugin_handle
+            .download(id, url, ffmpeg_path, body.webview_sender)?
+            .finish()
     })
 }
 

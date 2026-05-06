@@ -14,7 +14,6 @@ mod logger;
 mod plugins;
 mod samples;
 mod theme;
-mod waveform;
 mod window;
 
 #[derive(Debug, thiserror::Error)]
@@ -140,7 +139,6 @@ pub fn commands_iter<'a>() -> impl Iterator<Item = &'a dyn IPCCommand> {
     use crate::ipc::plugins::IPC_PLUGINS;
     use crate::ipc::samples::IPC_SAMPLES;
     use crate::ipc::theme::IPC_THEME;
-    use crate::ipc::waveform::IPC_WAVEFORM;
     use crate::ipc::window::IPC_WINDOW;
 
     IPC_WINDOW
@@ -152,7 +150,6 @@ pub fn commands_iter<'a>() -> impl Iterator<Item = &'a dyn IPCCommand> {
         .chain(IPC_PLUGINS.iter())
         .chain(IPC_SAMPLES.iter())
         .chain(IPC_THEME.iter())
-        .chain(IPC_WAVEFORM.iter())
         .copied()
 }
 

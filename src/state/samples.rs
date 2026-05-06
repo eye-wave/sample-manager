@@ -14,13 +14,14 @@ use crate::state::AppState;
 mod data;
 mod search;
 mod tagger;
+mod waveform;
 
 pub mod utils;
 
-pub use data::*;
-
+pub use data::SampleEntry;
 pub use search::{SearchRequest, filter_samples, search_local};
 pub use tagger::tag_string;
+pub use waveform::{WaveformData, draw_audio_and_save};
 
 pub const SAMPLE_EXTENSIONS: &[&str] = &[
     "aac", "aiff", "caf", "flac", "mid", "midi", "mp2", "mp3", "mp4", "mpeg", "ogg", "opus", "wav",

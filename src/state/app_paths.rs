@@ -48,12 +48,13 @@ macro_rules! define_paths {
 define_paths! {
     fn config_file => config.join("config.toml") = file
     fn favorites_file => cache.join(".favorites") = file
-    fn themes_path => config.join("themes") = file
-    fn thumbnail_cache_path => cache.join(".waves") = file
 
     fn plugin_storage_file => cache.join("plugin-storage.db") = file
     fn plugin_secret_storage_file => cache.join("plugin-secret-store.db") = file
     fn plugin_entry_cache_file => cache.join("plugin-entry-cache.db") = file
+
+    fn themes_path => config.join("themes") = path
+    fn thumbnail_cache_path => cache.join(".waves") = path
 
     fn plugin_sync_path => data.join("Samples") = path
     fn plugin_cache_path => cache.join(PLUGIN_DIR) = path

@@ -8,6 +8,7 @@ use wasmtime::{Instance, TypedFunc};
 
 use crate::{
     AStr, AnyResult,
+    ipc::IPCMessage,
     plugins::{manifest::PluginManifest, runner::PluginRunner},
     state::samples::SearchRequest,
 };
@@ -56,6 +57,8 @@ pub enum PluginRunnerCommand {
         plugin_id: PluginId,
         url: String,
         reply_to: mpsc::SyncSender<Result<PathBuf, String>>,
+        ffmpeg_path: Option<AStr>,
+        web_sender: mpsc::Sender<IPCMessage>,
     },
     SearchLocalRegistry {
         req: SearchRequest,
@@ -112,7 +115,13 @@ impl PluginRuntimeHandle {
         Ok(rx.recv()?)
     }
 
-    pub fn download(&self, plugin_id: PluginId, url: &str) -> Result<PathBuf, String> {
+    pub fn download(
+        &self,
+        plugin_id: PluginId,
+        url: &str,
+        ffmpeg_path: Option<AStr>,
+        web_sender: mpsc::Sender<IPCMessage>,
+    ) -> Result<PathBuf, String> {
         let (tx, rx) = mpsc::sync_channel(1);
 
         self.sender
@@ -120,6 +129,8 @@ impl PluginRuntimeHandle {
                 plugin_id,
                 url: url.to_string(),
                 reply_to: tx,
+                ffmpeg_path,
+                web_sender,
             })
             .map_err(|e| e.to_string())?;
 

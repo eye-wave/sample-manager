@@ -11,11 +11,11 @@ resolver = "3"
 members = ["plugins/*", "tagger/compiler"]
 
 [dependencies]
-ahash = { version = "0.8.12", default-features = false }
 assert_no_alloc = "1.1.2"
 atomic_float = "1.1.0"
 base64 = "0.22.1"
 bitflags = "2.11.1"
+blake3 = "1.8.5"
 cpal = "0.17.3"
 dirs = "6.0.0"
 drag = "2.1.0"
@@ -29,9 +29,7 @@ serde = { version = "1.0.228", default-features = false, features = [
   "derive",
   "rc",
 ] }
-serde_json = { version = "1.0.149", default-features = false, features = [
-  "alloc",
-] }
+serde_json = "1.0.149"
 struct-patch = "0.11.0"
 symphonia = { version = "0.5.5", features = ["mp3", "wav", "vorbis"] }
 tao = "0.35.0"

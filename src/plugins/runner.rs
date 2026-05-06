@@ -1,15 +1,14 @@
-use std::{
-    collections::HashMap,
-    fs,
-    io::Read,
-    sync::mpsc,
-    time::{Duration, Instant},
-};
+use std::collections::HashMap;
+use std::fs;
+use std::io::Read;
+use std::sync::mpsc;
+use std::time::{Duration, Instant};
 
 use plugin_wire::{WireEntry, encode_search_request, parse_frame, sample::SampleSerialize};
 use rayon::prelude::*;
 use wasmtime::{Caller, Engine, Linker, Module, Store};
 
+use crate::state::samples::WaveformData;
 use crate::{
     AStr, AnyResult,
     plugins::{
@@ -18,7 +17,7 @@ use crate::{
         manifest::{PluginManifest, SearchMode},
         unpack_plugin_zip,
     },
-    state::samples::{SearchRequest, filter_samples},
+    state::samples::{SearchRequest, draw_audio_and_save, filter_samples},
 };
 
 // -- index cache ---------------------------------------------------------------
@@ -91,13 +90,23 @@ impl PluginRunner {
                     plugin_id,
                     url,
                     reply_to,
+                    ffmpeg_path,
+                    web_sender,
                 }) => {
                     use crate::state::samples::utils::*;
 
                     let response = (|| -> AnyResult<_> {
                         let bytes = self.call_wasm_download(&plugin_id, &url)?;
-                        let hashed = hash_path(&url);
+                        let hashed = hash_path(Some(&plugin_id), &url);
                         let save_path = sync_path(&plugin_id, &hashed)?;
+
+                        draw_audio_and_save(
+                            Some(&plugin_id),
+                            &url,
+                            WaveformData::Bytes("wav", &bytes),
+                            ffmpeg_path,
+                        )?
+                        .send_to_webview(web_sender)?;
 
                         fs::write(&save_path, bytes)?;
                         Ok(save_path)
