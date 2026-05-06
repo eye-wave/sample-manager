@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use plugin_wire::{WireEntry, encode_search_request, parse_frame, sample::SampleEntryBase};
+use plugin_wire::{WireEntry, encode_search_request, parse_frame, sample::SampleSerialize};
 use rayon::prelude::*;
 use wasmtime::{Caller, Engine, Linker, Module, Store};
 
@@ -75,7 +75,7 @@ impl PluginRunner {
 
                     let res = result
                         .as_ref()
-                        .map(|r| r.iter().map(|f| f.into()).collect::<Vec<SampleEntryBase>>());
+                        .map(|r| r.iter().map(|f| f.into()).collect::<Vec<SampleSerialize>>());
 
                     let _ = reply_to.send(res.map_err(|e| e.to_string()));
                 }

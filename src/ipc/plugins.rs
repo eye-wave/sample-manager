@@ -1,4 +1,4 @@
-use plugin_wire::sample::SampleEntryBase;
+use plugin_wire::sample::SampleSerialize;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -60,7 +60,7 @@ fn configure_plugin_value(body: IPCBody) -> IPCResponse {
 
 #[derive(Serialize)]
 struct SearchResult {
-    files: Vec<SampleEntryBase>,
+    files: Vec<SampleSerialize>,
     count: usize,
 }
 

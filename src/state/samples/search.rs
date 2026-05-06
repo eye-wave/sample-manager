@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use fuzzy_matcher::skim::SkimMatcherV2;
-use plugin_wire::sample::SampleEntryBase;
+use plugin_wire::sample::SampleSerialize;
 use rayon::{iter::Either, prelude::*};
 use serde::{Deserialize, Serialize};
 
@@ -86,11 +86,11 @@ pub fn filter_samples<'a, T: SampleEntry + Sized>(
 pub fn filter_samples_dyn<'a>(
     entries: impl ParallelIterator<Item = &'a dyn SampleEntry>,
     req: &SearchRequest,
-) -> Vec<SampleEntryBase> {
+) -> Vec<SampleSerialize> {
     let query = clean_up_string(&req.query);
     let matcher = SkimMatcherV2::default().smart_case();
 
-    let mut result: Vec<(SampleEntryBase, i64)> = entries
+    let mut result: Vec<(SampleSerialize, i64)> = entries
         .map(|s| {
             let score = if req.is_fav && query.is_empty() {
                 i64::MAX

@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, mpsc},
 };
 
-use plugin_wire::{WireEntry, sample::SampleEntryBase};
+use plugin_wire::{WireEntry, sample::SampleSerialize};
 use wasmtime::{Instance, TypedFunc};
 
 use crate::{
@@ -39,7 +39,7 @@ pub enum PluginRunnerCommand {
     Search {
         id: PluginId,
         req: SearchRequest,
-        reply_to: mpsc::SyncSender<Result<Vec<SampleEntryBase>, String>>,
+        reply_to: mpsc::SyncSender<Result<Vec<SampleSerialize>, String>>,
     },
     SetConfigField {
         id: PluginId,
@@ -126,7 +126,7 @@ impl PluginRuntimeHandle {
         rx.recv().map_err(|e| e.to_string())?
     }
 
-    pub fn search(&self, id: PluginId, req: SearchRequest) -> Result<Vec<SampleEntryBase>, String> {
+    pub fn search(&self, id: PluginId, req: SearchRequest) -> Result<Vec<SampleSerialize>, String> {
         let (tx, rx) = mpsc::sync_channel(1);
         self.sender
             .send(Cmd::Search {

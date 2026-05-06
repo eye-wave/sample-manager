@@ -5,7 +5,7 @@ use std::sync::{Arc, RwLock};
 
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
-use plugin_wire::sample::{SampleEntryBase, SampleMetadata};
+use plugin_wire::sample::{SampleMetadata, SampleSerialize};
 
 use crate::AStr;
 use crate::ipc::IPCMessage;
@@ -85,12 +85,12 @@ impl SampleEntry for FsSample {
         self.path.to_string_lossy()
     }
 
-    fn to_base(&self) -> plugin_wire::sample::SampleEntryBase {
+    fn to_base(&self) -> plugin_wire::sample::SampleSerialize {
         self.into()
     }
 }
 
-impl From<&FsSample> for SampleEntryBase {
+impl From<&FsSample> for SampleSerialize {
     fn from(value: &FsSample) -> Self {
         Self {
             name: value

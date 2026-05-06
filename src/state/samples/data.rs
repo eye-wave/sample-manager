@@ -1,7 +1,7 @@
 use std::{borrow::Cow, sync::Arc};
 
 use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
-use plugin_wire::{WireEntry, sample::SampleEntryBase};
+use plugin_wire::{WireEntry, sample::SampleSerialize};
 use serde::Serialize;
 use ts_rs::TS;
 
@@ -12,14 +12,14 @@ use crate::state::AppState;
 struct WithFav {
     is_fav: bool,
     #[serde(flatten)]
-    inner: SampleEntryBase,
+    inner: SampleSerialize,
 }
 
 pub trait SampleEntry: Sync {
     fn score(&self, query: &str, tags: &[&str], matcher: &SkimMatcherV2) -> i64;
 
     fn to_hash<'a>(&'a self) -> Cow<'a, str>;
-    fn to_base(&self) -> SampleEntryBase;
+    fn to_base(&self) -> SampleSerialize;
 
     fn is_fav(&self, state: &AppState) -> bool {
         state.favorite_samples.contains(&self.to_hash().to_string())
@@ -55,12 +55,12 @@ impl SampleEntry for WireEntry {
             .unwrap_or(i64::MIN)
     }
 
-    fn to_base(&self) -> SampleEntryBase {
+    fn to_base(&self) -> SampleSerialize {
         self.into()
     }
 }
 
-impl SampleEntry for SampleEntryBase {
+impl SampleEntry for SampleSerialize {
     fn score(&self, query: &str, tags: &[&str], matcher: &SkimMatcherV2) -> i64 {
         if !tags.is_empty() {
             let has_all = tags.iter().all(|t| self.meta.tags.contains(&Arc::from(*t)));
@@ -84,7 +84,7 @@ impl SampleEntry for SampleEntryBase {
         )
     }
 
-    fn to_base(&self) -> SampleEntryBase {
+    fn to_base(&self) -> SampleSerialize {
         self.clone()
     }
 }

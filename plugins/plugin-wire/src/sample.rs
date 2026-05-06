@@ -18,7 +18,7 @@ use alloc::vec::Vec;
 use crate::{SampleType, WireEntry};
 
 #[cfg_attr(feature = "std", derive(Debug, Clone, Serialize, TS))]
-pub struct SampleEntryBase {
+pub struct SampleSerialize {
     pub name: String,
     pub path: Option<String>,
     pub url: Option<String>,
@@ -35,8 +35,8 @@ pub struct SampleMetadata {
     pub sample_type: SampleType,
 }
 
-impl From<SampleEntryBase> for WireEntry {
-    fn from(entry: SampleEntryBase) -> Self {
+impl From<SampleSerialize> for WireEntry {
+    fn from(entry: SampleSerialize) -> Self {
         let mut str_content = String::with_capacity(entry.name.len());
 
         str_content.push_str(&entry.name);
@@ -81,7 +81,7 @@ impl From<SampleEntryBase> for WireEntry {
     }
 }
 
-impl From<&WireEntry> for SampleEntryBase {
+impl From<&WireEntry> for SampleSerialize {
     fn from(raw: &WireEntry) -> Self {
         let s = &raw.str_content;
 
@@ -129,7 +129,7 @@ impl From<&WireEntry> for SampleEntryBase {
     }
 }
 
-impl From<WireEntry> for SampleEntryBase {
+impl From<WireEntry> for SampleSerialize {
     fn from(value: WireEntry) -> Self {
         Self::from(&value)
     }

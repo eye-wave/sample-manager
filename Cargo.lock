@@ -2323,11 +2323,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
+name = "plugin_discord"
+version = "0.1.0"
+dependencies = [
+ "plugin_sdk",
+]
+
+[[package]]
 name = "plugin_sdk"
 version = "0.1.0"
 dependencies = [
  "paste",
  "plugin_wire",
+]
+
+[[package]]
+name = "plugin_splice"
+version = "0.1.0"
+dependencies = [
+ "plugin_sdk",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
