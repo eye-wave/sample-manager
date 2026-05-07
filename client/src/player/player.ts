@@ -15,10 +15,50 @@ declare const time_est__: HTMLSpanElement;
 
 declare const pause_btn__: HTMLButtonElement;
 
+declare const volume_ctrl__: HTMLInputElement;
+declare const volume_txt__: HTMLSpanElement;
+
 const RESUME_ICON = `<path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/>`;
 const PAUSE_ICON = `<rect x=14 y=3 width=5 height=18 rx="1"/><rect x=5 y=3 width=5 height=18 rx="1"/>`;
 
 function createPlayerHandle() {
+  const norm = (value: number) => (3 * Math.atan(value)) / Math.PI;
+  const denorm = (value: number) => Math.tan((Math.PI * value) / 3);
+
+  volume_ctrl__.max = norm(2.01).toPrecision(4);
+
+  const setVolumeText = (value: number) => {
+    volume_txt__.textContent = `${value > 1 ? "+" : ""}${(value * 100) | 0}%`;
+    volume_txt__.style.color = value > 1 ? "var(--accent)" : "var(--text-primary)";
+  };
+
+  const setVolume = (value: number) => {
+    invoke(IPC.SET_VOLUME, value);
+    setVolumeText(value);
+  };
+
+  const syncSlider = (value: number) => {
+    volume_ctrl__.value = norm(value) as unknown as string;
+  };
+
+  invoke(IPC.GET_VOLUME).then((value) => {
+    const volume = +value;
+
+    setVolumeText(volume);
+    syncSlider(volume);
+  });
+
+  volume_ctrl__.oninput = () => {
+    setVolume(denorm(+volume_ctrl__.value));
+  };
+
+  volume_ctrl__.ondblclick = () => {
+    const defaultVolume = 1;
+
+    syncSlider(defaultVolume);
+    setVolume(defaultVolume);
+  };
+
   let playerState = 2;
   let intervalId = -1;
 
@@ -93,7 +133,7 @@ function createPlayerHandle() {
   pause_btn__.onclick = togglePause;
 
   w.addEventListener("keydown", (e) => {
-    if (isFocusElement(e.target)) return;
+    if (isFocusElement(e.target) && e.target !== volume_ctrl__) return;
     if (e.key === " ") {
       e.preventDefault();
       togglePause();

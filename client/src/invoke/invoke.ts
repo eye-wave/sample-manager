@@ -15,8 +15,11 @@ export const invoke = <T>(id: number, payload?: T) => {
     const callId = nextId++;
     pending.set(callId, { resolve, reject });
     /// DEV start
-    if (typeof ipc === "undefined")
-      return console.warn(`Trying to call IPC command: "${id}" in the browser window.`);
+
+    if (typeof ipc === "undefined") {
+      const key = Object.entries(IPC).find((e) => e[1] === id)?.[0];
+      return console.warn(`Trying to call IPC command: "${key}" in the browser window.`);
+    }
     /// DEV end
 
     let data = "";

@@ -162,7 +162,9 @@ impl PlayerHandle {
     }
 
     pub fn set_volume(&self, volume: f32) {
-        self.shared.volume.store(volume, Ordering::Release);
+        self.shared
+            .volume
+            .store(volume.clamp(0.0, 2.0), Ordering::Release);
     }
 }
 

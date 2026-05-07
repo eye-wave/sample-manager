@@ -20,6 +20,11 @@ btn_closeWindow__.onclick = () => invoke(IPC.CLOSE_WINDOW);
 
 /// DEV start
 updateCurrentTheme();
+
+if (typeof ipc === "undefined") {
+  import("../styles/theme.scss");
+}
+
 /// DEV end
 
 w.addEventListener(

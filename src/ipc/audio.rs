@@ -93,6 +93,6 @@ crate::ipc_commands! {
         player_stop,
         player_seek,
         get_volume,
-        set_volume,
+        set_volume
     ]
 }
