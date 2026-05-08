@@ -1,0 +1,29 @@
+theme_type = "dark"
+
+bg_base = "0d1112"
+bg_panel = "14191b"
+bg_surface = "1c2326"
+bg_hover = "252d31"
+bg_active = "2d373c"
+
+accent = "94fbab"
+accent_dim = "76c889"
+accent_glow = "94fbab26"
+
+text_primary = "cbd5d6"
+text_secondary = "8a9a9c"
+text_muted = "57686a"
+
+border = "cbd5d614"
+border_active = "94fbab66"
+
+tag_bg = "1c2326"
+tag_text = "94fbab"
+tag_text_secondary = "bb9af7"
+
+love = "711c91"
+
+wave_a = "1a1b26"
+wave_b = "94fbab"
+
+radius = 4
