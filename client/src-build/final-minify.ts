@@ -108,6 +108,7 @@ function commonDictionary(html: string) {
     "clientY",
     "style",
     "dataset",
+    "parentElement",
     "preventDefault",
     "querySelectorAll",
     "querySelector",

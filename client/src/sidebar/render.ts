@@ -3,8 +3,8 @@ import { loadNode } from "./lazy-load";
 import { SIDEBAR_FOLDER, SIDEBAR_ITEM } from "./template";
 import { FileType, type VFSNode } from "./vfs";
 
-export function renderNode(parent: HTMLElement, node: VFSNode): void {
-  parent.insertAdjacentHTML("beforeend", SIDEBAR_FOLDER(node.displayName));
+export function renderNode(parent: HTMLElement, node: VFSNode, icon?: string): void {
+  parent.insertAdjacentHTML("beforeend", SIDEBAR_FOLDER(node.displayName, icon));
   parent.insertAdjacentHTML(
     "beforeend",
     /* HTML */ `<div class="tree-children" style="display:none"></div>`,

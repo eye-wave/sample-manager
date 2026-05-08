@@ -34,7 +34,7 @@ const createVisualNode = (section: Element) => {
   if (countSpan && countEl) countSpan.appendChild(countEl);
 
   // biome-ignore lint/style/noNonNullAssertion: trust
-  const iconEl = section.querySelector<SVGPathElement>("path")!;
+  const iconEl = section.querySelector<SVGPathElement>("[data-folder] path")!;
 
   iconEl.setAttribute("d", FOLDER_CLOSED);
 
@@ -55,6 +55,7 @@ const createVisualNode = (section: Element) => {
       const open = arrowClassList?.contains("open");
 
       iconEl?.setAttribute("d", open ? FOLDER_OPEN : FOLDER_CLOSED);
+
       if (childrenEl) {
         childrenEl.style.display = open ? "block" : "none";
       }
@@ -82,9 +83,9 @@ export type VFSNode = {
 };
 
 export const VFSNode = {
-  root(path: string) {
+  root(path: string, name?: string) {
     const n = createNode(path);
-    n.displayName = basename(path);
+    n.displayName = name ?? basename(path);
     return n;
   },
 

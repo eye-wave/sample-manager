@@ -67,22 +67,65 @@ w._s = send;
 
 /// DEV start
 if (typeof ipc !== "undefined") {
-  const toStr = <T>(i: T) => {
-    const type = typeof i;
-    if (type === "string") return i;
-    if (type === "number") return `${i}`;
-    if (type === "boolean") return i ? "true" : "false";
-    if (type === "object") {
-      const name = i?.constructor.name;
-      const json = JSON.stringify(i, null, 2);
-      const jsonHidden = json === "{}" ? "" : json;
+  const inspect = (value: unknown, depth = 0, maxDepth = 3): string => {
+    const indent = "  ".repeat(depth);
 
-      return `\x1b[90m[${name}]\x1b[0m${jsonHidden}`;
+    if (value === null) return "null";
+    if (value === undefined) return "undefined";
+
+    const type = typeof value;
+
+    if (type !== "object") {
+      if (type === "string") return `"${value}"`;
+      return String(value);
     }
+
+    const obj = value as Record<string, unknown>;
+
+    const name =
+      value instanceof Object && value.constructor ? value.constructor.name : "Object";
+
+    if (depth >= maxDepth) {
+      return `[\x1b[90m${name}\x1b[0m] {...}`;
+    }
+
+    if (Array.isArray(value)) {
+      const len = value.length;
+
+      const items: string[] = [];
+
+      for (let i = 0; i < Math.min(len, 10); i++) {
+        items.push(`${i}: ${inspect(value[i] as unknown, depth + 1, maxDepth)}`);
+      }
+
+      const more = len > 10 ? ` ... +${len - 10}` : "";
+
+      return `[\x1b[90m${name}\x1b[0m:${len}] {\n${indent}  ${items.join(
+        "\n" + indent + "  ",
+      )}${more ? "\n" + indent + more : ""}\n${indent}}`;
+    }
+
+    const entries: string[] = [];
+
+    try {
+      for (const k of Object.keys(obj)) {
+        const v = obj[k];
+        entries.push(`${k}: ${inspect(v, depth + 1, maxDepth)}`);
+      }
+    } catch {
+      return `[\x1b[90m${name}\x1b[0m] <uninspectable>`;
+    }
+
+    if (entries.length === 0) {
+      return `[\x1b[90m${name}\x1b[0m] {}`;
+    }
+
+    return `[\x1b[90m${name}\x1b[0m] {\n${indent}  ${entries.join(
+      "\n" + indent + "  ",
+    )}\n${indent}}`;
   };
 
-  const toLog = (args: unknown[]) =>
-    args.reduce((str: string, n: unknown) => str + toStr(n) + " ", "").slice(0, -1);
+  const toLog = (args: unknown[]) => args.map((a) => inspect(a)).join(" ");
 
   console.log = (...args) => invoke(IPC.LOG, "L" + toLog(args));
   console.warn = (...args) => invoke(IPC.LOG, "W" + toLog(args));

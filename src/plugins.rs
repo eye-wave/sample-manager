@@ -9,16 +9,14 @@ use wasmtime::{Instance, TypedFunc};
 use crate::{
     AStr, AnyResult,
     ipc::IPCMessage,
-    plugins::{manifest::PluginManifest, runner::PluginRunner},
-    state::samples::SearchRequest,
+    plugins::{icon::SVGIcon, manifest::PluginManifest, runner::PluginRunner},
+    state::{config::FFPaths, samples::SearchRequest},
 };
 
 mod host;
-mod loader;
+mod icon;
 mod manifest;
 mod runner;
-
-pub(super) use loader::unpack_plugin_zip;
 
 pub use manifest::{PluginId, PluginInfo, config_key, parse_string_to_bytes};
 
@@ -31,7 +29,6 @@ pub struct PluginInstance {
     pub fn_free: TypedFunc<(u32, u32), ()>,
 }
 
-#[derive(Debug)]
 pub enum PluginRunnerCommand {
     LoadPlugin {
         name: AStr,
@@ -52,12 +49,13 @@ pub enum PluginRunnerCommand {
     },
     GetAllPluginsInfo {
         reply_to: mpsc::Sender<Vec<PluginInfo>>,
+        icon_cb: Box<dyn Fn(&mut SVGIcon) + Send + 'static>,
     },
     Download {
         plugin_id: PluginId,
         url: String,
         reply_to: mpsc::SyncSender<Result<PathBuf, String>>,
-        ffmpeg_path: Option<AStr>,
+        ffpaths: FFPaths,
         web_sender: mpsc::Sender<IPCMessage>,
     },
     SearchLocalRegistry {
@@ -119,7 +117,7 @@ impl PluginRuntimeHandle {
         &self,
         plugin_id: PluginId,
         url: &str,
-        ffmpeg_path: Option<AStr>,
+        ffpaths: FFPaths,
         web_sender: mpsc::Sender<IPCMessage>,
     ) -> Result<PathBuf, String> {
         let (tx, rx) = mpsc::sync_channel(1);
@@ -129,7 +127,7 @@ impl PluginRuntimeHandle {
                 plugin_id,
                 url: url.to_string(),
                 reply_to: tx,
-                ffmpeg_path,
+                ffpaths,
                 web_sender,
             })
             .map_err(|e| e.to_string())?;
@@ -150,9 +148,15 @@ impl PluginRuntimeHandle {
         rx.recv().map_err(|e| e.to_string())?
     }
 
-    pub fn get_all_plugins_info(&self) -> Vec<PluginInfo> {
+    pub fn get_all_plugins_info<F>(&self, icon_cb: F) -> Vec<PluginInfo>
+    where
+        F: Fn(&mut SVGIcon) + Send + 'static,
+    {
         let (tx, rx) = std::sync::mpsc::channel();
-        let _ = self.sender.send(Cmd::GetAllPluginsInfo { reply_to: tx });
+        let _ = self.sender.send(Cmd::GetAllPluginsInfo {
+            reply_to: tx,
+            icon_cb: Box::new(icon_cb),
+        });
         rx.recv().unwrap_or_default()
     }
 

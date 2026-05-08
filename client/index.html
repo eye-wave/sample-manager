@@ -76,6 +76,11 @@
                   </div>
 
                   <div class="field">
+                    <span class="field-label">FFprobe path</span>
+                    <input type="text" id="ffprobe_path__">
+                  </div>
+
+                  <div class="field">
                     <span class="field-label">Sidebar width</span>
                     <input type="number" id="sidebar_width__">
                   </div>
@@ -123,6 +128,8 @@
           <div class="sidebar-divider"></div>
           <div class="sidebar-header">File Tree</div>
           <div id="sidebar__" class="sidebar-scroll"></div>
+          <div id="sidebar_plugins__" class="sidebar-scroll"></div>
+          <div style="flex:1"></div>
           <div style="padding:8px;border-top:1px solid var(--border)">
             <button id="add_folder__" class="add-folder">+ Add Folder</button>
           </div>

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::path::Path;
 
 use plugin_wire::sample::SampleSerialize;
 use serde::{Deserialize, Serialize};
@@ -8,7 +8,7 @@ use crate::{
     AStr,
     ipc::{IPCBody, IPCMessage, IPCResponse, IntoIPCResponse, ok},
     plugins::{PluginId, parse_string_to_bytes},
-    state::samples::SearchRequest,
+    state::{app_paths, samples::SearchRequest},
 };
 
 fn disable_plugin(body: IPCBody) -> IPCResponse {
@@ -24,7 +24,7 @@ fn disable_plugin(body: IPCBody) -> IPCResponse {
 fn get_all_plugins_info(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
         let mut plugins_info = state.loaded_plugins_info.clone();
-        let loaded_plugins_info = state.plugin_handle.get_all_plugins_info();
+        let loaded_plugins_info = state.plugin_handle.get_all_plugins_info(|_| {});
 
         for p in plugins_info.iter_mut() {
             if loaded_plugins_info
@@ -51,6 +51,7 @@ struct ConfigPluginValueUpdate {
 fn configure_plugin_value(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
         let ConfigPluginValueUpdate { id, name, data } = serde_json::from_str(&body.req)?;
+        println!("Got from UI: {id}, {name}, {data}");
 
         let data = parse_string_to_bytes(data);
 
@@ -105,14 +106,44 @@ fn plugin_download_file(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
         let IdWithPath { id, url } = serde_json::from_str(&body.req)?;
 
-        let ffmpeg_path = state.get_config().ffmpeg_path.clone();
-        let ffmpeg_path: Option<AStr> =
-            ffmpeg_path.as_ref().and_then(|p| p.to_str()).map(Arc::from);
+        let paths = state.get_config().ffpaths.clone();
 
         state
             .plugin_handle
-            .download(id, url, ffmpeg_path, body.webview_sender)?
+            .download(id, url, paths, body.webview_sender)?
             .finish()
+    })
+}
+
+fn get_plugin_paths(body: IPCBody) -> IPCResponse {
+    crate::with_state!(body, state, {
+        let info = state.plugin_handle.get_all_plugins_info(|icon| {
+            icon.with_size(20, 20);
+        });
+
+        let lines = info
+            .iter()
+            .filter_map(|plug| {
+                let path = app_paths::plugin_sync_path().join(plug.meta.id.as_ref());
+
+                #[derive(Serialize)]
+                struct PluginSidebarView<'a> {
+                    name: &'a str,
+                    path: &'a Path,
+                    icon: Option<String>,
+                }
+
+                serde_json::to_string(&PluginSidebarView {
+                    name: &plug.meta.name,
+                    path: &path,
+                    icon: plug.icon.clone(),
+                })
+                .ok()
+            })
+            .intersperse(",".into())
+            .collect::<String>();
+
+        format!("[{lines}]").finish()
     })
 }
 
@@ -122,6 +153,7 @@ crate::ipc_commands! {
         get_all_plugins_info,
         configure_plugin_value,
         plugin_search_for_sample,
-        plugin_download_file
+        plugin_download_file,
+        get_plugin_paths
     ]
 }

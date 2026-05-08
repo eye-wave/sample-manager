@@ -15,7 +15,6 @@ use crate::{
         PluginId, PluginInstance, PluginRunnerCommand as Cmd, config_key,
         host::{HostState, PendingDownload},
         manifest::{PluginManifest, SearchMode},
-        unpack_plugin_zip,
     },
     state::samples::{SearchRequest, draw_audio_and_save, filter_samples},
 };
@@ -78,11 +77,11 @@ impl PluginRunner {
 
                     let _ = reply_to.send(res.map_err(|e| e.to_string()));
                 }
-                Ok(Cmd::GetAllPluginsInfo { reply_to }) => {
+                Ok(Cmd::GetAllPluginsInfo { reply_to, icon_cb }) => {
                     let plugin_info_list = self
                         .plugins
                         .values()
-                        .map(|p| p.manifest.to_plugin_info(self.store.data()))
+                        .map(|p| p.manifest.to_plugin_info(self.store.data(), &icon_cb))
                         .collect();
                     let _ = reply_to.send(plugin_info_list);
                 }
@@ -90,7 +89,7 @@ impl PluginRunner {
                     plugin_id,
                     url,
                     reply_to,
-                    ffmpeg_path,
+                    ffpaths,
                     web_sender,
                 }) => {
                     use crate::state::samples::utils::*;
@@ -104,7 +103,7 @@ impl PluginRunner {
                             Some(&plugin_id),
                             &url,
                             WaveformData::Bytes("wav", &bytes),
-                            ffmpeg_path,
+                            ffpaths.flatten(),
                         )?
                         .send_to_webview(web_sender)?;
 
@@ -125,7 +124,7 @@ impl PluginRunner {
     }
 
     fn load_plugin(&mut self, bytes: &[u8]) -> AnyResult<()> {
-        let (manifest, wasm_bytes) = unpack_plugin_zip(bytes)?;
+        let (manifest, wasm_bytes) = PluginManifest::load_from_bytes(bytes)?;
         let module = Module::new(&self.engine, &wasm_bytes)?;
 
         let mut linker = Linker::<HostState>::new(&self.engine);

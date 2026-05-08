@@ -5,7 +5,7 @@ import * as IPC from "../gen/ipc-gen";
 import { updateCurrentTheme, updateTheme, updateThemeCss } from "../helpers";
 import { invoke } from "../invoke/invoke";
 import type { LooseInput } from "../lying";
-import { createPluginCard, renderField } from "./template";
+import { bindSettingInputs, createPluginCard, renderPluginSettings } from "./template";
 
 declare const conf_btn__: HTMLButtonElement;
 declare const conf_dial__: HTMLDialogElement;
@@ -14,6 +14,7 @@ declare const conf_reset__: HTMLButtonElement;
 declare const conf_save__: HTMLButtonElement;
 declare const dialog_close__: HTMLButtonElement;
 declare const ffmpeg_path__: HTMLInputElement;
+declare const ffprobe_path__: HTMLInputElement;
 declare const plugins_settings__: HTMLDivElement;
 declare const sidebar_width__: LooseInput;
 declare const theme_select__: HTMLSelectElement;
@@ -100,6 +101,7 @@ conf_btn__.onclick = async () => {
     const settings: AppConfig = JSON.parse(await invoke(IPC.GET_CONFIG_AS_JSON));
 
     if (settings.ffmpeg_path) ffmpeg_path__.value = settings.ffmpeg_path;
+    if (settings.ffprobe_path) ffprobe_path__.value = settings.ffprobe_path;
     if (settings.sidebar_width) sidebar_width__.value = settings.sidebar_width;
   } catch (_) {}
 
@@ -115,9 +117,9 @@ conf_btn__.onclick = async () => {
       showPane("dial_tab_plugin__");
 
       plugin_settings_label__.textContent = "Plugin " + info.name;
-      plugin_settings_body__.innerHTML = Object.entries(info.config)
-        .map(([k, f]) => renderField(k, f))
-        .join("");
+      plugin_settings_body__.innerHTML = renderPluginSettings(info);
+
+      bindSettingInputs(plugin_settings_body__);
     };
   });
 
@@ -178,5 +180,6 @@ w.addEventListener("keydown", (e) => {
   }
 });
 
+ffprobe_path__.oninput = () => patch.set("ffprobe_path", ffprobe_path__.value);
 ffmpeg_path__.oninput = () => patch.set("ffmpeg_path", ffmpeg_path__.value);
 sidebar_width__.oninput = () => patch.set("sidebar_width", +sidebar_width__.value);

@@ -1,11 +1,10 @@
 use std::fs;
-use std::sync::Arc;
 
 use crate::ipc::{IPCBody, IPCError, IPCMessage, IPCResponse, IntoIPCResponse, Poisoned, ok};
+use crate::ipc_commands;
 use crate::state::samples::{
     SearchRequest, WaveformData, draw_audio_and_save, process_directories, search_local, tag_string,
 };
-use crate::{AStr, ipc_commands};
 
 fn add_sample_folder(body: IPCBody) -> IPCResponse {
     let path = body.req.as_ref();
@@ -25,9 +24,9 @@ fn add_sample_folder(body: IPCBody) -> IPCResponse {
 
 fn get_sample_folders(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
-        let cfg = state.get_config();
-
-        cfg.tracked_dirs
+        state
+            .get_config()
+            .tracked_dirs
             .iter()
             .map(|d| d.to_string_lossy().to_string() + "\n")
             .collect::<String>()
@@ -128,23 +127,12 @@ fn tag_path(body: IPCBody) -> IPCResponse {
 }
 
 fn draw_audio_file(body: IPCBody) -> IPCResponse {
-    let ffmpeg_path = crate::with_state!(body, state, { state.get_config().ffmpeg_path.clone() });
-
-    if ffmpeg_path.as_ref().map(|p| !p.exists()).unwrap_or(false) {
-        crate::with_state_mut!(body, state, {
-            state.update_config(|c| c.ffmpeg_path = None)
-        })
-    }
-
-    let ffmpeg_path = ffmpeg_path.clone();
+    let ffpaths = crate::with_state!(body, state, { state.get_config().ffpaths.clone() });
 
     std::thread::spawn(move || {
         let path = body.req.clone();
 
-        let ffmpeg_path: Option<AStr> =
-            ffmpeg_path.as_ref().and_then(|p| p.to_str()).map(Arc::from);
-
-        match draw_audio_and_save(None, &path, WaveformData::Path(&path), ffmpeg_path) {
+        match draw_audio_and_save(None, &path, WaveformData::Path(&path), ffpaths.flatten()) {
             Ok(msg) => {
                 let _ = msg.send_to_webview(body.webview_sender);
             }

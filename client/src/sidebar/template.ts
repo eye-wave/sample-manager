@@ -1,18 +1,20 @@
-export const SIDEBAR_FOLDER = (name: string) =>
+export const SIDEBAR_FOLDER = (name: string, icon?: string) =>
   /* HTML */ `<div class="tree-section">
     <div class="tree-label">
       <span class="tree-arrow">▶</span>
       <span class="tree-icon">
+      ${icon ?? ""}
       <svg
-        width="16"
-        height="16"
+      data-folder
+        width="18"
+        height="18"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
         stroke-width="2"
         stroke-linecap="round"
         stroke-linejoin="round"
-      ><path></svg></span>
+      ><path></path></svg></span>
       <span class="tree-name">${name}</span>
       <span class="tree-count"></span>
     </div>

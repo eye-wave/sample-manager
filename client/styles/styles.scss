@@ -242,6 +242,7 @@ body {
   flex-direction: column;
   flex-shrink: 0;
   position: relative;
+  overflow-y: scroll;
 
   &-resize {
     position: absolute;
@@ -274,12 +275,6 @@ body {
   &-header {
     @extend %label-micro;
     padding: 12px 14px 8px;
-  }
-
-  &-scroll {
-    flex: 1;
-    overflow-y: scroll;
-    padding-bottom: 8px;
   }
 
   &-divider {
@@ -798,6 +793,48 @@ dialog {
     max-width: 180px;
     text-align: center;
     text-align-last: center;
+  }
+
+  .switch {
+    display: inline-block;
+    position: relative;
+
+    & input[type="checkbox"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+    }
+
+    & label {
+      display: block;
+      width: 44px;
+      height: 24px;
+      border-radius: 12px;
+      background: var(--bg-panel);
+      cursor: pointer;
+      border: 1px solid var(--bg-hover);
+    }
+
+    & label::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--accent-dim);
+      box-shadow: 0 0px 3px var(--border);
+    }
+
+    & input:checked + label::after {
+      left: 23px;
+    }
+
+    & input:focus-visible + label {
+      border-color: var(--accent);
+      background: var(--bg-active);
+    }
   }
 
   &-shell {

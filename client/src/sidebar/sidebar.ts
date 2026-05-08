@@ -12,12 +12,13 @@ import { NodeType, type VFSChild, VFSNode } from "./vfs";
 initSidebarResize();
 
 declare const sidebar__: HTMLDivElement;
+declare const sidebar_plugins__: HTMLDivElement;
 declare const add_folder__: HTMLButtonElement;
 
 const popup = $el("div");
 popup.className = "tree-section item popup";
 
-d.body.appendChild(popup);
+d.body.appendChild(popup as Node);
 
 const root = VFSNode.root("__root__");
 
@@ -32,7 +33,8 @@ function onHover(e: Event) {
   popup.textContent = el.textContent;
   popup.style.display = "";
   // Temporary fix i will need to look into why 65.5 offset was needed
-  popup.style.top = el.offsetTop - sidebar__.scrollTop + 65.5 + "px";
+  // @ts-expect-error
+  popup.style.top = el.offsetTop - sidebar__.parentElement.scrollTop + 65.5 + "px";
   popup.style.left = el.offsetLeft - 8 + "px";
 }
 
@@ -42,39 +44,62 @@ sidebar__.onmousemove = onHover;
 sidebar__.onscroll = hidePopup;
 sidebar__.onmouseleave = hidePopup;
 
-invoke(IPC.START_SAMPLE_SCAN);
-invoke(IPC.GET_SAMPLE_FOLDERS).then(async (res) => {
-  const folders: string[] = res.split("\n").filter((e) => e);
+sidebar_plugins__.onmouseenter = onHover;
+sidebar_plugins__.onmousemove = onHover;
+sidebar_plugins__.onscroll = hidePopup;
+sidebar_plugins__.onmouseleave = hidePopup;
 
+// @ts-expect-error
+sidebar__.parentElement.onwheel = hidePopup;
+
+async function renderRootDirs(
+  target: HTMLElement,
+  folders: ({ name: string; path: string; icon: string | null } | string)[],
+) {
   for (const folder of folders) {
-    const node = VFSNode.root(folder);
+    const path = typeof folder === "string" ? folder : folder.path;
 
-    const children: VFSChild[] = await invoke(IPC.READ_DIR, folder).then((res) =>
+    // @ts-expect-error
+    const node = VFSNode.root(path, folder?.name);
+
+    const children: VFSChild[] = await invoke(IPC.READ_DIR, path).then((res) =>
       res
         .split("\n")
         .filter((e) => e)
-        .map((p) => parseVFS(folder, p)),
+        .map((p) => parseVFS(path, p)),
     );
 
     node.extend(children);
     root.add(node);
-  }
 
-  for (const child of root.children) {
-    if (child.nodeType === NodeType) {
-      renderNode(sidebar__, child);
+    if (node.nodeType === NodeType) {
+      // @ts-expect-error
+      renderNode(target, node, folder?.icon);
     }
   }
+}
+
+invoke(IPC.START_SAMPLE_SCAN);
+invoke(IPC.GET_SAMPLE_FOLDERS).then(async (res) => {
+  const folders: string[] = res.split("\n").filter((e) => e);
+  renderRootDirs(sidebar__, folders);
 });
 
-sidebar__.onclick = async (e) => {
+invoke(IPC.GET_PLUGIN_PATHS).then(async (res) => {
+  renderRootDirs(sidebar_plugins__, JSON.parse(res));
+});
+
+async function onClick(e: Event) {
   const url = (e.target as HTMLElement)?.dataset.path;
   if (!url) return;
 
   const path = decodeURI(url);
 
   playerHandle.startPlaying(path, basename(path));
-};
+}
+
+sidebar__.onclick = onClick;
+sidebar_plugins__.onclick = onClick;
 
 add_folder__.onclick = async () => {
   const folder = await invoke(IPC.OPEN_FOLDER);

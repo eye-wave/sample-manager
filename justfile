@@ -11,7 +11,7 @@ dev-client:
     bun --cwd client dev
 
 dev-rust:
-    cargo watch -x run -i client
+    cargo watch -x run -i client -i src/state/config/themes -i justfile
 
 build:
     just build-client

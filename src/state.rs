@@ -8,7 +8,7 @@ use crate::AnyResult;
 use crate::audio::AudioPlayer;
 use crate::ipc::IPCMessage;
 use crate::plugins::{PluginInfo, PluginRuntimeHandle};
-use crate::state::config::{AppConfigPatch, find_executable, is_executable};
+use crate::state::config::AppConfigPatch;
 
 pub mod app_paths;
 pub mod config;
@@ -51,18 +51,6 @@ impl AppState {
         self.app_config = conf;
         self.favorite_samples = favorite_samples;
 
-        if self.app_config.ffmpeg_path.is_none() {
-            if let Some(path) = find_executable("ffmpeg")
-                && is_executable(&path)
-            {
-                self.app_config.ffmpeg_path = Some(path)
-            }
-        } else {
-            if !is_executable(self.app_config.ffmpeg_path.as_ref().unwrap()) {
-                self.app_config.ffmpeg_path = None
-            }
-        }
-
         for name in self.app_config.plugins.iter() {
             let plugin_name = name.to_string() + ".zip";
             let path = app_paths::plugin_config_path().join(plugin_name);
@@ -73,7 +61,7 @@ impl AppState {
             }
         }
 
-        self.loaded_plugins_info = self.plugin_handle.get_all_plugins_info();
+        self.loaded_plugins_info = self.plugin_handle.get_all_plugins_info(|_| {});
 
         Ok(())
     }

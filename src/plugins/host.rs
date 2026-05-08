@@ -92,6 +92,7 @@ impl HostState {
 
     pub fn set_item(&mut self, key: StorageKey, data: Vec<u8>) {
         self.storage.insert(key, data);
+        let _ = self.flush_storage();
     }
 
     pub fn get_secret_item(&self, key: StorageKey) -> Option<Vec<u8>> {
