@@ -18,8 +18,6 @@ use symphonia::core::{
     units::Time,
 };
 
-use crate::AnyResult;
-
 use super::device::{RING_CAPACITY, RingProd};
 use super::handle::{PlayerFlags, SharedAudioState};
 
@@ -360,7 +358,7 @@ fn init_decoder(
     })
 }
 
-fn perform_seek(state: &mut DecoderState, millis: u32) -> AnyResult<()> {
+fn perform_seek(state: &mut DecoderState, millis: u32) -> Result<(), SymphoniaError> {
     let secs = (millis / 1000) as u64;
     let ns = (millis % 1000) * 1_000_000;
 

@@ -1,8 +1,6 @@
-use crate::{
-    ipc::{IPCBody, IPCResponse, IntoIPCResponse, ok},
-    ipc_commands,
-    state::config::{AppConfigPatch, ConfigField},
-};
+use crate::ipc::{IPCBody, IPCResponse, IntoIPCResponse, ok};
+use crate::ipc_commands;
+use crate::state::config::{AppConfigPatch, ConfigField};
 
 fn patch_config(body: IPCBody) -> IPCResponse {
     crate::with_state_mut!(body, state, {

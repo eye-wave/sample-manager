@@ -7,8 +7,6 @@ use ringbuf::traits::{Consumer, Observer};
 use ringbuf::wrap::caching::Caching;
 use ringbuf::{HeapRb, SharedRb, storage::Heap, traits::Split};
 
-use crate::AnyResult;
-
 use super::handle::{PlayerFlags, SharedAudioState};
 
 pub struct AudioDevice {
@@ -16,29 +14,35 @@ pub struct AudioDevice {
     pub config: SupportedStreamConfig,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum DeviceError {
-    #[error("")]
-    UnsupportedSampleFormat,
-
-    #[error("")]
-    NoOutputDevice,
-}
-
 pub type RingProd = Caching<Arc<SharedRb<Heap<f32>>>, true, false>;
 pub type RingCons = Caching<Arc<SharedRb<Heap<f32>>>, false, true>;
 
 pub const RING_CAPACITY: usize = 48_000 * 2 * 4;
 
+#[derive(Debug, thiserror::Error)]
+pub enum AudioDeviceError {
+    #[error("unsupported audio sample format")]
+    UnsupportedSampleFormat,
+
+    #[error("no output audio device available")]
+    NoOutputDevice,
+
+    #[error("failed to build audio stream")]
+    BuildStream(#[from] cpal::BuildStreamError),
+
+    #[error("default stream configuration is unavailable")]
+    DefaultStreamConfig(#[from] cpal::DefaultStreamConfigError),
+}
+
 impl AudioDevice {
-    pub fn new(shared_state: &Arc<SharedAudioState>) -> AnyResult<(RingProd, Self)> {
+    pub fn new(shared_state: &Arc<SharedAudioState>) -> Result<(RingProd, Self), AudioDeviceError> {
         let rb = HeapRb::<f32>::new(RING_CAPACITY);
         let (rb_prod, rb_cons) = rb.split();
 
         let host = cpal::default_host();
         let device = host
             .default_output_device()
-            .ok_or(DeviceError::NoOutputDevice)?;
+            .ok_or(AudioDeviceError::NoOutputDevice)?;
 
         let config = device.default_output_config()?;
 
@@ -74,7 +78,7 @@ impl AudioDevice {
             cpal::SampleFormat::U8 => build_stream!(u8, chan_count),
             cpal::SampleFormat::U16 => build_stream!(u16, chan_count),
             cpal::SampleFormat::U32 => build_stream!(u32, chan_count),
-            _ => return Err(Box::new(DeviceError::UnsupportedSampleFormat)),
+            _ => return Err(AudioDeviceError::UnsupportedSampleFormat),
         };
 
         _stream.play().ok();

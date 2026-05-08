@@ -10,7 +10,7 @@ use serde::{Serialize, de::DeserializeOwned};
 
 use crate::state::samples::{SearchRequest, filter_samples};
 use crate::{
-    AStr, AnyResult,
+    AStr,
     plugins::{PluginId, manifest::SchemaField},
     state::app_paths,
 };
@@ -19,6 +19,15 @@ pub type StorageKey = (PluginId, AStr);
 
 pub struct PendingDownload {
     pub bytes: Vec<u8>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum HostError {
+    #[error("I/O error")]
+    Io(#[from] std::io::Error),
+
+    #[error("postcard serialization/deserialization error")]
+    Postcard(#[from] postcard::Error),
 }
 
 pub struct HostState {
@@ -50,14 +59,14 @@ impl HostState {
         state
     }
 
-    fn load<T: DeserializeOwned>(target: &mut T, path: &Path) -> AnyResult<()> {
+    fn load<T: DeserializeOwned>(target: &mut T, path: &Path) -> Result<(), HostError> {
         let bytes = fs::read(path)?;
         *target = postcard::from_bytes(&bytes)?;
 
         Ok(())
     }
 
-    fn load_from_disk(&mut self) -> AnyResult<()> {
+    fn load_from_disk(&mut self) -> Result<(), HostError> {
         Self::load(&mut self.storage, app_paths::plugin_storage_file())?;
         Self::load(&mut self.secrets, app_paths::plugin_secret_storage_file())?;
         Self::load(&mut self.entry_cache, app_paths::plugin_entry_cache_file())?;
@@ -65,7 +74,7 @@ impl HostState {
         Ok(())
     }
 
-    fn flush<T: Serialize>(&self, target: &T, path: &Path) -> AnyResult<()> {
+    fn flush<T: Serialize>(&self, target: &T, path: &Path) -> Result<(), HostError> {
         let bytes = postcard::to_allocvec(target)?;
         let tmp = path.with_extension("tmp");
         fs::write(&tmp, &bytes)?;
@@ -74,15 +83,15 @@ impl HostState {
         Ok(())
     }
 
-    fn flush_storage(&self) -> AnyResult<()> {
+    fn flush_storage(&self) -> Result<(), HostError> {
         self.flush(&self.storage, app_paths::plugin_storage_file())
     }
 
-    fn flush_secret(&self) -> AnyResult<()> {
+    fn flush_secret(&self) -> Result<(), HostError> {
         self.flush(&self.secrets, app_paths::plugin_secret_storage_file())
     }
 
-    fn flush_cache(&self) -> AnyResult<()> {
+    fn flush_cache(&self) -> Result<(), HostError> {
         self.flush(&self.entry_cache, app_paths::plugin_entry_cache_file())
     }
 

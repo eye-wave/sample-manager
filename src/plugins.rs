@@ -6,17 +6,18 @@ use std::{
 use plugin_wire::{WireEntry, sample::SampleSerialize};
 use wasmtime::{Instance, TypedFunc};
 
-use crate::{
-    AStr, AnyResult,
-    ipc::IPCMessage,
-    plugins::{icon::SVGIcon, manifest::PluginManifest, runner::PluginRunner},
-    state::{config::FFPaths, samples::SearchRequest},
-};
+use crate::AStr;
+use crate::ipc::IPCMessage;
+use crate::state::{config::FFPaths, samples::SearchRequest};
 
 mod host;
 mod icon;
 mod manifest;
 mod runner;
+
+use icon::SVGIcon;
+use manifest::PluginManifest;
+use runner::PluginRunner;
 
 pub use manifest::{PluginId, PluginInfo, config_key, parse_string_to_bytes};
 
@@ -70,6 +71,15 @@ pub struct PluginRuntimeHandle {
     sender: mpsc::Sender<PluginRunnerCommand>,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum PluginSendError {
+    #[error("MPSC send error")]
+    Send(#[from] mpsc::SendError<PluginRunnerCommand>),
+
+    #[error("MPSC receive error")]
+    Recv(#[from] mpsc::RecvError),
+}
+
 impl PluginRuntimeHandle {
     pub fn spawn() -> Self {
         let (tx, rx) = mpsc::channel::<Cmd>();
@@ -102,7 +112,10 @@ impl PluginRuntimeHandle {
         });
     }
 
-    pub fn search_local_registry(&self, req: &SearchRequest) -> AnyResult<Arc<Vec<WireEntry>>> {
+    pub fn search_local_registry(
+        &self,
+        req: &SearchRequest,
+    ) -> Result<Arc<Vec<WireEntry>>, PluginSendError> {
         let (tx, rx) = mpsc::sync_channel(1);
 
         self.sender.send(Cmd::SearchLocalRegistry {

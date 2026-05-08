@@ -5,12 +5,30 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    AStr, AnyResult,
+    AStr,
     plugins::{
         host::{HostState, StorageKey},
         icon::SVGIcon,
     },
 };
+
+#[derive(Debug, thiserror::Error)]
+pub enum ManifestError {
+    #[error("invalid plugin id: {0}")]
+    InvalidPluginId(String),
+
+    #[error("plugin '{0}' is missing a runtime entry (wasm file not declared in manifest)")]
+    MissingPluginEntry(AStr),
+
+    #[error("I/O error")]
+    Io(#[from] std::io::Error),
+
+    #[error("zip error")]
+    Zip(#[from] zip::result::ZipError),
+
+    #[error("TOML parse error")]
+    Toml(#[from] toml::de::Error),
+}
 
 // -- PluginId -----------------------------------------------------------------
 
@@ -18,14 +36,14 @@ use crate::{
 pub struct PluginId(AStr);
 
 impl PluginId {
-    pub fn new(str: impl AsRef<str>) -> AnyResult<Self> {
+    pub fn new(str: impl AsRef<str>) -> Result<Self, ManifestError> {
         const FORBIDDEN: &[char] = &['<', '>', ':'];
         let s = str.as_ref();
 
         if s.chars()
             .any(|c| c.is_whitespace() || FORBIDDEN.contains(&c))
         {
-            return Err("invalid plugin id".into());
+            return Err(ManifestError::InvalidPluginId(str.as_ref().to_owned()));
         }
 
         Ok(Self(Arc::from(s)))
@@ -184,7 +202,7 @@ impl Deref for PluginManifest {
 }
 
 impl PluginManifest {
-    pub fn load_from_bytes(bytes: &[u8]) -> AnyResult<(Self, Vec<u8>)> {
+    pub fn load_from_bytes(bytes: &[u8]) -> Result<(Self, Vec<u8>), ManifestError> {
         let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes))?;
 
         let raw: RawPluginManifest = {
@@ -219,7 +237,7 @@ impl PluginManifest {
                 f.read_to_end(&mut buf)?;
                 buf
             }
-            None => return Err("Manifest missing assets.entry wasm path".into()),
+            None => return Err(ManifestError::MissingPluginEntry(manifest.name.clone())),
         };
 
         Ok((manifest, wasm_bytes))

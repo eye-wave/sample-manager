@@ -5,12 +5,11 @@ use plugin_wire::sample::SampleSerialize;
 use rayon::{iter::Either, prelude::*};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    AStr, AnyResult,
-    state::{
-        AppState,
-        samples::{SampleEntry, clean_up_string},
-    },
+use crate::AStr;
+use crate::plugins::PluginSendError;
+use crate::state::{
+    AppState,
+    samples::{SampleEntry, clean_up_string},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -22,7 +21,7 @@ pub struct SearchRequest {
     pub is_fav: bool,
 }
 
-pub fn search_local(req: &SearchRequest, state: &AppState) -> AnyResult<String> {
+pub fn search_local(req: &SearchRequest, state: &AppState) -> Result<String, PluginSendError> {
     let plugin_filtered = state.plugin_handle.search_local_registry(req)?;
 
     let scored = if req.is_fav {

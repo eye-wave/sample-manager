@@ -4,12 +4,10 @@ use plugin_wire::sample::SampleSerialize;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{
-    AStr,
-    ipc::{IPCBody, IPCMessage, IPCResponse, IntoIPCResponse, ok},
-    plugins::{PluginId, parse_string_to_bytes},
-    state::{app_paths, samples::SearchRequest},
-};
+use crate::AStr;
+use crate::ipc::{IPCBody, IPCMessage, IPCResponse, IntoIPCResponse, ok};
+use crate::plugins::{PluginId, parse_string_to_bytes};
+use crate::state::{app_paths, samples::SearchRequest};
 
 fn disable_plugin(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {

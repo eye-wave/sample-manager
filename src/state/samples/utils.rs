@@ -1,7 +1,6 @@
 use std::fs;
 use std::path::PathBuf;
 
-use crate::AnyResult;
 #[cfg(not(target_os = "windows"))]
 use crate::plugins::PluginId;
 use crate::state::app_paths;
@@ -23,7 +22,7 @@ pub fn thumbnail_path(hashed: &str) -> PathBuf {
     app_paths::thumbnail_cache_path().join(hashed)
 }
 
-pub fn sync_path(id: &PluginId, hashed: &str) -> AnyResult<PathBuf> {
+pub fn sync_path(id: &PluginId, hashed: &str) -> std::io::Result<PathBuf> {
     let parent = app_paths::plugin_sync_path().join(format!("plug_{id}"));
 
     fs::create_dir_all(&parent)?;

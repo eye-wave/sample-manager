@@ -2,6 +2,8 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 
+use image::{ImageBuffer, Rgb};
+
 use crate::ipc::IPCMessage;
 use crate::plugins::PluginId;
 use crate::state::config::FFPathsRef;
@@ -200,8 +202,6 @@ pub fn draw_audio_and_save(
     Ok(DrawAudioMessage::Result { uri })
 }
 
-use image::{ImageBuffer, Rgb};
-
 fn draw_waveform_custom(
     input: &WaveformData,
     ffpaths: FFPathsRef,
@@ -363,6 +363,6 @@ fn draw_waveform_custom(
 fn encode_webp(img: &ImageBuffer<Rgb<u8>, Vec<u8>>) -> std::io::Result<Vec<u8>> {
     let mut buf = std::io::Cursor::new(Vec::new());
     img.write_to(&mut buf, image::ImageFormat::WebP)
-        .map_err(|e| std::io::Error::other(e))?;
+        .map_err(std::io::Error::other)?;
     Ok(buf.into_inner())
 }

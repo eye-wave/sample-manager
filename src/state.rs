@@ -4,7 +4,6 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::sync::{Arc, mpsc};
 
-use crate::AnyResult;
 use crate::audio::AudioPlayer;
 use crate::ipc::IPCMessage;
 use crate::plugins::{PluginInfo, PluginRuntimeHandle};
@@ -27,6 +26,15 @@ pub struct AppState {
     app_config: AppConfig,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum StateError {
+    #[error("I/O error")]
+    Io(#[from] std::io::Error),
+
+    #[error("TOML parse error")]
+    Toml(#[from] toml::de::Error),
+}
+
 impl AppState {
     pub fn new(rx: mpsc::Sender<IPCMessage>) -> Self {
         Self {
@@ -40,7 +48,7 @@ impl AppState {
         }
     }
 
-    pub fn init(&mut self) -> AnyResult<()> {
+    pub fn init(&mut self) -> Result<(), StateError> {
         let conf = fs::read(app_paths::config_file())?;
         let conf: AppConfig = toml::from_slice(&conf)?;
 

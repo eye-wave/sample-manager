@@ -8,16 +8,74 @@ use plugin_wire::{WireEntry, encode_search_request, parse_frame, sample::SampleS
 use rayon::prelude::*;
 use wasmtime::{Caller, Engine, Linker, Module, Store};
 
-use crate::state::samples::WaveformData;
-use crate::{
-    AStr, AnyResult,
-    plugins::{
-        PluginId, PluginInstance, PluginRunnerCommand as Cmd, config_key,
-        host::{HostState, PendingDownload},
-        manifest::{PluginManifest, SearchMode},
+use crate::AStr;
+use crate::ipc::IPCMessage;
+use crate::state::samples::{SearchRequest, WaveformData, draw_audio_and_save, filter_samples};
+
+use super::host::{HostState, PendingDownload};
+use super::manifest::{ManifestError, PluginManifest, SearchMode};
+use super::{PluginId, PluginInstance, PluginRunnerCommand as Cmd, PluginSendError, config_key};
+
+#[derive(Debug, thiserror::Error)]
+pub enum PluginRuntimeError {
+    #[error("failed to load plugin manifest: {0}")]
+    Manifest(#[from] ManifestError),
+
+    #[error("failed to send message to plugin runtime: {0}")]
+    PluginMpsc(#[from] PluginSendError),
+
+    #[error("failed to send IPC message to webview: {0}")]
+    WebviewMpsc(#[from] mpsc::SendError<IPCMessage>),
+
+    #[error("plugin runtime I/O failure")]
+    Io(#[from] std::io::Error),
+
+    #[error("wasmtime runtime error: {0}")]
+    Wasmtime(#[from] wasmtime::Error),
+
+    #[error("HTTP request failed: {0}")]
+    Ureq(#[from] ureq::Error),
+
+    #[error("plugin '{0}' is not currently loaded")]
+    PluginNotLoaded(PluginId),
+
+    #[error("plugin '{plugin}' is missing required export '{export}'")]
+    MissingExport {
+        plugin: PluginId,
+        export: &'static str,
     },
-    state::samples::{SearchRequest, draw_audio_and_save, filter_samples},
-};
+
+    #[error("plugin '{plugin}' failed while calling export '{fn_name}': {error}")]
+    WasmCallError {
+        plugin: PluginId,
+        fn_name: &'static str,
+        error: wasmtime::Error,
+    },
+
+    #[error("plugin attempted invalid memory access: {0}")]
+    MemoryAccessError(#[from] wasmtime::MemoryAccessError),
+
+    #[error("plugin '{plugin}' failed to download resource '{url}' (status code: {status})")]
+    DownloadFailed {
+        plugin: PluginId,
+        url: String,
+        status: i32,
+    },
+
+    #[error("plugin '{plugin}' attempted to read frame data outside allocated bounds")]
+    FramePointerOutOfBounds { plugin: PluginId },
+
+    #[error("plugin '{plugin}' produced an invalid frame payload: {err}")]
+    FrameParseError { plugin: PluginId, err: &'static str },
+
+    #[error(
+        "plugin '{plugin}' reported a completed download for '{url}' without issuing a download request"
+    )]
+    MissingDownloadCall { plugin: PluginId, url: String },
+
+    #[error("plugin '{plugin}' does not export linear memory")]
+    MissingMemoryExport { plugin: PluginId },
+}
 
 // -- index cache ---------------------------------------------------------------
 
@@ -36,7 +94,7 @@ pub(super) struct PluginRunner {
 }
 
 impl PluginRunner {
-    pub fn new() -> AnyResult<Self> {
+    pub fn new() -> Result<Self, PluginRuntimeError> {
         let engine = Engine::default();
         let store = Store::new(&engine, HostState::new());
 
@@ -94,7 +152,7 @@ impl PluginRunner {
                 }) => {
                     use crate::state::samples::utils::*;
 
-                    let response = (|| -> AnyResult<_> {
+                    let response = (|| -> Result<_, PluginRuntimeError> {
                         let bytes = self.call_wasm_download(&plugin_id, &url)?;
                         let hashed = hash_path(Some(&plugin_id), &url);
                         let save_path = sync_path(&plugin_id, &hashed)?;
@@ -123,7 +181,7 @@ impl PluginRunner {
         }
     }
 
-    fn load_plugin(&mut self, bytes: &[u8]) -> AnyResult<()> {
+    fn load_plugin(&mut self, bytes: &[u8]) -> Result<(), PluginRuntimeError> {
         let (manifest, wasm_bytes) = PluginManifest::load_from_bytes(bytes)?;
         let module = Module::new(&self.engine, &wasm_bytes)?;
 
@@ -208,8 +266,8 @@ impl PluginRunner {
         let plugin = self.plugins.get(id).ok_or("plugin not loaded")?;
 
         let req_bytes = encode_search_request(req.limit, req.offset, req.is_fav, &req.query);
-        let (req_ptr, req_len) =
-            wasm_alloc_write(&mut self.store, plugin, &req_bytes).map_err(|e| e.to_string())?;
+        let (req_ptr, req_len) = wasm_alloc_write(id.clone(), &mut self.store, plugin, &req_bytes)
+            .map_err(|e| e.to_string())?;
 
         let frame_ptr = plugin
             .fn_search
@@ -224,7 +282,7 @@ impl PluginRunner {
 
         let plugin = self.plugins.get(id).unwrap();
         let (entries, frame_size) =
-            read_frame_at(&mut self.store, plugin, frame_ptr).map_err(|e| e.to_string())?;
+            read_frame_at(id, &mut self.store, plugin, frame_ptr).map_err(|e| e.to_string())?;
 
         let plugin = self.plugins.get(id).unwrap();
         plugin
@@ -250,7 +308,8 @@ impl PluginRunner {
 
         let config_bytes = serde_json::to_vec(&config).map_err(|e| e.to_string())?;
         let (cfg_ptr, cfg_len) =
-            wasm_alloc_write(&mut self.store, plugin, &config_bytes).map_err(|e| e.to_string())?;
+            wasm_alloc_write(id.clone(), &mut self.store, plugin, &config_bytes)
+                .map_err(|e| e.to_string())?;
 
         let frame_ptr = fn_get_index
             .call(&mut self.store, (cfg_ptr, cfg_len))
@@ -264,7 +323,7 @@ impl PluginRunner {
 
         let plugin = self.plugins.get(id).unwrap();
         let (entries, frame_size) =
-            read_frame_at(&mut self.store, plugin, frame_ptr).map_err(|e| e.to_string())?;
+            read_frame_at(id, &mut self.store, plugin, frame_ptr).map_err(|e| e.to_string())?;
 
         let plugin = self.plugins.get(id).unwrap();
         plugin
@@ -275,29 +334,51 @@ impl PluginRunner {
         Ok(entries)
     }
 
-    fn call_wasm_download(&mut self, id: &PluginId, url: &str) -> AnyResult<Vec<u8>> {
-        let plugin = self.plugins.get(id).ok_or("plugin not loaded")?;
+    fn call_wasm_download(
+        &mut self,
+        id: &PluginId,
+        url: &str,
+    ) -> Result<Vec<u8>, PluginRuntimeError> {
+        let plugin = self
+            .plugins
+            .get(id)
+            .ok_or(PluginRuntimeError::PluginNotLoaded(id.clone()))?;
 
         let fn_download = plugin
             .instance
             .get_typed_func::<(u32, u32), i32>(&mut self.store, "download")
-            .map_err(|_| "plugin does not export download")?;
+            .map_err(|_| PluginRuntimeError::MissingExport {
+                plugin: id.clone(),
+                export: "download",
+            })?;
 
         let (url_ptr, url_len) =
-            wasm_alloc_write(&mut self.store, plugin, url.as_bytes()).map_err(|e| e.to_string())?;
+            wasm_alloc_write(id.clone(), &mut self.store, plugin, url.as_bytes())?;
 
         let status = fn_download
             .call(&mut self.store, (url_ptr, url_len))
-            .map_err(|e| e.to_string())?;
+            .map_err(|error| PluginRuntimeError::WasmCallError {
+                plugin: id.clone(),
+                fn_name: "download",
+                error,
+            })?;
 
         let plugin = self.plugins.get(id).unwrap();
         plugin
             .fn_free
             .call(&mut self.store, (url_ptr, url_len))
-            .map_err(|e| e.to_string())?;
+            .map_err(|error| PluginRuntimeError::WasmCallError {
+                plugin: id.clone(),
+                fn_name: "free",
+                error,
+            })?;
 
         if status != 0 {
-            return Err(format!("plugin download failed with code {status}").into());
+            return Err(PluginRuntimeError::DownloadFailed {
+                plugin: id.clone(),
+                url: url.to_string(),
+                status,
+            });
         }
 
         self.store
@@ -305,7 +386,10 @@ impl PluginRunner {
             .pending_download
             .take()
             .map(|p| p.bytes)
-            .ok_or_else(|| "plugin returned ok but never called emit_download".into())
+            .ok_or_else(|| PluginRuntimeError::MissingDownloadCall {
+                plugin: id.clone(),
+                url: url.to_string(),
+            })
     }
 }
 
@@ -313,16 +397,17 @@ impl PluginRunner {
 
 /// Allocates `bytes` inside the plugin's wasm memory and returns (ptr, len).
 fn wasm_alloc_write(
+    id: PluginId,
     store: &mut Store<HostState>,
     plugin: &PluginInstance,
     bytes: &[u8],
-) -> AnyResult<(u32, u32)> {
+) -> Result<(u32, u32), PluginRuntimeError> {
     let len = bytes.len() as u32;
     let ptr = plugin.fn_alloc.call(&mut *store, len)?;
     plugin
         .instance
         .get_memory(&mut *store, "memory")
-        .ok_or("plugin has no memory export")?
+        .ok_or(PluginRuntimeError::MissingMemoryExport { plugin: id.clone() })?
         .write(&mut *store, ptr as usize, bytes)?;
     Ok((ptr, len))
 }
@@ -330,33 +415,40 @@ fn wasm_alloc_write(
 /// Copies the frame out of wasm memory and parses it via `plugin_wire::parse_frame`.
 /// Returns `(entries, frame_byte_size)` — caller frees `frame_ptr` with that size.
 fn read_frame_at(
+    id: &PluginId,
     store: &mut Store<HostState>,
     plugin: &PluginInstance,
     frame_ptr: u32,
-) -> AnyResult<(Vec<WireEntry>, usize)> {
+) -> Result<(Vec<WireEntry>, usize), PluginRuntimeError> {
     let mem = plugin
         .instance
         .get_memory(&mut *store, "memory")
-        .ok_or("plugin has no memory export")?;
+        .ok_or(PluginRuntimeError::MissingMemoryExport { plugin: id.clone() })?;
 
     let base = frame_ptr as usize;
     let frame_data = {
         let raw = mem.data(&*store);
         if base + 4 > raw.len() {
-            return Err("frame pointer out of bounds".into());
+            return Err(PluginRuntimeError::FramePointerOutOfBounds { plugin: id.clone() });
         }
         raw[base..].to_vec() // copy out before releasing the borrow
     };
 
     let (wire_entries, bytes_consumed) =
-        parse_frame(&frame_data).map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+        parse_frame(&frame_data).map_err(|err| PluginRuntimeError::FrameParseError {
+            plugin: id.clone(),
+            err,
+        })?;
 
     Ok((wire_entries, bytes_consumed))
 }
 
 // -- host imports --------------------------------------------------------------
 
-fn define_host_imports(linker: &mut Linker<HostState>, manifest: &PluginManifest) -> AnyResult<()> {
+fn define_host_imports(
+    linker: &mut Linker<HostState>,
+    manifest: &PluginManifest,
+) -> Result<(), PluginRuntimeError> {
     let id = manifest.id.clone();
     let caps = manifest.capabilities.clone();
 
@@ -669,7 +761,7 @@ fn define_host_imports(linker: &mut Linker<HostState>, manifest: &PluginManifest
                     return -2;
                 }
 
-                let response = (|| -> AnyResult<Vec<u8>> {
+                let response = (|| -> Result<Vec<u8>, PluginRuntimeError> {
                     let mut res_body = vec![];
 
                     if let Some(body) = body {

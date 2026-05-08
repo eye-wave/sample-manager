@@ -4,8 +4,8 @@ use std::sync::{Arc, RwLock, mpsc};
 
 use tao::window::Window;
 
+use crate::AStr;
 use crate::state::AppState;
-use crate::{AStr, AnyResult};
 
 mod audio;
 mod config;
@@ -82,7 +82,7 @@ impl IntoBytes for PathBuf {
 }
 
 pub type IPCRequestBody<'a> = (usize, u32, &'a str);
-pub type IPCResponse = AnyResult<std::borrow::Cow<'static, [u8]>>;
+pub type IPCResponse = Result<std::borrow::Cow<'static, [u8]>, Box<dyn std::error::Error>>;
 
 #[derive(Clone)]
 pub struct IPCBody {

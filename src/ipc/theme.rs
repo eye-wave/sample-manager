@@ -1,12 +1,10 @@
 use std::fs;
 
-use crate::{
-    ipc::{IPCBody, IPCError, IPCResponse, IntoIPCResponse},
-    ipc_commands,
-    state::{
-        app_paths,
-        config::{Theme, ThemeType},
-    },
+use crate::ipc::{IPCBody, IPCError, IPCResponse, IntoIPCResponse};
+use crate::ipc_commands;
+use crate::state::{
+    app_paths,
+    config::{Theme, ThemeType},
 };
 
 fn get_theme(body: IPCBody) -> IPCResponse {
