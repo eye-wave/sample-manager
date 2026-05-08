@@ -18,7 +18,7 @@ pub const PROTOCOL: &str = "wry";
 
 impl App {
     pub fn build() -> Self {
-        let (event_runner, event_system) = EventSystem::build();
+        let (mut event_runner, event_system) = EventSystem::build();
         let event_handle = Arc::new(event_system);
 
         let theme = {
@@ -41,6 +41,8 @@ impl App {
 
         let window_handle = Arc::new(window);
         let window_handle_cloned = window_handle.clone();
+
+        event_runner.attach_handle(&window_handle);
 
         let webview = WebViewBuilder::new()
             .with_custom_protocol(PROTOCOL.to_string(), move |_, req| {

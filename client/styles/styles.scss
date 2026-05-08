@@ -120,10 +120,6 @@ body {
 .titlebar {
   display: flex;
   background: var(--bg-base);
-
-  #titlebar_handle__ {
-    flex: 1;
-  }
 }
 
 .btn-group {
@@ -753,6 +749,7 @@ dialog {
   max-height: 100vh;
 
   &::backdrop {
+    top: 20px;
     background: #0000008c;
   }
 }

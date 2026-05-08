@@ -1,4 +1,4 @@
-import { w } from "./alias";
+import { d, w } from "./alias";
 import * as IPC from "./gen/ipc-gen";
 import { updateCurrentTheme } from "./helpers";
 import { invoke } from "./invoke/invoke";
@@ -7,12 +7,17 @@ import { invoke } from "./invoke/invoke";
 w.oncontextmenu = (e) => e.preventDefault();
 /// BUILD end
 
-declare const titlebar_handle__: HTMLDivElement;
 declare const btn_minimize__: HTMLButtonElement;
 declare const btn_maximize__: HTMLButtonElement;
 declare const btn_closeWindow__: HTMLButtonElement;
 
-titlebar_handle__.onmousedown = () => invoke(IPC.DRAG_WINDOW);
+w.onmousedown = (e) => {
+  if (e.target === btn_minimize__) return;
+  if (e.target === btn_maximize__) return;
+  if (e.target === btn_closeWindow__) return;
+
+  invoke(IPC.DRAG_WINDOW);
+};
 
 btn_minimize__.onclick = () => invoke(IPC.MINIMIZE_WINDOW);
 btn_maximize__.onclick = () => invoke(IPC.MAXIMIZE_WINDOW);
@@ -34,3 +39,48 @@ w.addEventListener(
   },
   { passive: false },
 );
+
+(() => {
+  const EDGE = 6;
+
+  const SouthEast = 0;
+  const NorthEast = 1;
+  const SouthWest = 2;
+  const NorthWest = 3;
+  const East = 4;
+  const West = 5;
+  const North = 6;
+  const South = 7;
+
+  const HITS = ["nwse", "nesw", "nesw", "nwse", "ew", "ew", "ns", "ns"];
+
+  function getDir(x: number, y: number) {
+    const w = window.innerWidth,
+      h = window.innerHeight;
+    const r = x >= w - EDGE,
+      b = y >= h - EDGE;
+    const l = x <= EDGE,
+      t = y <= EDGE;
+    if (r && b) return SouthEast;
+    if (r && t) return NorthEast;
+    if (l && b) return SouthWest;
+    if (l && t) return NorthWest;
+    if (r) return East;
+    if (l) return West;
+    if (t) return North;
+    if (b) return South;
+    return null;
+  }
+  d.addEventListener("mousemove", (e) => {
+    const hit = getDir(e.clientX, e.clientY);
+    d.documentElement.style.cursor = hit ? HITS[hit] + "-resize" : "";
+  });
+  d.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    const hit = getDir(e.clientX, e.clientY);
+    if (hit) {
+      e.preventDefault();
+      ipc.postMessage("0:" + hit);
+    }
+  });
+})();

@@ -16,6 +16,8 @@ mod samples;
 mod theme;
 mod window;
 
+pub const IPC_ID_BASE: usize = 10;
+
 #[derive(Debug, thiserror::Error)]
 #[error("{0}")]
 pub struct IPCError(Cow<'static, str>);
@@ -211,13 +213,19 @@ mod test {
     fn generate_ipc() {
         let mut contents: String = commands_iter()
             .enumerate()
-            .map(|(i, c)| format!("export const {} = {i};", c.name().to_uppercase()) + "\n")
+            .map(|(i, c)| {
+                format!(
+                    "export const {} = {};",
+                    c.name().to_uppercase(),
+                    i + IPC_ID_BASE
+                ) + "\n"
+            })
             .collect();
 
         contents += "\nexport type IPC_ID = \n";
         contents += &commands_iter()
             .enumerate()
-            .map(|(i, _)| i.to_string())
+            .map(|(i, _)| (i + IPC_ID_BASE).to_string())
             .intersperse("|".into())
             .collect::<String>();
 

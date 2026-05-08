@@ -3,10 +3,11 @@ use std::rc::Rc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, RwLock};
 
+use tao::window::ResizeDirection;
 use tao::{event_loop::EventLoopBuilder, window::Window};
 use wry::WebView;
 
-use crate::ipc::{IPCBody, IPCCommand, IPCMessage, commands_iter, ipc_strip_cmd_id};
+use crate::ipc::{IPC_ID_BASE, IPCBody, IPCCommand, IPCMessage, commands_iter, ipc_strip_cmd_id};
 use crate::state::AppState;
 
 pub struct EventSystem {
@@ -19,6 +20,7 @@ pub struct EventSystem {
 pub struct EventRunner {
     webview_rx: Receiver<IPCMessage>,
     event_loop: EventLoop,
+    window_handle: Option<Arc<Window>>,
 }
 
 pub type EventLoop = tao::event_loop::EventLoop<LoopEvent>;
@@ -26,6 +28,7 @@ pub type EventLoopProxy = tao::event_loop::EventLoopProxy<LoopEvent>;
 
 pub(super) enum LoopEvent {
     JS(u32, Cow<'static, [u8]>),
+    Resize(ResizeDirection),
 }
 
 impl EventSystem {
@@ -42,6 +45,7 @@ impl EventSystem {
             EventRunner {
                 event_loop,
                 webview_rx: rx,
+                window_handle: None,
             },
             Self {
                 webview_tx: tx,
@@ -55,8 +59,24 @@ impl EventSystem {
     pub fn receive(&self, req: wry::http::Request<String>, window_handle: Arc<Window>) {
         let body = req.body();
 
+        if let Some(dir_str) = body.strip_prefix("0:") {
+            let dir = match dir_str {
+                "0" => ResizeDirection::SouthEast,
+                "1" => ResizeDirection::NorthEast,
+                "2" => ResizeDirection::SouthWest,
+                "3" => ResizeDirection::NorthWest,
+                "4" => ResizeDirection::East,
+                "5" => ResizeDirection::West,
+                "6" => ResizeDirection::North,
+                "7" => ResizeDirection::South,
+                _ => return,
+            };
+            self.event_loop.send_event(LoopEvent::Resize(dir)).ok();
+            return;
+        }
+
         if let Some((cmd_id, call_id, payload)) = ipc_strip_cmd_id(body)
-            && let Some(cmd) = self.ipc_commands.get(cmd_id)
+            && let Some(cmd) = self.ipc_commands.get(cmd_id - IPC_ID_BASE)
         {
             let body = IPCBody {
                 webview_sender: self.webview_tx.clone(),
@@ -103,6 +123,10 @@ impl EventRunner {
         &self.event_loop
     }
 
+    pub fn attach_handle(&mut self, handle: &Arc<Window>) {
+        self.window_handle = Some(handle.clone());
+    }
+
     pub fn run(self, webview: &Rc<WebView>) {
         use tao::event::{Event, WindowEvent};
         use tao::event_loop::ControlFlow;
@@ -110,6 +134,8 @@ impl EventRunner {
         let webview = webview.clone();
 
         self.event_loop.run(move |event, _, control_flow| {
+            let window = self.window_handle.as_ref().unwrap();
+
             *control_flow = ControlFlow::Wait;
 
             while let Ok(msg) = self.webview_rx.try_recv() {
@@ -118,17 +144,24 @@ impl EventRunner {
                 webview.evaluate_script(&code).ok();
             }
 
-            if let Event::WindowEvent { event, .. } = &event
-                && event == &WindowEvent::CloseRequested
-            {
-                std::process::exit(0);
-            }
+            match &event {
+                Event::WindowEvent { event, .. } => {
+                    if event == &WindowEvent::CloseRequested {
+                        std::process::exit(0)
+                    }
+                }
 
-            if let Event::UserEvent(LoopEvent::JS(call_id, bytes)) = event {
-                let payload_str = unsafe { str::from_utf8_unchecked(&bytes) };
-                let payload = escape_for_template_literal(payload_str);
-                let code = format!("_r({call_id},`{}`)", payload);
-                webview.evaluate_script(&code).ok();
+                Event::UserEvent(LoopEvent::JS(call_id, bytes)) => {
+                    let payload_str = unsafe { str::from_utf8_unchecked(bytes) };
+                    let payload = escape_for_template_literal(payload_str);
+                    let code = format!("_r({call_id},`{}`)", payload);
+                    webview.evaluate_script(&code).ok();
+                }
+                Event::UserEvent(LoopEvent::Resize(dir)) => {
+                    window.drag_resize_window(*dir).ok();
+                }
+
+                _ => {}
             }
         });
     }
