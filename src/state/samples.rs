@@ -172,7 +172,7 @@ pub fn process_directories<'a>(
         })
         .ok();
 
-    println!("SCAN DONE!");
+    tracing::info!("scan completed");
 
     let mut guard = app_state.write().map_err(|_| ())?;
     for s in sample_registry.iter() {

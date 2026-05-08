@@ -2,6 +2,8 @@ use crate::ipc::{IPCBody, IPCError, IPCResponse, ok};
 use crate::ipc_commands;
 
 fn log(body: IPCBody) -> IPCResponse {
+    use std::io::{self, Write};
+
     let mode = body
         .req
         .as_bytes()
@@ -11,6 +13,7 @@ fn log(body: IPCBody) -> IPCResponse {
 
     let message = &body.req[1..];
 
+    const GRAY: &str = "\x1b[90m";
     const RESET: &str = "\x1b[0m";
 
     let ansi = match mode {
@@ -20,7 +23,15 @@ fn log(body: IPCBody) -> IPCResponse {
         _ => "",
     };
 
-    println!("[🌐WEB] {ansi}{}{RESET}", message.replace(RESET, ansi));
+    let now = chrono::Local::now().format("%H:%M:%S");
+    let formatted_message = message.replace(RESET, ansi);
+
+    let mut stdout = io::stdout().lock();
+    let _ = writeln!(
+        stdout,
+        "{GRAY}{now}\x1b[0m [🌐WEB] {ansi}{formatted_message}\x1b[0m"
+    );
+
     ok()
 }
 

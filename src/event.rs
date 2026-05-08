@@ -70,7 +70,7 @@ impl EventSystem {
                     self.send(call_id, bytes).ok();
                 }
                 Err(err) => {
-                    eprintln!("{err}");
+                    tracing::error!(error = %err);
                     self.send_empty(call_id).ok();
                 }
             };

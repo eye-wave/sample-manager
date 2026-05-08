@@ -60,7 +60,7 @@ impl AudioDevice {
                     move |data: &mut [$T], _info: &cpal::OutputCallbackInfo| {
                         audio_loop(data, &shared_cb, $chan as u64, &mut rb_cons)
                     },
-                    |err| eprintln!("cpal stream error: {err}"),
+                    |err| tracing::error!(error = %err, "cpal stream error"),
                     None,
                 )?
             }};

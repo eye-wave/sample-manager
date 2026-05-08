@@ -111,7 +111,7 @@ impl PluginRunner {
             match rx.recv() {
                 Ok(Cmd::LoadPlugin { name, bytes }) => {
                     if let Err(e) = self.load_plugin(&bytes) {
-                        eprintln!("[plugins] failed to load {name}: {e}");
+                        tracing::error!(plugin = %name, error = %e, "failed to load plugin");
                     }
                 }
                 Ok(Cmd::SetConfigField { id, name, data }) => {
@@ -452,7 +452,6 @@ fn define_host_imports(
     let id = manifest.id.clone();
     let caps = manifest.capabilities.clone();
 
-    // log(ptr, len)
     {
         let log_id = id.clone();
         linker.func_wrap(
@@ -466,7 +465,7 @@ fn define_host_imports(
                 let data = mem.data(&caller);
                 let msg = std::str::from_utf8(&data[ptr as usize..(ptr + len) as usize])
                     .unwrap_or("<invalid utf8>");
-                eprintln!("[plugin/{log_id}] {msg}");
+                tracing::info!(plugin = %log_id, "{msg}");
             },
         )?;
     }
@@ -560,7 +559,11 @@ fn define_host_imports(
                   o_cap: u32|
                   -> u32 {
                 if !sec_caps.encrypted_storage {
-                    eprintln!("[plugin/{sec_id}] denied secret_get: capability missing");
+                    tracing::warn!(
+                        plugin = %sec_id,
+                        capability = "secret_set",
+                        "capability missing"
+                    );
                     return u32::MAX;
                 }
                 let mem = caller
@@ -600,7 +603,11 @@ fn define_host_imports(
                   v_ptr: u32,
                   v_len: u32| {
                 if !sec_caps.encrypted_storage {
-                    eprintln!("[plugin/{sec_id}] denied secret_set: capability missing");
+                    tracing::warn!(
+                        plugin = %sec_id,
+                        capability = "secret_set",
+                        "capability missing"
+                    );
                     return;
                 }
                 let mem = caller
@@ -648,7 +655,11 @@ fn define_host_imports(
                   out_cap: u32|
                   -> i32 {
                 if !fs_caps.filesystem {
-                    eprintln!("[plugin/{fs_id}] denied fs_read: capability missing");
+                    tracing::warn!(
+                        plugin = %fs_id,
+                        capability = "fs_read",
+                        "capability missing"
+                    );
                     return -1;
                 }
 
@@ -668,14 +679,23 @@ fn define_host_imports(
                 };
 
                 if path.contains("..") {
-                    eprintln!("[plugin/{fs_id}] denied fs_read: path traversal in {path:?}");
+                    tracing::warn!(
+                        plugin = %fs_id,
+                        capability = "fs_read",
+                        "capability missing"
+                    );
                     return -3;
                 }
 
                 let contents = match std::fs::read(&path) {
                     Ok(b) => b,
                     Err(e) => {
-                        eprintln!("[plugin/{fs_id}] fs_read error for {path:?}: {e}");
+                        tracing::error!(
+                            plugin = %fs_id,
+                            path = ?path,
+                            error = %e,
+                            "fs_read failed"
+                        );
                         return -4;
                     }
                 };
@@ -711,7 +731,7 @@ fn define_host_imports(
                   out_cap: u32|
                   -> i32 {
                 if !net_caps.network {
-                    eprintln!("[plugin] blocked: network capability not enabled");
+                    tracing::warn!("network capability not enabled");
                     return -2;
                 }
                 let mem = caller
@@ -757,7 +777,7 @@ fn define_host_imports(
                 };
 
                 if !caller.data().is_url_allowed(&uri, &allowlist) {
-                    eprintln!("[plugin] blocked request to {uri}");
+                    tracing::warn!(uri = %uri, "blocked outbound request");
                     return -2;
                 }
 
@@ -793,7 +813,7 @@ fn define_host_imports(
                         n as i32
                     }
                     Err(e) => {
-                        eprintln!("[plugin] http_fetch error: {e}");
+                        tracing::error!(error = %e, "http_fetch failed");
                         -3
                     }
                 }

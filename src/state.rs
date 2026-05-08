@@ -65,7 +65,11 @@ impl AppState {
 
             match fs::read(path) {
                 Ok(bytes) => self.plugin_handle.load(name, bytes),
-                Err(err) => eprintln!("Failed to load plugin '{name}'.\n\t{err}"),
+                Err(err) => tracing::error!(
+                    plugin = %name,
+                    error = %err,
+                    "failed to load plugin"
+                ),
             }
         }
 

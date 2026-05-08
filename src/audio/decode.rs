@@ -68,8 +68,8 @@ impl AudioDecoderHandle {
         std::thread::Builder::new()
             .name("decode-thread".into())
             .spawn(move || {
-                if let Err(err) = decode_thread_loop(rx, rb_prod, audio_state, stream_config) {
-                    eprintln!("{err}");
+                if let Err(e) = decode_thread_loop(rx, rb_prod, audio_state, stream_config) {
+                    tracing::error!(error = %e, "decode failed");
                 }
             })?;
 
@@ -132,7 +132,7 @@ fn decode_thread_loop(
                             signal_ready();
                         }
                         Err(e) => {
-                            eprintln!("init_decoder failed: {e}");
+                            tracing::error!(error = %e, "init_decoder failed");
                             audio_state.set_state(PlayerFlags::STOPPED);
                             signal_ready();
                         }
@@ -203,7 +203,7 @@ fn decode_thread_loop(
             if let DecodeError::EndOfFile = e {
                 audio_state.set_state(PlayerFlags::DRAINING);
             } else {
-                eprintln!("decode error: {e}");
+                tracing::error!(error = %e, "decode failed");
             }
             current = None;
         }

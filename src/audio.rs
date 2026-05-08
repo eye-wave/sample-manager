@@ -58,12 +58,12 @@ impl AudioPlayer {
                 match AudioDecoderHandle::new(rb_prod, shared_state.clone(), device.config.clone())
                 {
                     Ok(decoder) => audio_decoder = Some(decoder),
-                    Err(err) => eprintln!("{err}"),
+                    Err(err) => tracing::error!(error = %err),
                 }
 
                 audio_device = Some(device);
             }
-            Err(err) => eprintln!("{err}"),
+            Err(err) => tracing::error!(error = %err),
         }
 
         Self {

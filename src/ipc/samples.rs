@@ -136,7 +136,10 @@ fn draw_audio_file(body: IPCBody) -> IPCResponse {
             Ok(msg) => {
                 let _ = msg.send_to_webview(body.webview_sender);
             }
-            Err(err) => eprintln!("Error occured in draw_audio_file:\n\t{err}"),
+            Err(err) => tracing::error!(
+                error = %err,
+                "draw_audio_file failed"
+            ),
         }
     });
 

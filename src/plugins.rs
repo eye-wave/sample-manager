@@ -89,7 +89,7 @@ impl PluginRuntimeHandle {
             .spawn(move || match PluginRunner::new() {
                 Ok(plug) => plug.run(rx),
                 Err(err) => {
-                    eprintln!("{err}");
+                    tracing::error!(error = %err);
                 }
             })
             .expect("failed to spawn plugin runner thread");

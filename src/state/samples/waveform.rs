@@ -54,7 +54,6 @@ fn draw_waveform_ffmpeg(
     }
 
     let duration = get_duration(&input, ffpaths.ffprobe).unwrap_or(3.0);
-    println!("{duration}");
 
     const WIDTH: &str = "900";
 

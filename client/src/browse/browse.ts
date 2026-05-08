@@ -90,6 +90,9 @@ listen("search", (payload) => {
     }
   })();
 
+  console.log(`got {count} files in search`);
+  console.log(files);
+
   PaginationHandler.setPages((count / PAGE_SIZE) | 0);
 
   for (let i = 0; i < POOL_SIZE; i++) {

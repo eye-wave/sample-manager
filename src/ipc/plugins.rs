@@ -49,7 +49,6 @@ struct ConfigPluginValueUpdate {
 fn configure_plugin_value(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
         let ConfigPluginValueUpdate { id, name, data } = serde_json::from_str(&body.req)?;
-        println!("Got from UI: {id}, {name}, {data}");
 
         let data = parse_string_to_bytes(data);
 
