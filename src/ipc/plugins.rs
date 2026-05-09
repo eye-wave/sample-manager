@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use plugin_wire::sample::SampleSerialize;
 use serde::{Deserialize, Serialize};
@@ -8,6 +9,24 @@ use crate::AStr;
 use crate::ipc::{IPCBody, IPCError, IPCMessage, IPCResponse, IntoIPCResponse, ok};
 use crate::plugins::PluginId;
 use crate::state::{app_paths, samples::SearchRequest};
+
+fn add_plugin(body: IPCBody) -> IPCResponse {
+    crate::with_state_mut!(body, state, {
+        let path = PathBuf::from(body.req.to_string());
+        let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+
+        let bytes = fs::read(&path)?;
+
+        state.plugin_handle.load(name, bytes);
+        state.loaded_plugins_info = state.plugin_handle.get_all_plugins_info(|_| {});
+
+        state.mutate_config(|cfg| {
+            cfg.plugins.insert(name.to_string());
+        });
+
+        ok()
+    })
+}
 
 fn disable_plugin(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
@@ -34,8 +53,14 @@ fn get_all_plugins_info(body: IPCBody) -> IPCResponse {
             }
         }
 
-        serde_json::to_string(&plugins_info)?.finish()
-    })
+        let payload = serde_json::to_string(&plugins_info)?;
+        let _ = body.webview_sender.send(IPCMessage {
+            id: "plugin-info",
+            payload,
+        });
+    });
+
+    ok()
 }
 
 #[derive(Deserialize, TS)]
@@ -151,6 +176,7 @@ fn get_plugin_paths(body: IPCBody) -> IPCResponse {
 
 crate::ipc_commands! {
     IPC_PLUGINS = [
+        add_plugin,
         disable_plugin,
         get_all_plugins_info,
         configure_plugin_value,

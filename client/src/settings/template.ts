@@ -106,6 +106,8 @@ function renderField(key: string, field: SchemaFieldWithValue) {
     }
 
     inputHtml += `</div>`;
+  } else if (field.type === "stringList") {
+    inputHtml = "<h1>Too lazy to implement this rn</h1>";
   }
 
   return /* HTML */ `

@@ -31,6 +31,10 @@ pub enum SchemaField {
         count: u8,
         default: Vec<f64>,
     },
+    StringList {
+        label: AStr,
+        default: Vec<AStr>,
+    },
     Select {
         label: AStr,
         options: SchemaFieldOptions,
@@ -86,6 +90,11 @@ pub enum SchemaFieldWithValue {
         default: Vec<f64>,
         value: Vec<f64>,
     },
+    StringList {
+        label: AStr,
+        value: Vec<AStr>,
+        default: Vec<AStr>,
+    },
     Select {
         label: AStr,
         options: SchemaFieldOptions,
@@ -104,6 +113,12 @@ impl SchemaFieldWithValue {
                 for (i, n) in list.iter().enumerate().take(*count as usize) {
                     value[i] = *n;
                 }
+            }
+            Self::StringList { value, .. } => {
+                let list: Vec<_> = serde_json::from_str(data)?;
+
+                value.clear();
+                value.extend(list);
             }
             Self::String { value, .. } => *value = Arc::from(data),
             Self::Select { value, options, .. } => {
@@ -125,6 +140,7 @@ impl SchemaFieldWithValue {
             Self::Bool { value, .. } => postcard::to_allocvec(value),
             Self::Number { value, .. } => postcard::to_allocvec(value),
             Self::NumberList { value, .. } => postcard::to_allocvec(value),
+            Self::StringList { value, .. } => postcard::to_allocvec(value),
             Self::Select { value, .. } => postcard::to_allocvec(value),
             Self::String { value, .. } => postcard::to_allocvec(value),
         }

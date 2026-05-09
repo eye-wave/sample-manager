@@ -1,11 +1,35 @@
 use std::path::Path;
 
-use crate::ipc::{IPCBody, IPCResponse, IntoIPCResponse};
+use serde::Deserialize;
+use ts_rs::TS;
+
+use crate::ipc::{IPCBody, IPCResponse, IntoIPCResponse, ok};
 use crate::ipc_commands;
 
 fn open_folder(_body: IPCBody) -> IPCResponse {
-    let folder = tinyfiledialogs::select_folder_dialog("Select folder", "");
-    folder.finish()
+    tinyfiledialogs::select_folder_dialog("Select folder", "").finish()
+}
+
+#[derive(Deserialize, TS)]
+#[ts(export)]
+struct PickFileOptions<'a> {
+    label: &'a str,
+    filters: Vec<&'a str>,
+}
+
+fn pick_file(body: IPCBody) -> IPCResponse {
+    let opt: PickFileOptions = serde_json::from_str(&body.req)?;
+
+    let file = tinyfiledialogs::open_file_dialog(
+        "Upload a plugin file:",
+        "",
+        Some((&opt.filters, opt.label)),
+    );
+
+    match file {
+        Some(path) => path.finish(),
+        None => ok(),
+    }
 }
 
 fn get_path_type(path: &Path) -> u8 {
@@ -63,5 +87,6 @@ ipc_commands! {
     IPC_FS = [
         read_dir,
         open_folder,
+        pick_file
     ]
 }

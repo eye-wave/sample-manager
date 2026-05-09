@@ -1,12 +1,14 @@
 import type { AppConfig } from "@typegen/AppConfig";
+import type { PickFileOptions } from "@typegen/PickFileOptions";
 import type { PluginInfo } from "@typegen/PluginInfo";
 import type { SchemaFieldWithValue } from "@typegen/SchemaFieldWithValue";
 import { d, w } from "../alias";
 import * as IPC from "../gen/ipc-gen";
 import { updateCurrentTheme, updateTheme, updateThemeCss } from "../helpers";
-import { invoke } from "../invoke/invoke";
+import { invoke, listen } from "../invoke/invoke";
 import { bindSettingInputs, createPluginCard, renderSettings } from "./template";
 
+declare const add_plugin_btn__: HTMLButtonElement;
 declare const conf_btn__: HTMLButtonElement;
 declare const conf_dial__: HTMLDialogElement;
 declare const conf_dial_body__: HTMLDivElement;
@@ -44,12 +46,14 @@ const tabBtns: HTMLButtonElement[] = [];
 
 d.querySelectorAll(".dialog-body button").forEach((el) => {
   const btn = el as HTMLButtonElement;
-  const target = btn.dataset.target as string;
+  const target = btn.dataset.target;
 
-  btn.onclick = () => showPane(target);
+  if (target) {
+    btn.onclick = () => showPane(target);
 
-  tabIds.push(target);
-  tabBtns.push(btn);
+    tabIds.push(target);
+    tabBtns.push(btn);
+  }
 });
 
 tabIds.push("dial_tab_plugin__");
@@ -74,9 +78,7 @@ conf_btn__.onclick = async () => {
   conf_dial__.showModal();
   patch.flush();
 
-  const pluginsInfo: PluginInfo[] = await invoke(IPC.GET_ALL_PLUGINS_INFO).then((res) =>
-    JSON.parse(res),
-  );
+  invoke(IPC.GET_ALL_PLUGINS_INFO);
 
   try {
     const config: Record<string, SchemaFieldWithValue> = JSON.parse(
@@ -95,24 +97,6 @@ conf_btn__.onclick = async () => {
       }
     });
   } catch (_) {}
-
-  plugins_settings__.innerHTML = pluginsInfo.map((i) => createPluginCard(i)).join("");
-  plugins_settings__.querySelectorAll(".btn").forEach((el) => {
-    const btn = el as HTMLButtonElement;
-    const plugId = btn.dataset.id as string;
-
-    const info = pluginsInfo.find((p) => p.id === plugId);
-    if (!info) return;
-
-    btn.onclick = () => {
-      showPane("dial_tab_plugin__");
-
-      plugin_settings_label__.textContent = "Plugin " + info.name;
-      plugin_settings_body__.innerHTML = renderSettings(info);
-
-      bindSettingInputs(plugin_settings_body__);
-    };
-  });
 };
 
 const revertAndClose = () => {
@@ -146,9 +130,48 @@ conf_save__.onclick = () => {
   conf_dial__.close();
 };
 
+add_plugin_btn__.onclick = async () => {
+  const opt: PickFileOptions = { filters: ["*.zip"], label: "Zipped plugin files" };
+
+  const path = await invoke(IPC.PICK_FILE, opt);
+  if (!path) return;
+
+  console.log("Received", path);
+};
+
 w.addEventListener("keydown", (e) => {
   if (conf_dial__.open && e.key === "Escape") {
     updateCurrentTheme();
     conf_dial__.close();
   }
+});
+
+listen("plugin-info", (data) => {
+  const pluginsInfo: PluginInfo[] = [];
+  try {
+    const items: PluginInfo[] = JSON.parse(data);
+    items.forEach((i) => {
+      pluginsInfo.push(i);
+    });
+  } catch {}
+
+  console.log(pluginsInfo);
+
+  plugins_settings__.innerHTML = pluginsInfo.map((i) => createPluginCard(i)).join("");
+  plugins_settings__.querySelectorAll(".btn").forEach((el) => {
+    const btn = el as HTMLButtonElement;
+    const plugId = btn.dataset.id as string;
+
+    const info = pluginsInfo.find((p) => p.id === plugId);
+    if (!info) return;
+
+    btn.onclick = () => {
+      showPane("dial_tab_plugin__");
+
+      plugin_settings_label__.textContent = "Plugin " + info.name;
+      plugin_settings_body__.innerHTML = renderSettings(info);
+
+      bindSettingInputs(plugin_settings_body__);
+    };
+  });
 });

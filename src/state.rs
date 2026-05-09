@@ -115,9 +115,16 @@ impl AppState {
         &self.app_config
     }
 
-    pub fn mutate_config_field(&mut self, patch: AppConfigPatch) {
-        self.app_config.mutate_config_field(patch);
+    pub fn patch_config(&mut self, patch: AppConfigPatch) {
+        self.app_config.patch(patch);
         self.update_config(|_| {});
+    }
+
+    pub fn mutate_config<F>(&mut self, mut cb: F)
+    where
+        F: FnMut(&mut AppConfig),
+    {
+        cb(&mut self.app_config);
     }
 
     pub fn get_plugin_info(&self, id: &PluginId) -> Option<&PluginInfo> {

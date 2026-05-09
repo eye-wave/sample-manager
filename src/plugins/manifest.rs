@@ -155,6 +155,8 @@ impl SchemaField {
                 SchemaFieldWithValue::Select { label: label.clone(), options: options.clone(), default: default.clone(), value: fetch(b(), || default.clone(), |v| options.has_field(v)) },
             Self::NumberList { label, separator, count, default } =>
                 SchemaFieldWithValue::NumberList { label: label.clone(), separator: separator.clone(), count: *count, default: default.clone(), value: fetch(b(), || default.clone(), |v: &Vec<f64>| v.len() == *count as usize) },
+            Self::StringList { label, default } =>
+                SchemaFieldWithValue::StringList { label: label.clone(), default: default.clone(), value: fetch(b(), || default.clone(), |_| true) },
         }
     }
 }

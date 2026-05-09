@@ -102,7 +102,7 @@ impl AppConfig {
         }
     }
 
-    pub fn mutate_config_field(&mut self, patch: AppConfigPatch) {
+    pub fn patch(&mut self, patch: AppConfigPatch) {
         self.apply(patch);
     }
 
@@ -110,10 +110,10 @@ impl AppConfig {
         HashMap::from([
             (
                 "tracked_dirs".into(),
-                SchemaFieldWithValue::Bool {
-                    label: "".into(),
-                    default: false,
-                    value: false,
+                SchemaFieldWithValue::StringList {
+                    label: "Tracked directories".into(),
+                    default: Vec::new(),
+                    value: Vec::new(),
                 },
             ),
             (
