@@ -1,6 +1,6 @@
 use crate::ipc::{IPCBody, IPCResponse, IntoIPCResponse, ok};
 use crate::ipc_commands;
-use crate::state::config::{AppConfigPatch, ConfigField};
+use crate::state::config::AppConfigPatch;
 
 fn patch_config(body: IPCBody) -> IPCResponse {
     crate::with_state_mut!(body, state, {
@@ -11,23 +11,22 @@ fn patch_config(body: IPCBody) -> IPCResponse {
     })
 }
 
-fn get_config_as_json(body: IPCBody) -> IPCResponse {
+fn get_config_fields(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
-        serde_json::to_string(state.get_config())?.finish()
+        serde_json::to_string(&state.get_config().as_fields())?.finish()
     })
 }
 
 fn get_config_field(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
-        let field: ConfigField = serde_json::from_str(&format!("\"{}\"", body.req))?;
-        state.get_config().get_field_as_json(field)?.finish()
+        state.get_config().get_field_as_json(&body.req)?.finish()
     })
 }
 
 ipc_commands! {
     IPC_CONFIG = [
         patch_config,
-        get_config_as_json,
+        get_config_fields,
         get_config_field
     ]
 }

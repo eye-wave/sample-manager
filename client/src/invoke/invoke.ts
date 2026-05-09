@@ -11,6 +11,7 @@ const pending = new Map<number, PromiseReturn>();
 let nextId = 1;
 
 export const invoke = <T>(id: number, payload?: T) => {
+  console.trace(id, payload);
   return new Promise<string>((resolve, reject) => {
     const callId = nextId++;
     pending.set(callId, { resolve, reject });

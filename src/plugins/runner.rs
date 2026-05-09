@@ -10,11 +10,12 @@ use wasmtime::{Caller, Engine, Linker, Module, Store};
 
 use crate::AStr;
 use crate::ipc::IPCMessage;
+use crate::plugins::manifest::config_key;
 use crate::state::samples::{SearchRequest, WaveformData, draw_audio_and_save, filter_samples};
 
 use super::host::{HostState, PendingDownload};
 use super::manifest::{ManifestError, PluginManifest, SearchMode};
-use super::{PluginId, PluginInstance, PluginRunnerCommand as Cmd, PluginSendError, config_key};
+use super::{PluginId, PluginInstance, PluginRunnerCommand as Cmd, PluginSendError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum PluginRuntimeError {

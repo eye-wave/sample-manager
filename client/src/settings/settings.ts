@@ -1,11 +1,11 @@
 import type { AppConfig } from "@typegen/AppConfig";
 import type { PluginInfo } from "@typegen/PluginInfo";
+import type { SchemaFieldWithValue } from "@typegen/SchemaFieldWithValue";
 import { d, w } from "../alias";
 import * as IPC from "../gen/ipc-gen";
 import { updateCurrentTheme, updateTheme, updateThemeCss } from "../helpers";
 import { invoke } from "../invoke/invoke";
-import type { LooseInput } from "../lying";
-import { bindSettingInputs, createPluginCard, renderPluginSettings } from "./template";
+import { bindSettingInputs, createPluginCard, renderSettings } from "./template";
 
 declare const conf_btn__: HTMLButtonElement;
 declare const conf_dial__: HTMLDialogElement;
@@ -13,13 +13,10 @@ declare const conf_dial_body__: HTMLDivElement;
 declare const conf_reset__: HTMLButtonElement;
 declare const conf_save__: HTMLButtonElement;
 declare const dialog_close__: HTMLButtonElement;
-declare const ffmpeg_path__: HTMLInputElement;
-declare const ffprobe_path__: HTMLInputElement;
-declare const plugins_settings__: HTMLDivElement;
-declare const sidebar_width__: LooseInput;
-declare const theme_select__: HTMLSelectElement;
-declare const plugin_settings_label__: HTMLParagraphElement;
 declare const plugin_settings_body__: HTMLDivElement;
+declare const plugin_settings_label__: HTMLParagraphElement;
+declare const plugins_settings__: HTMLDivElement;
+declare const settings_body__: HTMLDivElement;
 
 function createPatch() {
   type Patch = Partial<AppConfig>;
@@ -42,10 +39,6 @@ function createPatch() {
 
 const patch = createPatch();
 
-let newTheme = "";
-
-const themeName = (t: string) => t.replace(/\s/, "");
-
 const tabIds: string[] = [];
 const tabBtns: HTMLButtonElement[] = [];
 
@@ -66,8 +59,7 @@ function showPane(target: string) {
     // @ts-expect-error
     const el = w[id] as HTMLDivElement;
 
-    if (id === target) el.style.display = "contents";
-    else el.style.display = "none";
+    el.style.display = id === target ? "contents" : "none";
   }
 
   for (const btn of tabBtns) {
@@ -76,18 +68,7 @@ function showPane(target: string) {
   }
 }
 
-function themeSelectionTemplate(type: "light" | "dark", themes: string[]) {
-  const inner = themes
-    .map((t) => {
-      const theme_val = themeName(t);
-      const theme_name = t.replace(".toml", "");
-
-      return /* HTML */ `<option value="${theme_val}">${theme_name}</option>`;
-    })
-    .join("");
-
-  return /* HTML */ `<optgroup label="${type}">${inner}</optgroup>`;
-}
+let previewedTheme = "";
 
 conf_btn__.onclick = async () => {
   conf_dial__.showModal();
@@ -98,11 +79,21 @@ conf_btn__.onclick = async () => {
   );
 
   try {
-    const settings: AppConfig = JSON.parse(await invoke(IPC.GET_CONFIG_AS_JSON));
+    const config: Record<string, SchemaFieldWithValue> = JSON.parse(
+      await invoke(IPC.GET_CONFIG_FIELDS),
+    );
 
-    if (settings.ffmpeg_path) ffmpeg_path__.value = settings.ffmpeg_path;
-    if (settings.ffprobe_path) ffprobe_path__.value = settings.ffprobe_path;
-    if (settings.sidebar_width) sidebar_width__.value = settings.sidebar_width;
+    settings_body__.innerHTML = renderSettings({ id: "__APP_SETTINGS__", config });
+    bindSettingInputs(settings_body__, (field, data) => {
+      if (field === "ffmpeg_path") patch.set("ffmpeg_path", data);
+      else if (field === "ffprobe_path") patch.set("ffprobe_path", data);
+      else if (field === "sidebar_width") patch.set("sidebar_width", +data);
+      else if (field === "color_theme") {
+        previewedTheme = data;
+
+        invoke(IPC.PREVIEW_THEME, data).then(updateThemeCss);
+      }
+    });
   } catch (_) {}
 
   plugins_settings__.innerHTML = pluginsInfo.map((i) => createPluginCard(i)).join("");
@@ -117,47 +108,30 @@ conf_btn__.onclick = async () => {
       showPane("dial_tab_plugin__");
 
       plugin_settings_label__.textContent = "Plugin " + info.name;
-      plugin_settings_body__.innerHTML = renderPluginSettings(info);
+      plugin_settings_body__.innerHTML = renderSettings(info);
 
       bindSettingInputs(plugin_settings_body__);
     };
   });
-
-  const currentTheme = await invoke(IPC.GET_THEME_NAME);
-  const [lightCount, ...themes] = (await invoke(IPC.LIST_THEMES)).split(",");
-
-  const lightThemes = themes.slice(0, +lightCount).toSorted();
-  const darkThemes = themes.slice(+lightCount).toSorted();
-
-  newTheme = currentTheme;
-
-  theme_select__.innerHTML =
-    themeSelectionTemplate("light", lightThemes) + themeSelectionTemplate("dark", darkThemes);
-
-  if (currentTheme) theme_select__.value = themeName(currentTheme);
 };
 
-theme_select__.onchange = async () => {
-  newTheme = theme_select__.value;
-  const css = await invoke(IPC.PREVIEW_THEME, theme_select__.value);
-
-  updateThemeCss(css);
+const revertAndClose = () => {
+  updateCurrentTheme();
+  conf_dial__.close();
 };
 
 conf_dial__.onclick = (e: MouseEvent) => {
-  const left = conf_dial_body__.offsetLeft;
-  const right = left + conf_dial_body__.offsetWidth;
-  const top = conf_dial_body__.offsetTop;
-  const bottom = top + conf_dial_body__.offsetHeight;
+  if (e.target === conf_save__) return;
 
-  const isClickOutside =
-    e.clientX < left || e.clientX > right || e.clientY < top || e.clientY > bottom;
-
-  if (isClickOutside) {
-    updateCurrentTheme();
-
-    conf_dial__.close();
-  }
+  const {
+    offsetLeft: left,
+    offsetTop: top,
+    offsetWidth: w,
+    offsetHeight: h,
+  } = conf_dial_body__;
+  const outside =
+    e.clientX < left || e.clientX > left + w || e.clientY < top || e.clientY > top + h;
+  if (outside) revertAndClose();
 };
 
 dialog_close__.onclick = () => {
@@ -167,9 +141,8 @@ dialog_close__.onclick = () => {
 
 conf_reset__.onclick = () => conf_dial__.close();
 conf_save__.onclick = () => {
-  updateTheme(newTheme);
+  if (previewedTheme) updateTheme(previewedTheme);
   invoke(IPC.PATCH_CONFIG, patch.send());
-
   conf_dial__.close();
 };
 
@@ -179,7 +152,3 @@ w.addEventListener("keydown", (e) => {
     conf_dial__.close();
   }
 });
-
-ffprobe_path__.oninput = () => patch.set("ffprobe_path", ffprobe_path__.value);
-ffmpeg_path__.oninput = () => patch.set("ffmpeg_path", ffmpeg_path__.value);
-sidebar_width__.oninput = () => patch.set("sidebar_width", +sidebar_width__.value);

@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::AStr;
-use crate::ipc::{IPCBody, IPCMessage, IPCResponse, IntoIPCResponse, ok};
-use crate::plugins::{PluginId, parse_string_to_bytes};
+use crate::ipc::{IPCBody, IPCError, IPCMessage, IPCResponse, IntoIPCResponse, ok};
+use crate::plugins::PluginId;
 use crate::state::{app_paths, samples::SearchRequest};
 
 fn disable_plugin(body: IPCBody) -> IPCResponse {
@@ -50,9 +50,14 @@ fn configure_plugin_value(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
         let ConfigPluginValueUpdate { id, name, data } = serde_json::from_str(&body.req)?;
 
-        let data = parse_string_to_bytes(data);
+        let pinfo = state.get_plugin_info(&id).ok_or(IPCError::empty())?;
+        let bytes = pinfo
+            .get_field(&name)
+            .ok_or(IPCError::empty())?
+            .swap_value(&data)?
+            .to_bytes()?;
 
-        state.plugin_handle.set_config_field(id, name, data);
+        state.plugin_handle.set_config_field(id, name, bytes);
 
         ok()
     })
@@ -127,7 +132,7 @@ fn get_plugin_paths(body: IPCBody) -> IPCResponse {
                 struct PluginSidebarView<'a> {
                     name: &'a str,
                     path: &'a Path,
-                    icon: Option<String>,
+                    icon: Option<AStr>,
                 }
 
                 serde_json::to_string(&PluginSidebarView {

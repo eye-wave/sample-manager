@@ -18,7 +18,14 @@ use alloc::vec::Vec;
 use crate::{SampleType, WireEntry};
 
 #[cfg_attr(feature = "std", derive(Debug, Clone, Serialize, TS))]
+pub enum SampleSource {
+    Native,
+    Plugin,
+}
+
+#[cfg_attr(feature = "std", derive(Debug, Clone, Serialize, TS))]
 pub struct SampleSerialize {
+    pub source: SampleSource,
     pub name: String,
     pub path: Option<String>,
     pub url: Option<String>,
@@ -116,6 +123,7 @@ impl From<&WireEntry> for SampleSerialize {
         };
 
         Self {
+            source: SampleSource::Plugin,
             name,
             path,
             url,

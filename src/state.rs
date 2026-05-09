@@ -6,7 +6,7 @@ use std::sync::{Arc, mpsc};
 
 use crate::audio::AudioPlayer;
 use crate::ipc::IPCMessage;
-use crate::plugins::{PluginInfo, PluginRuntimeHandle};
+use crate::plugins::{PluginId, PluginInfo, PluginRuntimeHandle};
 use crate::state::config::AppConfigPatch;
 
 pub mod app_paths;
@@ -118,5 +118,9 @@ impl AppState {
     pub fn mutate_config_field(&mut self, patch: AppConfigPatch) {
         self.app_config.mutate_config_field(patch);
         self.update_config(|_| {});
+    }
+
+    pub fn get_plugin_info(&self, id: &PluginId) -> Option<&PluginInfo> {
+        self.loaded_plugins_info.iter().find(|p| p.meta.id == *id)
     }
 }

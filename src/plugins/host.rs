@@ -8,12 +8,9 @@ use plugin_wire::WireEntry;
 use rayon::iter::ParallelBridge;
 use serde::{Serialize, de::DeserializeOwned};
 
+use crate::schema::SchemaField;
 use crate::state::samples::{SearchRequest, filter_samples};
-use crate::{
-    AStr,
-    plugins::{PluginId, manifest::SchemaField},
-    state::app_paths,
-};
+use crate::{AStr, plugins::PluginId, state::app_paths};
 
 pub type StorageKey = (PluginId, AStr);
 

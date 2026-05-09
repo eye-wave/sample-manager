@@ -1,3 +1,4 @@
+import type { SampleEntry } from "@typegen/SampleEntry";
 import * as IPC from "../gen/ipc-gen";
 import { basename, setLiked, setLikedView } from "../helpers";
 import { invoke, listen } from "../invoke/invoke";
@@ -58,13 +59,6 @@ listen("set-fav", (payload) => {
   }
 });
 
-export type FSSample = {
-  name: string;
-  path: string;
-  tags: string[];
-  fav: boolean;
-};
-
 const PAGE_SIZE = 50;
 export async function search(query: string, tags: string[], offset: number, fav = false) {
   const params = {
@@ -82,7 +76,7 @@ export async function search(query: string, tags: string[], offset: number, fav 
 }
 
 listen("search", (payload) => {
-  const { files, count }: { files: FSSample[]; count: number } = (() => {
+  const { files, count }: { files: SampleEntry[]; count: number } = (() => {
     try {
       return JSON.parse(payload);
     } catch (_) {
@@ -98,8 +92,8 @@ listen("search", (payload) => {
     if (i < files.length) {
       const item = files[i];
 
-      row.update(basename(item.name), null, item.fav, item.tags);
-      row.setPath(item.path);
+      row.update(basename(item.name), null, item.is_fav, item.tags);
+      if (item.path) row.setPath(item.path);
     } else {
       row.hide();
     }

@@ -19,7 +19,7 @@ use icon::SVGIcon;
 use manifest::PluginManifest;
 use runner::PluginRunner;
 
-pub use manifest::{PluginId, PluginInfo, config_key, parse_string_to_bytes};
+pub use manifest::{PluginId, PluginInfo};
 
 pub struct PluginInstance {
     pub instance: Instance,

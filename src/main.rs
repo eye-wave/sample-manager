@@ -6,6 +6,7 @@ mod event;
 mod http;
 mod ipc;
 mod plugins;
+mod schema;
 mod state;
 mod window;
 

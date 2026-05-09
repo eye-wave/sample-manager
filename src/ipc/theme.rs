@@ -1,11 +1,5 @@
-use std::fs;
-
 use crate::ipc::{IPCBody, IPCError, IPCResponse, IntoIPCResponse};
 use crate::ipc_commands;
-use crate::state::{
-    app_paths,
-    config::{Theme, ThemeType},
-};
 
 fn get_theme(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
@@ -53,41 +47,11 @@ fn get_theme_name(body: IPCBody) -> IPCResponse {
     })
 }
 
-fn list_themes(_: IPCBody) -> IPCResponse {
-    let mut files = fs::read_dir(app_paths::themes_path())?
-        .filter_map(Result::ok)
-        .filter_map(|f| {
-            let path = app_paths::themes_path().join(f.path());
-            let theme: Theme = toml::from_str(&fs::read_to_string(&path).ok()?).ok()?;
-
-            Some((
-                theme.theme_type,
-                f.file_name().to_string_lossy().into_owned(),
-            ))
-        })
-        .collect::<Vec<_>>();
-
-    let light_count = files.iter().filter(|e| e.0 == ThemeType::Light).count();
-
-    files.sort_by_key(|a| a.0);
-
-    format!(
-        "{light_count},{}",
-        files
-            .iter()
-            .map(|f| f.1.clone())
-            .intersperse(",".into())
-            .collect::<String>()
-    )
-    .finish()
-}
-
 ipc_commands! {
     IPC_THEME = [
         get_theme,
         preview_theme,
         update_theme,
         get_theme_name,
-        list_themes
     ]
 }

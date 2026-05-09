@@ -136,7 +136,7 @@ impl EventRunner {
         self.event_loop.run(move |event, _, control_flow| {
             let window = self.window_handle.as_ref().unwrap();
 
-            *control_flow = ControlFlow::Wait;
+            *control_flow = ControlFlow::Poll;
 
             while let Ok(msg) = self.webview_rx.try_recv() {
                 let payload = escape_for_template_literal(&msg.payload);
@@ -147,7 +147,7 @@ impl EventRunner {
             match &event {
                 Event::WindowEvent { event, .. } => {
                     if event == &WindowEvent::CloseRequested {
-                        std::process::exit(0)
+                        *control_flow = ControlFlow::Exit;
                     }
                 }
 

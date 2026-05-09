@@ -50,7 +50,7 @@ export const BrowseRow = (
 
     labelText.nodeValue = name;
     typeEl.nodeValue = bpm ? "Loop" : "One-shot";
-    bpmEl.nodeValue = bpm ? bpm : "-";
+    bpmEl.nodeValue = (bpm ? bpm : "-") as string;
 
     renderTags(tagsEl, tags);
 

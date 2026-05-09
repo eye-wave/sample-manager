@@ -1,11 +1,10 @@
-use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, RwLock};
 
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
-use plugin_wire::sample::{SampleMetadata, SampleSerialize};
+use plugin_wire::sample::{SampleMetadata, SampleSerialize, SampleSource};
 
 use crate::AStr;
 use crate::ipc::IPCMessage;
@@ -69,6 +68,18 @@ pub fn clean_up_string(input: &str) -> String {
 }
 
 impl SampleEntry for FsSample {
+    fn source(&self) -> SampleSource {
+        SampleSource::Native
+    }
+
+    fn path(&self) -> Option<&str> {
+        self.path.to_str()
+    }
+
+    fn url(&self) -> Option<&str> {
+        None
+    }
+
     fn score(&self, query: &str, tags: &[&str], matcher: &SkimMatcherV2) -> i64 {
         if !tags.is_empty() {
             let has_all = tags.iter().all(|t| self.tags.contains(t));
@@ -82,10 +93,6 @@ impl SampleEntry for FsSample {
             .unwrap_or(i64::MIN)
     }
 
-    fn to_hash<'a>(&'a self) -> Cow<'a, str> {
-        self.path.to_string_lossy()
-    }
-
     fn to_base(&self) -> plugin_wire::sample::SampleSerialize {
         self.into()
     }
@@ -94,6 +101,7 @@ impl SampleEntry for FsSample {
 impl From<&FsSample> for SampleSerialize {
     fn from(value: &FsSample) -> Self {
         Self {
+            source: SampleSource::Native,
             name: value
                 .path
                 .file_name()

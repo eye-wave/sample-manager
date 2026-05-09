@@ -1,7 +1,10 @@
-use std::{borrow::Cow, sync::Arc};
+use std::{fmt::Debug, sync::Arc};
 
 use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
-use plugin_wire::{WireEntry, sample::SampleSerialize};
+use plugin_wire::{
+    WireEntry,
+    sample::{SampleSerialize, SampleSource},
+};
 use serde::Serialize;
 use ts_rs::TS;
 
@@ -15,14 +18,28 @@ struct WithFav {
     inner: SampleSerialize,
 }
 
-pub trait SampleEntry: Sync {
+pub trait SampleEntry: Sync + Debug {
     fn score(&self, query: &str, tags: &[&str], matcher: &SkimMatcherV2) -> i64;
+    fn source(&self) -> SampleSource;
 
-    fn to_hash<'a>(&'a self) -> Cow<'a, str>;
+    fn path(&self) -> Option<&str>;
+    fn url(&self) -> Option<&str>;
+
+    fn to_hash(&self) -> Option<&str> {
+        match self.source() {
+            SampleSource::Native => self.path(),
+            SampleSource::Plugin => self.url(),
+        }
+    }
+
     fn to_base(&self) -> SampleSerialize;
 
     fn is_fav(&self, state: &AppState) -> bool {
-        state.favorite_samples.contains(&self.to_hash().to_string())
+        if let Some(hash) = self.to_hash() {
+            state.favorite_samples.contains(hash)
+        } else {
+            false
+        }
     }
 
     fn to_json(&self, state: &AppState) -> Result<String, serde_json::Error> {
@@ -36,8 +53,16 @@ pub trait SampleEntry: Sync {
 }
 
 impl SampleEntry for WireEntry {
-    fn to_hash(&self) -> Cow<'_, str> {
-        Cow::Owned(self.name().to_string() + self.url().unwrap_or(""))
+    fn source(&self) -> SampleSource {
+        SampleSource::Plugin
+    }
+
+    fn path(&self) -> Option<&str> {
+        self.path()
+    }
+
+    fn url(&self) -> Option<&str> {
+        self.url()
     }
 
     fn score(&self, query: &str, tags: &[&str], matcher: &SkimMatcherV2) -> i64 {
@@ -76,15 +101,19 @@ impl SampleEntry for SampleSerialize {
         matcher.fuzzy_match(&search_str, query).unwrap_or(i64::MIN)
     }
 
-    fn to_hash<'a>(&'a self) -> Cow<'a, str> {
-        Cow::Owned(
-            self.name.clone()
-                + self.url.as_ref().unwrap_or(&"".to_string())
-                + self.path.as_ref().unwrap_or(&"".to_string()),
-        )
-    }
-
     fn to_base(&self) -> SampleSerialize {
         self.clone()
+    }
+
+    fn path(&self) -> Option<&str> {
+        self.path.as_deref()
+    }
+
+    fn url(&self) -> Option<&str> {
+        self.url.as_deref()
+    }
+
+    fn source(&self) -> SampleSource {
+        self.source.clone()
     }
 }

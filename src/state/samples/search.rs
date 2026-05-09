@@ -33,10 +33,12 @@ pub fn search_local(req: &SearchRequest, state: &AppState) -> Result<String, Plu
         Either::Right(state.sample_registry.values())
     };
 
+    let mut count = 0;
     let found_local = filter_samples(scored.par_bridge(), req);
     let found = filter_samples_dyn(
         plugin_filtered
             .iter()
+            .filter(|e| !req.is_fav || e.is_fav(state))
             .map(|e| e as &dyn SampleEntry)
             .chain(found_local.iter().map(|e| *e as &dyn SampleEntry))
             .par_bridge(),
@@ -44,10 +46,11 @@ pub fn search_local(req: &SearchRequest, state: &AppState) -> Result<String, Plu
     )
     .iter()
     .filter_map(|e| e.to_json(state).ok())
+    .inspect(|_| count += 1)
     .intersperse(",\n".into())
     .collect::<String>();
 
-    Ok(format!(r#"{{"count":{},"files":[{found}]}}"#, found.len()))
+    Ok(format!(r#"{{"count":{count},"files":[{found}]}}"#))
 }
 
 pub fn filter_samples<'a, T: SampleEntry + Sized>(

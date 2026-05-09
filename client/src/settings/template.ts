@@ -39,58 +39,109 @@ const hosts = (hosts: string[]) => {
 
 const host = (label: string) => `<li>https://${label}/*</li>`;
 
-export function renderPluginSettings({ id, config }: PluginInfo) {
-  const fields = Object.entries(config).map(([key, data]) => {
-    return renderField(`${id}:${key}`, data);
-  });
+export function renderSettings({
+  id,
+  config,
+}: {
+  id: string;
+  config: Record<string, SchemaFieldWithValue>;
+}) {
+  const fields = Object.entries(config)
+    .toSorted((a, b) => a[0].localeCompare(b[0]))
+    .map(([key, data]) => {
+      return renderField(`${id}:${key}`, data);
+    });
 
   return fields.join("");
 }
 
-function renderField(key: string, data: SchemaFieldWithValue) {
-  const { fieldType, value } = data;
-  const currentValue = value ?? fieldType.default;
+function renderField(key: string, field: SchemaFieldWithValue) {
+  const currentValue = field.value;
 
   let inputHtml = "";
 
-  if (fieldType.type === "string") {
-    const inputType = fieldType.is_password ? "password" : "text";
+  if (field.type === "string") {
+    const inputType = field.is_password ? "password" : "text";
     inputHtml = /* HTML */ `<input type="${inputType}" value="${currentValue}" data-key="${key}">`;
-  } else if (fieldType.type === "number") {
+  } else if (field.type === "number") {
     inputHtml = /* HTML */ `<input type="number" value="${currentValue}" data-key="${key}">`;
-  } else if (fieldType.type === "bool") {
+  } else if (field.type === "bool") {
     const id = key + performance.now().toString(36);
     const checked = currentValue ? "checked" : "";
 
     inputHtml = `<div class=switch><input id=${id} type=checkbox ${checked} data-key=${key}><label for=${id}></label></div>`;
-  } else if (fieldType.type === "select") {
-    const options = fieldType.options.map((opt) => {
-      const selected = opt === currentValue ? "selected" : "";
-      return `<option value="${opt}" ${selected}>${opt}</option>`;
-    });
+  } else if (field.type === "select") {
+    let optionsHtml = "";
 
-    inputHtml = /* HTML */ `<select data-key="${key}">${options.join("")}</select>`;
+    if ("list" in field.options) {
+      optionsHtml = field.options.list.values
+        .map((opt) => {
+          const selected = opt === currentValue ? "selected" : "";
+          return `<option value="${opt}" ${selected}>${opt}</option>`;
+        })
+        .join("");
+    } else if ("grouped" in field.options) {
+      optionsHtml = Object.entries(field.options.grouped.groups)
+        .map(([group, opts]) => {
+          const optHtml = opts
+            .map((opt) => {
+              const selected = opt === currentValue ? "selected" : "";
+              return `<option value="${opt}" ${selected}>${opt}</option>`;
+            })
+            .join("");
+
+          return `<optgroup label="${group}">${optHtml}</optgroup>`;
+        })
+        .join("");
+    }
+
+    inputHtml = `<select data-key="${key}">${optionsHtml}</select>`;
+  } else if (field.type === "numberList") {
+    inputHtml = `<div style="display:contents" data-key="${key}">`;
+
+    for (let i = 0; i < field.count; i++) {
+      const val = field.value.at(i) ?? field.default.at(i) ?? 0;
+
+      inputHtml += /* HTML */ `<input type="number" value="${val}">`;
+    }
+
+    inputHtml += `</div>`;
   }
 
   return /* HTML */ `
     <div class="field">
-      <span class="field-label">${fieldType.label}</span>
+      <span class="field-label">${field.label}</span>
       ${inputHtml}
     </div>`;
 }
 
-export function bindSettingInputs(el: HTMLElement) {
+export function bindSettingInputs(el: HTMLElement, cb?: (key: string, value: string) => void) {
   const inputs = el.querySelectorAll("[data-key]") as NodeListOf<HTMLInputElement>;
 
   inputs.forEach((i) => {
-    i.oninput = () => {
-      const joined = i.dataset.key;
-      const [id, name] = joined?.split(":") ?? [];
-      if (!id || !name) return;
+    const [id, name] = i.dataset.key?.split(":") ?? [];
+    if (!id || !name) return;
 
+    if (i.tagName === "DIV") {
+      const subInputs = Array.from(i.querySelectorAll("input"));
+
+      subInputs.forEach((s) => {
+        s.oninput = () => {
+          const data = JSON.stringify(subInputs.map((b) => +b.value));
+          if (typeof cb === "undefined")
+            invoke(IPC.CONFIGURE_PLUGIN_VALUE, { id, name, data });
+          else cb(name, data);
+        };
+      });
+
+      return;
+    }
+
+    i.oninput = () => {
       const data = i.getAttribute("type") === "checkbox" ? `${i.checked}` : i.value;
 
-      invoke(IPC.CONFIGURE_PLUGIN_VALUE, { id, name, data });
+      if (typeof cb === "undefined") invoke(IPC.CONFIGURE_PLUGIN_VALUE, { id, name, data });
+      else cb(name, data);
     };
   });
 }

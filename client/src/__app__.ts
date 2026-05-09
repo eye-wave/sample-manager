@@ -30,6 +30,31 @@ if (typeof ipc === "undefined") {
   import("../styles/theme.scss");
 }
 
+window.addEventListener("error", (event) => {
+  const err = event.error;
+
+  console.error(
+    "Caught error:",
+    [
+      err?.message || event.message,
+      err?.stack,
+      event.filename,
+      event.lineno,
+      event.colno,
+      event.type,
+    ].join(" "),
+  );
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  const reason = event.reason;
+
+  console.error(
+    "Unhandled rejection:",
+    [reason?.message ?? String(reason), reason?.stack, reason?.name].join(" "),
+  );
+});
+
 /// DEV end
 
 w.addEventListener(

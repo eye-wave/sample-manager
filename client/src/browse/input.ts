@@ -36,8 +36,8 @@ export const TagInput = (
     item.onclick = () => removeTag(+(item.dataset.i ?? 0));
 
     container.firstChild
-      ? container.insertBefore(item, container.firstChild)
-      : container.appendChild(item);
+      ? container.insertBefore(item as Node, container.firstChild)
+      : container.appendChild(item as Node);
   };
 
   const removeTag = (i: number) => {
