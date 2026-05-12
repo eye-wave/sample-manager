@@ -2,7 +2,7 @@ use std::{collections::HashMap, fs};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{AStr, state::app_paths};
+use crate::{AStr, LogErrorExt, state::app_paths};
 
 use super::color::{RGBAColor, RGBColor};
 
@@ -81,7 +81,9 @@ pub fn list_themes() -> std::io::Result<HashMap<AStr, Vec<AStr>>> {
         .filter_map(Result::ok)
         .filter_map(|f| {
             let path = app_paths::themes_path().join(f.path());
-            let theme: Theme = toml::from_str(&fs::read_to_string(&path).ok()?).ok()?;
+            let theme: Theme =
+                toml::from_str(&fs::read_to_string(&path).sure("Failed to read theme file")?)
+                    .sure("Failed to parse theme")?;
 
             Some((
                 theme.theme_type,

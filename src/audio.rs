@@ -1,5 +1,5 @@
 use std::path::Path;
-use std::sync::{atomic::Ordering, mpsc};
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 mod decode;
@@ -13,7 +13,6 @@ use handle::{PlayerHandle, SharedAudioState};
 pub use handle::PlaybackState;
 
 use crate::audio::handle::PlayerFlags;
-use crate::ipc::IPCMessage;
 
 pub struct AudioPlayer {
     handle: PlayerHandle,
@@ -44,8 +43,8 @@ macro_rules! with_decoder {
 }
 
 impl AudioPlayer {
-    pub fn new(rx: mpsc::Sender<IPCMessage>) -> Self {
-        let shared_state = SharedAudioState::new(rx);
+    pub fn new() -> Self {
+        let shared_state = SharedAudioState::new();
         let audio_handle = PlayerHandle {
             shared: shared_state.clone(),
         };
@@ -74,15 +73,13 @@ impl AudioPlayer {
     }
 
     pub fn play(&self, path: &impl AsRef<Path>) -> AudioResult<()> {
-        {
-            let (lock, _) = &*self.handle.shared.ready;
-            *lock.lock().unwrap() = false;
-        }
+        self.handle.shared.set_not_ready();
 
         self.handle
             .shared
             .samples_played
             .store(0, Ordering::Release);
+
         self.handle
             .shared
             .estimated_audio_len
@@ -92,37 +89,17 @@ impl AudioPlayer {
 
             decoder.flush_and_signal();
 
-            {
-                let (lock, cvar) = &*self.handle.shared.ready;
-                let ready = lock.lock().unwrap();
-                let result = cvar
-                    .wait_timeout_while(ready, Duration::from_secs(5), |r| !*r)
-                    .unwrap();
-                if result.1.timed_out() {
-                    return Err(AudioError::Timeout);
-                }
+            if !self.handle.shared.wait_until_ready(Duration::from_secs(5)) {
+                return Err(AudioError::Timeout);
             }
 
-
-            {
-                let (lock, _) = &*self.handle.shared.ready;
-                *lock.lock().unwrap() = false;
-            }
+            self.handle.shared.set_not_ready();
 
             decoder.start(path);
 
-
-            {
-                let (lock, cvar) = &*self.handle.shared.ready;
-                let ready = lock.lock().unwrap();
-                let result = cvar
-                    .wait_timeout_while(ready, Duration::from_secs(5), |r| !*r)
-                    .unwrap();
-                if result.1.timed_out() {
-                    return Err(AudioError::Timeout);
-                }
+            if !self.handle.shared.wait_until_ready(Duration::from_secs(5)) {
+                return Err(AudioError::Timeout);
             }
-
 
             self.handle.shared.clear_flag(PlayerFlags::FLUSHING);
 

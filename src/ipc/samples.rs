@@ -1,10 +1,10 @@
 use std::fs;
 
 use crate::ipc::{IPCBody, IPCError, IPCMessage, IPCResponse, IntoIPCResponse, Poisoned, ok};
-use crate::ipc_commands;
 use crate::state::samples::{
     SearchRequest, WaveformData, draw_audio_and_save, process_directories, search_local, tag_string,
 };
+use crate::{LogErrorExt, ipc_commands};
 
 fn add_sample_folder(body: IPCBody) -> IPCResponse {
     let path = body.req.as_ref();
@@ -53,7 +53,8 @@ fn start_sample_scan(body: IPCBody) -> IPCResponse {
     }
 
     std::thread::spawn(move || {
-        process_directories(dirs.iter(), thread_state, body.webview_sender).ok();
+        process_directories(dirs.iter(), thread_state, body.webview_sender)
+            .sure("Failed to process directories");
     });
 
     ok()
@@ -86,7 +87,7 @@ fn add_sample_to_fav(body: IPCBody) -> IPCResponse {
                 id: SET_FAV_ID,
                 payload: "1".to_string() + &body.req,
             })
-            .ok();
+            .sure("Failed to send IPC message");
 
         ok()
     })
@@ -101,7 +102,7 @@ fn remove_sample_from_fav(body: IPCBody) -> IPCResponse {
                 id: SET_FAV_ID,
                 payload: "0".to_string() + &body.req,
             })
-            .ok();
+            .sure("Failed to send IPC message");
 
         ok()
     })

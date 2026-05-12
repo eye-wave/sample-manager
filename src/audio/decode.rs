@@ -117,11 +117,7 @@ fn decode_thread_loop(
                 DecodeCommand::Start { path } => {
                     audio_state.abort.store(false, Ordering::Release);
 
-                    let signal_ready = || {
-                        let (lock, cvar) = &*audio_state.ready;
-                        *lock.lock().unwrap() = true;
-                        cvar.notify_all();
-                    };
+                    let signal_ready = || audio_state.set_ready();
 
                     match init_decoder(&path, audio_state.clone(), &stream_config) {
                         Ok(decoder) => {
@@ -169,10 +165,7 @@ fn decode_thread_loop(
                 DecodeCommand::FlushAndSignal => {
                     current = None;
                     audio_state.set_flag(PlayerFlags::FLUSHING);
-
-                    let (lock, cvar) = &*audio_state.ready;
-                    *lock.lock().unwrap() = true;
-                    cvar.notify_all();
+                    audio_state.set_ready();
                 }
             }
         }

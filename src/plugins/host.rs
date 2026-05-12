@@ -8,6 +8,7 @@ use plugin_wire::WireEntry;
 use rayon::iter::ParallelBridge;
 use serde::{Serialize, de::DeserializeOwned};
 
+use crate::LogErrorExt;
 use crate::schema::SchemaField;
 use crate::state::samples::{SearchRequest, filter_samples};
 use crate::{AStr, plugins::PluginId, state::app_paths};
@@ -145,7 +146,7 @@ impl HostState {
             .filter_map(|key| {
                 let storage_key = (plugin_id.clone(), key.clone());
                 let bytes = self.get_item(storage_key)?;
-                let value = String::from_utf8(bytes).ok()?;
+                let value = String::from_utf8(bytes).sure("Invalid string")?;
                 Some((key.to_string(), value))
             })
             .collect()

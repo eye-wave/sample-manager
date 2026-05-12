@@ -5,12 +5,12 @@ use plugin_wire::sample::SampleSerialize;
 use rayon::{iter::Either, prelude::*};
 use serde::{Deserialize, Serialize};
 
-use crate::AStr;
 use crate::plugins::PluginSendError;
 use crate::state::{
     AppState,
     samples::{SampleEntry, clean_up_string},
 };
+use crate::{AStr, LogErrorExt};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchRequest {
@@ -45,7 +45,7 @@ pub fn search_local(req: &SearchRequest, state: &AppState) -> Result<String, Plu
         req,
     )
     .iter()
-    .filter_map(|e| e.to_json(state).ok())
+    .filter_map(|e| e.to_json(state).sure("Failed to serialize to json"))
     .inspect(|_| count += 1)
     .intersperse(",\n".into())
     .collect::<String>();

@@ -1,9 +1,10 @@
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex, mpsc};
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::Duration;
 
 use atomic_float::AtomicF32;
 
-use crate::ipc::IPCMessage;
+use crate::LogErrorExt;
 
 bitflags::bitflags! {
     #[derive(Clone, Copy)]
@@ -49,13 +50,11 @@ pub struct SharedAudioState {
     pub seek_target: AtomicU32,
     pub volume: AtomicF32,
     pub abort: AtomicBool,
-    pub ready: Arc<(Mutex<bool>, Condvar)>,
-
-    pub _event_sender: mpsc::Sender<IPCMessage>,
+    ready: Arc<(Mutex<bool>, Condvar)>,
 }
 
 impl SharedAudioState {
-    pub fn new(rx: mpsc::Sender<IPCMessage>) -> Arc<Self> {
+    pub fn new() -> Arc<Self> {
         Arc::new(Self {
             flags: AtomicU8::new(PlayerFlags::PLAYING.bits()),
             sample_rate: AtomicU32::new(44100),
@@ -65,7 +64,6 @@ impl SharedAudioState {
             volume: AtomicF32::new(1.0),
             abort: AtomicBool::new(false),
             ready: Arc::new((Mutex::new(false), Condvar::new())),
-            _event_sender: rx,
         })
     }
 
@@ -75,7 +73,7 @@ impl SharedAudioState {
                 let current = PlayerFlags::from_bits_retain(w);
                 Some((current & !STATE_MASK | (next_state & STATE_MASK)).bits())
             })
-            .ok();
+            .sure("Failed to set PlayerFlags");
     }
 
     pub fn set_flag(&self, flag: PlayerFlags) {
@@ -95,6 +93,26 @@ impl SharedAudioState {
     pub fn load_flags(&self) -> PlayerFlags {
         PlayerFlags::from_bits_retain(self.flags.load(Ordering::Relaxed))
     }
+
+    pub fn set_not_ready(&self) {
+        let (lock, _) = &*self.ready;
+        *lock.lock().unwrap() = false;
+    }
+
+    pub fn set_ready(&self) {
+        let (lock, cvar) = &*self.ready;
+        *lock.lock().unwrap() = true;
+        cvar.notify_all();
+    }
+
+    pub fn wait_until_ready(&self, timeout: Duration) -> bool {
+        let (lock, cvar) = &*self.ready;
+
+        let ready = lock.lock().unwrap();
+        let result = cvar.wait_timeout_while(ready, timeout, |r| !*r).unwrap();
+
+        !result.1.timed_out()
+    }
 }
 
 pub struct PlayerHandle {
@@ -113,8 +131,7 @@ impl PlayerHandle {
     pub fn stop(&self) {
         self.shared.abort.store(true, Ordering::Release);
 
-        let (lock, _) = &*self.shared.ready;
-        *lock.lock().unwrap() = false;
+        self.shared.set_not_ready();
         self.shared.set_state(PlayerFlags::STOPPED);
         self.shared.clear_flag(PlayerFlags::DRAINING);
         self.shared.set_flag(PlayerFlags::FLUSHING);

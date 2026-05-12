@@ -7,6 +7,7 @@ use tao::window::ResizeDirection;
 use tao::{event_loop::EventLoopBuilder, window::Window};
 use wry::WebView;
 
+use crate::LogErrorExt;
 use crate::ipc::{IPC_ID_BASE, IPCBody, IPCCommand, IPCMessage, commands_iter, ipc_strip_cmd_id};
 use crate::state::AppState;
 
@@ -38,8 +39,8 @@ impl EventSystem {
         let event_loop = EventLoopBuilder::<LoopEvent>::with_user_event().build();
         let proxy = event_loop.create_proxy();
 
-        let mut app_state = AppState::new(tx.clone());
-        app_state.init().ok();
+        let mut app_state = AppState::new();
+        app_state.init().sure("Failed to initialize app state");
 
         (
             EventRunner {
@@ -71,7 +72,9 @@ impl EventSystem {
                 "7" => ResizeDirection::South,
                 _ => return,
             };
-            self.event_loop.send_event(LoopEvent::Resize(dir)).ok();
+            self.event_loop
+                .send_event(LoopEvent::Resize(dir))
+                .sure("Failed to send the 'resize' event");
             return;
         }
 
@@ -87,11 +90,13 @@ impl EventSystem {
 
             match cmd.respond(body) {
                 Ok(bytes) => {
-                    self.send(call_id, bytes).ok();
+                    self.send(call_id, bytes)
+                        .sure("Failed to respond to IPC command");
                 }
                 Err(err) => {
                     tracing::error!(error = %err);
-                    self.send_empty(call_id).ok();
+                    self.send_empty(call_id)
+                        .sure("Failed to respond to IPC command");
                 }
             };
         }
@@ -141,7 +146,9 @@ impl EventRunner {
             while let Ok(msg) = self.webview_rx.try_recv() {
                 let payload = escape_for_template_literal(&msg.payload);
                 let code = format!("_s('{}',`{}`)", msg.id, payload);
-                webview.evaluate_script(&code).ok();
+                webview
+                    .evaluate_script(&code)
+                    .sure("Failed to evauate webview script");
             }
 
             match &event {
@@ -152,13 +159,18 @@ impl EventRunner {
                 }
 
                 Event::UserEvent(LoopEvent::JS(call_id, bytes)) => {
-                    let payload_str = unsafe { str::from_utf8_unchecked(bytes) };
-                    let payload = escape_for_template_literal(payload_str);
-                    let code = format!("_r({call_id},`{}`)", payload);
-                    webview.evaluate_script(&code).ok();
+                    if let Ok(payload_str) = str::from_utf8(bytes) {
+                        let payload = escape_for_template_literal(payload_str);
+                        let code = format!("_r({call_id},`{}`)", payload);
+                        webview
+                            .evaluate_script(&code)
+                            .sure("Failed to evauate webview script");
+                    }
                 }
                 Event::UserEvent(LoopEvent::Resize(dir)) => {
-                    window.drag_resize_window(*dir).ok();
+                    window
+                        .drag_resize_window(*dir)
+                        .sure("Failed to start resizing app window");
                 }
 
                 _ => {}

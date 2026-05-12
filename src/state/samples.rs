@@ -6,9 +6,9 @@ use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use plugin_wire::sample::{SampleMetadata, SampleSerialize, SampleSource};
 
-use crate::AStr;
 use crate::ipc::IPCMessage;
 use crate::state::AppState;
+use crate::{AStr, LogErrorExt, SyncError};
 
 mod data;
 mod search;
@@ -137,7 +137,7 @@ pub fn process_directories<'a>(
     dirs: impl Iterator<Item = &'a PathBuf>,
     app_state: Arc<RwLock<AppState>>,
     sender: Sender<IPCMessage>,
-) -> Result<(), ()> {
+) -> Result<(), SyncError> {
     use std::time::{Duration, Instant};
 
     let mut sample_registry = Vec::<FsSample>::new();
@@ -152,7 +152,7 @@ pub fn process_directories<'a>(
                     id: "s_tick",
                     payload: sample_registry.len().to_string(),
                 })
-                .ok();
+                .sure("Failed to send IPC Message");
 
             time = Instant::now();
         }
@@ -178,11 +178,11 @@ pub fn process_directories<'a>(
             id: "s_tick",
             payload: sample_registry.len().to_string(),
         })
-        .ok();
+        .sure("Failed to send IPC Message");
 
     tracing::info!("scan completed");
 
-    let mut guard = app_state.write().map_err(|_| ())?;
+    let mut guard = app_state.write()?;
     for s in sample_registry.iter() {
         guard.sample_registry.insert(s.path.clone(), s.clone());
     }

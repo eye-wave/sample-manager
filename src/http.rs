@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use wry::http::{Request, Response, StatusCode, Uri};
 
+use crate::LogErrorExt;
 use crate::state::{app_paths, config::Theme};
 
 pub fn app_handler(theme: Theme, req: Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> {
@@ -62,5 +63,5 @@ fn try_read_file(base_path: &Path, uri: &Uri) -> Option<Vec<u8>> {
     let file_name = req_path.file_name()?;
 
     let path = base_path.join(file_name);
-    fs::read(path).ok()
+    fs::read(path).sure("Failed to read path")
 }

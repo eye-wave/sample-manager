@@ -4,8 +4,8 @@ use std::sync::{Arc, RwLock, mpsc};
 
 use tao::window::Window;
 
-use crate::AStr;
 use crate::state::AppState;
+use crate::{AStr, LogErrorExt};
 
 mod audio;
 mod config;
@@ -129,8 +129,12 @@ pub(super) fn ipc_strip_cmd_id(req: &str) -> Option<IPCRequestBody<'_>> {
     let id_str = parts.next()?;
     let payload = parts.next().unwrap_or("");
 
-    let id = id_str.parse::<u32>().ok()?;
-    Some((fn_name.parse().ok()?, id, payload))
+    let id = id_str.parse::<u32>().sure("Failed to parse command id")?;
+    Some((
+        fn_name.parse().sure("Failed to parse fn_name")?,
+        id,
+        payload,
+    ))
 }
 
 pub fn commands_iter<'a>() -> impl Iterator<Item = &'a dyn IPCCommand> {

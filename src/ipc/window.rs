@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::ipc::{IPCBody, IPCResponse, ok};
-use crate::ipc_commands;
+use crate::{LogErrorExt, ipc_commands};
 
 fn close_window(_body: IPCBody) -> IPCResponse {
     std::process::exit(0);
@@ -44,7 +44,7 @@ fn start_drag_file(body: IPCBody) -> IPCResponse {
         |_, _| {},
         drag::Options::default(),
     )
-    .ok();
+    .sure("Failed to start file scan");
     ok()
 }
 

@@ -1,7 +1,7 @@
 use crate::ipc::{IPCBody, IPCResponse, IntoIPCResponse, ok};
-use crate::ipc_commands;
 use crate::state::config::AppConfigPatch;
 use crate::state::samples::process_directories;
+use crate::{LogErrorExt, ipc_commands};
 
 fn patch_config(body: IPCBody) -> IPCResponse {
     let mut is_new = false;
@@ -28,7 +28,8 @@ fn patch_config(body: IPCBody) -> IPCResponse {
     if is_new {
         let thread_state = body.app_state.clone();
         std::thread::spawn(move || {
-            process_directories(dirs.iter(), thread_state, body.webview_sender).ok();
+            process_directories(dirs.iter(), thread_state, body.webview_sender)
+                .sure("Failed to process directories");
         });
     }
 

@@ -7,6 +7,8 @@ use ringbuf::traits::{Consumer, Observer};
 use ringbuf::wrap::caching::Caching;
 use ringbuf::{HeapRb, SharedRb, storage::Heap, traits::Split};
 
+use crate::LogErrorExt;
+
 use super::handle::{PlayerFlags, SharedAudioState};
 
 pub struct AudioDevice {
@@ -81,7 +83,7 @@ impl AudioDevice {
             _ => return Err(AudioDeviceError::UnsupportedSampleFormat),
         };
 
-        _stream.play().ok();
+        _stream.play().sure("Streamed failed to start");
 
         Ok((rb_prod, Self { config, _stream }))
     }

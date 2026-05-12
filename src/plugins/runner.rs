@@ -8,10 +8,10 @@ use plugin_wire::{WireEntry, encode_search_request, parse_frame, sample::SampleS
 use rayon::prelude::*;
 use wasmtime::{Caller, Engine, Linker, Module, Store};
 
-use crate::AStr;
 use crate::ipc::IPCMessage;
 use crate::plugins::manifest::config_key;
 use crate::state::samples::{SearchRequest, WaveformData, draw_audio_and_save, filter_samples};
+use crate::{AStr, LogErrorExt};
 
 use super::host::{HostState, PendingDownload};
 use super::manifest::{ManifestError, PluginManifest, SearchMode};
@@ -197,7 +197,7 @@ impl PluginRunner {
 
         let fn_get_index = instance
             .get_typed_func::<(u32, u32), u32>(&mut self.store, "get_index")
-            .ok();
+            .sure("fn_index not found");
 
         let id = manifest.id.clone();
 

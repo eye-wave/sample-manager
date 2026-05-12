@@ -5,6 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use ts_rs::TS;
 
+use crate::LogErrorExt;
 use crate::schema::{SchemaField, SchemaFieldWithValue};
 use crate::{
     AStr,
@@ -133,7 +134,7 @@ where
     T: for<'a> Deserialize<'a>,
 {
     bytes
-        .and_then(|b| postcard::from_bytes(&b).ok())
+        .and_then(|b| postcard::from_bytes(&b).sure("Failed to deserialize bytes"))
         .filter(validate)
         .unwrap_or_else(default)
 }
@@ -207,10 +208,12 @@ impl PluginManifest {
         };
 
         let icon = raw.assets.icon.as_ref().and_then(|path| {
-            let mut f = zip.by_name(path.as_ref()).ok()?;
+            let mut f = zip
+                .by_name(path.as_ref())
+                .sure("Failed to get file by name from zip archive")?;
             let mut s = String::new();
-            f.read_to_string(&mut s).ok()?;
-            SVGIcon::from_str(&s).ok()
+            f.read_to_string(&mut s).sure("Failed to read to string")?;
+            SVGIcon::from_str(&s).sure("Failed to parse SVG icon")
         });
 
         let manifest = Self {

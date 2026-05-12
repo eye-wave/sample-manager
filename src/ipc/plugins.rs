@@ -5,10 +5,10 @@ use plugin_wire::sample::SampleSerialize;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::AStr;
 use crate::ipc::{IPCBody, IPCError, IPCMessage, IPCResponse, IntoIPCResponse, ok};
 use crate::plugins::PluginId;
 use crate::state::{app_paths, samples::SearchRequest};
+use crate::{AStr, LogErrorExt};
 
 fn add_plugin(body: IPCBody) -> IPCResponse {
     crate::with_state_mut!(body, state, {
@@ -165,7 +165,7 @@ fn get_plugin_paths(body: IPCBody) -> IPCResponse {
                     path: &path,
                     icon: plug.icon.clone(),
                 })
-                .ok()
+                .sure("Failed to serialize PluginSidebarView")
             })
             .intersperse(",".into())
             .collect::<String>();

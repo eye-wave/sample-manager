@@ -13,10 +13,10 @@ mod theme;
 pub use theme::Theme;
 use ts_rs::TS;
 
-use crate::AStr;
 use crate::schema::{SchemaFieldOptions, SchemaFieldWithValue};
 use crate::state::app_paths;
 use crate::state::config::theme::list_themes;
+use crate::{AStr, LogErrorExt};
 
 // --- FFPaths ---
 
@@ -80,7 +80,8 @@ impl AppConfig {
 
     pub fn get_theme(&self, theme_name: &str) -> Option<Theme> {
         let path = theme_path(theme_name);
-        toml::from_str(&fs::read_to_string(path).ok()?).ok()
+        toml::from_str(&fs::read_to_string(path).sure("Failed to read config")?)
+            .sure("Failed to parse config")
     }
 
     pub fn update_theme(&mut self, theme_name: &str) -> Option<Theme> {
@@ -182,7 +183,7 @@ fn theme_path(name: &str) -> PathBuf {
 }
 
 fn resolve_executable(path: Option<PathBuf>, name: &str) -> Option<PathBuf> {
-    path.or_else(|| which::which(name).ok())
+    path.or_else(|| which::which(name).sure("exec path not found"))
         .filter(|p| p.is_file() && is_executable(p))
 }
 

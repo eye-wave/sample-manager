@@ -2,10 +2,10 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::Path;
-use std::sync::{Arc, mpsc};
+use std::sync::Arc;
 
+use crate::LogErrorExt;
 use crate::audio::AudioPlayer;
-use crate::ipc::IPCMessage;
 use crate::plugins::{PluginId, PluginInfo, PluginRuntimeHandle};
 use crate::state::config::AppConfigPatch;
 
@@ -36,10 +36,10 @@ pub enum StateError {
 }
 
 impl AppState {
-    pub fn new(rx: mpsc::Sender<IPCMessage>) -> Self {
+    pub fn new() -> Self {
         Self {
             sample_registry: HashMap::new(),
-            audio_player: AudioPlayer::new(rx),
+            audio_player: AudioPlayer::new(),
             favorite_samples: HashSet::new(),
             plugin_handle: PluginRuntimeHandle::spawn(),
 
@@ -82,7 +82,7 @@ impl AppState {
         let result = cb(&mut self.app_config);
 
         if let Ok(contents) = toml::to_string(&self.app_config) {
-            fs::write(app_paths::config_file(), contents).ok();
+            fs::write(app_paths::config_file(), contents).sure("Failed to write config file");
         }
 
         result

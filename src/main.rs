@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod audio;
+mod error;
 mod event;
 mod http;
 mod ipc;
@@ -12,18 +13,11 @@ mod window;
 
 pub type AStr = std::sync::Arc<str>;
 
+pub use error::{LogErrorExt, SyncError};
+
 fn main() {
-    init_logging();
+    error::init_logging();
 
-    crate::state::app_paths::create_all_dirs().ok();
+    crate::state::app_paths::create_all_dirs().sure("Failed to create directories");
     crate::window::App::build().run();
-}
-
-fn init_logging() {
-    use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
-
-    tracing_subscriber::registry()
-        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
-        .with(fmt::layer())
-        .init();
 }

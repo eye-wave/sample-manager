@@ -4,7 +4,7 @@ use serde::Deserialize;
 use ts_rs::TS;
 
 use crate::ipc::{IPCBody, IPCResponse, IntoIPCResponse, ok};
-use crate::ipc_commands;
+use crate::{LogErrorExt, ipc_commands};
 
 fn open_folder(_body: IPCBody) -> IPCResponse {
     tinyfiledialogs::select_folder_dialog("Select folder", "").finish()
@@ -74,7 +74,12 @@ fn read_dir(body: IPCBody) -> IPCResponse {
             let item_type = get_path_type(&e.path()) + BYTE_OFFSET;
             let prefix = unsafe { String::from_utf8_unchecked(vec![item_type]) };
 
-            let relative = e.path().strip_prefix(path).ok()?.display().to_string();
+            let relative = e
+                .path()
+                .strip_prefix(path)
+                .sure("Failed to strip path prefix")?
+                .display()
+                .to_string();
             Some(prefix + &relative)
         })
         .collect();
