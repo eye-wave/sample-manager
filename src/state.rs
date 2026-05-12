@@ -117,7 +117,6 @@ impl AppState {
 
     pub fn patch_config(&mut self, patch: AppConfigPatch) {
         self.app_config.patch(patch);
-        self.update_config(|_| {});
     }
 
     pub fn mutate_config<F>(&mut self, mut cb: F)

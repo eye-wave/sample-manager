@@ -12,7 +12,6 @@ import { NodeType, type VFSChild, VFSNode } from "./vfs";
 initSidebarResize();
 
 declare const sidebar__: HTMLDivElement;
-declare const sidebar_plugins__: HTMLDivElement;
 declare const add_folder__: HTMLButtonElement;
 
 const popup = $el("div");
@@ -33,8 +32,7 @@ function onHover(e: Event) {
   popup.textContent = el.textContent;
   popup.style.display = "";
   // Temporary fix i will need to look into why 65.5 offset was needed
-  // @ts-expect-error
-  popup.style.top = el.offsetTop - sidebar__.parentElement.scrollTop + 65.5 + "px";
+  popup.style.top = el.offsetTop + 65.5 - sidebar__.scrollTop + "px";
   popup.style.left = el.offsetLeft - 8 + "px";
 }
 
@@ -43,11 +41,6 @@ sidebar__.onmouseenter = onHover;
 sidebar__.onmousemove = onHover;
 sidebar__.onscroll = hidePopup;
 sidebar__.onmouseleave = hidePopup;
-
-sidebar_plugins__.onmouseenter = onHover;
-sidebar_plugins__.onmousemove = onHover;
-sidebar_plugins__.onscroll = hidePopup;
-sidebar_plugins__.onmouseleave = hidePopup;
 
 // @ts-expect-error
 sidebar__.parentElement.onwheel = hidePopup;
@@ -86,7 +79,7 @@ invoke(IPC.GET_SAMPLE_FOLDERS).then(async (res) => {
 });
 
 invoke(IPC.GET_PLUGIN_PATHS).then(async (res) => {
-  renderRootDirs(sidebar_plugins__, JSON.parse(res));
+  renderRootDirs(sidebar__, JSON.parse(res));
 });
 
 async function onClick(e: Event) {
@@ -99,7 +92,6 @@ async function onClick(e: Event) {
 }
 
 sidebar__.onclick = onClick;
-sidebar_plugins__.onclick = onClick;
 
 add_folder__.onclick = async () => {
   const folder = await invoke(IPC.OPEN_FOLDER);

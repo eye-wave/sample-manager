@@ -6,7 +6,9 @@ import { d, w } from "../alias";
 import * as IPC from "../gen/ipc-gen";
 import { updateCurrentTheme, updateTheme, updateThemeCss } from "../helpers";
 import { invoke, listen } from "../invoke/invoke";
-import { bindSettingInputs, createPluginCard, renderSettings } from "./template";
+import { resizeHandle } from "../sidebar/resize";
+import { bindSettingInputs } from "./inputs";
+import { createPluginCard, renderSettings } from "./template";
 
 declare const add_plugin_btn__: HTMLButtonElement;
 declare const conf_btn__: HTMLButtonElement;
@@ -87,11 +89,15 @@ conf_btn__.onclick = async () => {
 
     settings_body__.innerHTML = renderSettings({ id: "__APP_SETTINGS__", config });
     bindSettingInputs(settings_body__, (field, data) => {
-      if (field === "ffmpeg_path") patch.set("ffmpeg_path", data);
-      else if (field === "ffprobe_path") patch.set("ffprobe_path", data);
-      else if (field === "sidebar_width") patch.set("sidebar_width", +data);
+      if (field === "ffmpeg_path") patch.set("ffmpeg_path", data as string);
+      else if (field === "ffprobe_path") patch.set("ffprobe_path", data as string);
+      else if (field === "sidebar_width") {
+        const width = +(data as string);
+        patch.set("sidebar_width", width);
+        resizeHandle(width);
+      } else if (field === "tracked_dirs") patch.set("tracked_dirs", data as string[]);
       else if (field === "color_theme") {
-        previewedTheme = data;
+        previewedTheme = data as string;
 
         invoke(IPC.PREVIEW_THEME, data).then(updateThemeCss);
       }
@@ -135,8 +141,6 @@ add_plugin_btn__.onclick = async () => {
 
   const path = await invoke(IPC.PICK_FILE, opt);
   if (!path) return;
-
-  console.log("Received", path);
 };
 
 w.addEventListener("keydown", (e) => {
@@ -154,8 +158,6 @@ listen("plugin-info", (data) => {
       pluginsInfo.push(i);
     });
   } catch {}
-
-  console.log(pluginsInfo);
 
   plugins_settings__.innerHTML = pluginsInfo.map((i) => createPluginCard(i)).join("");
   plugins_settings__.querySelectorAll(".btn").forEach((el) => {

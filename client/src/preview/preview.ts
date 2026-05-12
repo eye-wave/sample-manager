@@ -14,6 +14,7 @@ declare const preview_fav__: HTMLSpanElement;
 declare const s_total__: HTMLSpanElement;
 
 preview_fav__.onclick = () => {
+  if (!PreviewHandler.label) return;
   const [path, isfav] = getCurrentSample() ?? [PreviewHandler.path, PreviewHandler.fav];
   if (path !== PreviewHandler.path) {
     setLiked(PreviewHandler.path, !PreviewHandler.fav);

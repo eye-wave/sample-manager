@@ -70,8 +70,6 @@ impl Theme {
             radius,
         } = self;
 
-        println!("Requested them {:?}", self.theme_type);
-
         format!(
             ":root{{--bg-base:{bg_base};--bg-panel:{bg_panel};--bg-surface:{bg_surface};--bg-hover:{bg_hover};--bg-active:{bg_active};--accent:{accent};--accent-dim:{accent_dim};--accent-glow:{accent_glow};--text-primary:{text_primary};--text-secondary:{text_secondary};--text-muted:{text_muted};--border:{border};--border-active:{border_active};--tag-bg:{tag_bg};--tag-text:{tag_text};--tag-text-secondary:{tag_text_secondary};--love:{love};--wave-a:{wave_a};--wave-b:{wave_b};--radius:{radius}px}}"
         )

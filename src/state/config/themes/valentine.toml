@@ -1,12 +1,12 @@
 theme_type = "dark"
 
-bg_base = "2d2a32"
-bg_panel = "37333d"
-bg_surface = "443f4a"
-bg_hover = "4e4856"
-bg_active = "5a5263"
+bg_base = "121014"
+bg_panel = "1a171e"
+bg_surface = "242029"
+bg_hover = "2f2a36"
+bg_active = "3b3444"
 
-accent = "ffb7c5"
+accent = "f293a6"
 accent_dim = "e0a1ad"
 accent_glow = "ffb7c526"
 

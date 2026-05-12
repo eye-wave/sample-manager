@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use serde::ser::Error;
 use serde::{Deserialize, Serialize};
@@ -60,7 +61,7 @@ pub struct FFPathsRef<'a> {
 // --- AppConfig ---
 
 #[derive(Debug, Default, Serialize, Deserialize, Patch, TS)]
-#[patch(attribute(derive(Debug, Deserialize)))]
+#[patch(attribute(derive(Clone, Debug, Deserialize)))]
 #[serde(default)]
 #[ts(export)]
 pub struct AppConfig {
@@ -113,7 +114,12 @@ impl AppConfig {
                 SchemaFieldWithValue::StringList {
                     label: "Tracked directories".into(),
                     default: Vec::new(),
-                    value: Vec::new(),
+                    value: self
+                        .tracked_dirs
+                        .iter()
+                        .filter_map(|f| f.to_str())
+                        .map(Arc::from)
+                        .collect(),
                 },
             ),
             (

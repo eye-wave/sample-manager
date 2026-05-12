@@ -1,7 +1,7 @@
 import type { PluginInfo } from "@typegen/PluginInfo";
 import type { SchemaFieldWithValue } from "@typegen/SchemaFieldWithValue";
-import * as IPC from "../gen/ipc-gen";
-import { invoke } from "../invoke/invoke";
+
+import { renderField } from "./inputs";
 
 export function createPluginCard(info: PluginInfo) {
   return /* HTML */ `<div class="card">
@@ -53,97 +53,4 @@ export function renderSettings({
     });
 
   return fields.join("");
-}
-
-function renderField(key: string, field: SchemaFieldWithValue) {
-  const currentValue = field.value;
-
-  let inputHtml = "";
-
-  if (field.type === "string") {
-    const inputType = field.is_password ? "password" : "text";
-    inputHtml = /* HTML */ `<input type="${inputType}" value="${currentValue}" data-key="${key}">`;
-  } else if (field.type === "number") {
-    inputHtml = /* HTML */ `<input type="number" value="${currentValue}" data-key="${key}">`;
-  } else if (field.type === "bool") {
-    const id = key + performance.now().toString(36);
-    const checked = currentValue ? "checked" : "";
-
-    inputHtml = `<div class=switch><input id=${id} type=checkbox ${checked} data-key=${key}><label for=${id}></label></div>`;
-  } else if (field.type === "select") {
-    let optionsHtml = "";
-
-    if ("list" in field.options) {
-      optionsHtml = field.options.list.values
-        .map((opt) => {
-          const selected = opt === currentValue ? "selected" : "";
-          return `<option value="${opt}" ${selected}>${opt}</option>`;
-        })
-        .join("");
-    } else if ("grouped" in field.options) {
-      optionsHtml = Object.entries(field.options.grouped.groups)
-        .map(([group, opts]) => {
-          const optHtml = opts
-            .map((opt) => {
-              const selected = opt === currentValue ? "selected" : "";
-              return `<option value="${opt}" ${selected}>${opt}</option>`;
-            })
-            .join("");
-
-          return `<optgroup label="${group}">${optHtml}</optgroup>`;
-        })
-        .join("");
-    }
-
-    inputHtml = `<select data-key="${key}">${optionsHtml}</select>`;
-  } else if (field.type === "numberList") {
-    inputHtml = `<div style="display:contents" data-key="${key}">`;
-
-    for (let i = 0; i < field.count; i++) {
-      const val = field.value.at(i) ?? field.default.at(i) ?? 0;
-
-      inputHtml += /* HTML */ `<input type="number" value="${val}">`;
-    }
-
-    inputHtml += `</div>`;
-  } else if (field.type === "stringList") {
-    inputHtml = "<h1>Too lazy to implement this rn</h1>";
-  }
-
-  return /* HTML */ `
-    <div class="field">
-      <span class="field-label">${field.label}</span>
-      ${inputHtml}
-    </div>`;
-}
-
-export function bindSettingInputs(el: HTMLElement, cb?: (key: string, value: string) => void) {
-  const inputs = el.querySelectorAll("[data-key]") as NodeListOf<HTMLInputElement>;
-
-  inputs.forEach((i) => {
-    const [id, name] = i.dataset.key?.split(":") ?? [];
-    if (!id || !name) return;
-
-    if (i.tagName === "DIV") {
-      const subInputs = Array.from(i.querySelectorAll("input"));
-
-      subInputs.forEach((s) => {
-        s.oninput = () => {
-          const data = JSON.stringify(subInputs.map((b) => +b.value));
-          if (typeof cb === "undefined")
-            invoke(IPC.CONFIGURE_PLUGIN_VALUE, { id, name, data });
-          else cb(name, data);
-        };
-      });
-
-      return;
-    }
-
-    i.oninput = () => {
-      const data = i.getAttribute("type") === "checkbox" ? `${i.checked}` : i.value;
-
-      if (typeof cb === "undefined") invoke(IPC.CONFIGURE_PLUGIN_VALUE, { id, name, data });
-      else cb(name, data);
-    };
-  });
 }

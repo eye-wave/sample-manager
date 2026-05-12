@@ -12,6 +12,7 @@ declare const btn_maximize__: HTMLButtonElement;
 declare const btn_closeWindow__: HTMLButtonElement;
 
 w.onmousedown = (e) => {
+  if (e.clientY > 20) return;
   if (e.target === btn_minimize__) return;
   if (e.target === btn_maximize__) return;
   if (e.target === btn_closeWindow__) return;

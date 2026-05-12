@@ -238,13 +238,17 @@ body {
   flex-direction: column;
   flex-shrink: 0;
   position: relative;
-  overflow-y: scroll;
+  overflow: hidden;
+
+  &-scroll {
+    overflow-y: scroll;
+  }
 
   &-resize {
     position: absolute;
     top: 0;
-    right: -3px;
-    width: 6px;
+    right: 0;
+    width: 8px;
     height: 100%;
     cursor: col-resize;
     z-index: 10;
@@ -253,8 +257,8 @@ body {
       content: "";
       position: absolute;
       top: 0;
-      left: 50%;
-      transform: translateX(-50%);
+      right: 0;
+      transform: translateX(0px);
       width: 2px;
       height: 100%;
       background: var(--accent);
@@ -896,6 +900,14 @@ dialog {
     gap: 6px;
   }
 
+  &-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 410px;
+    overflow-y: scroll;
+  }
+
   &-footer {
     display: flex;
     align-items: center;
@@ -970,9 +982,9 @@ dialog {
 
 .field {
   display: flex;
-  align-items: center;
+  align-items: start;
   justify-content: space-between;
-  padding: 11px 14px;
+  padding: 8px;
   background: var(--bg-surface);
   border-radius: 9px;
   border: 1px solid var(--border);
@@ -998,6 +1010,59 @@ dialog {
     color: var(--text-muted);
     margin-top: 1px;
   }
+}
+
+.string-list-rows {
+  display: flex;
+  flex-direction: column;
+  max-height: 160px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+
+  &:empty { display: none; }
+}
+
+.string-list-row {
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+  user-select: none;
+
+  &:last-child { border-bottom: none; }
+
+  &:hover {
+    color: var(--text-muted);
+    text-decoration: line-through;
+    background: var(--bg-hover);
+  }
+}
+
+.string-list-row-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.string-list-input {
+  width: 100%;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.12s;
+
+  &:focus { border-color: var(--border-active); }
 }
 
 // --- Plugin card -----------------------------
