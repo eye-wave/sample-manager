@@ -34,16 +34,8 @@ export default function htmlTemplateMinifyPlugin() {
         const templateContent = match[1];
         if (!templateContent) continue;
 
-        const expressions: string[] = [];
-
-        const html = templateContent.replace(/\$\{([\s\S]*?)\}/g, (_, expr) => {
-          const i = expressions.length;
-          expressions.push(expr);
-          return `___EXPR_${i}___`;
-        });
-
         const minified = await import("html-minifier-terser").then((m) =>
-          m.minify(html, {
+          m.minify(templateContent, {
             collapseWhitespace: true,
             collapseInlineTagWhitespace: true,
             removeComments: true,
@@ -54,11 +46,7 @@ export default function htmlTemplateMinifyPlugin() {
           }),
         );
 
-        let final = minified;
-
-        expressions.forEach((expr, i) => {
-          final = final.replace(`___EXPR_${i}___`, `\${${expr}}`);
-        });
+        const final = minified;
 
         result = result.replace(fullMatch, "`" + final + "`");
       }
