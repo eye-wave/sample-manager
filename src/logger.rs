@@ -1,0 +1,58 @@
+use std::io;
+use std::sync::mpsc;
+
+use tracing_subscriber::fmt::MakeWriter;
+use tracing_subscriber::fmt::writer::MakeWriterExt;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, fmt};
+
+use crate::ipc::IPCMessage;
+
+mod ansi;
+
+#[derive(Clone)]
+struct ChannelWriter {
+    tx: mpsc::Sender<IPCMessage>,
+}
+
+impl io::Write for ChannelWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let msg = str::from_utf8(buf)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid utf-8"))?;
+
+        let _ = self.tx.send(IPCMessage {
+            id: "log",
+            payload: ansi::ansi_to_html(msg),
+        });
+
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<'a> MakeWriter<'a> for ChannelWriter {
+    type Writer = Self;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        self.clone()
+    }
+}
+
+pub(super) fn init_logging(tx: mpsc::Sender<IPCMessage>) {
+    let writer = std::io::stdout.and(ChannelWriter { tx });
+
+    tracing_subscriber::registry()
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+        .with(
+            fmt::layer()
+                .with_file(true)
+                .with_line_number(true)
+                .with_ansi(true)
+                .with_writer(writer),
+        )
+        .init();
+}

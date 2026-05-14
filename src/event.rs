@@ -12,7 +12,7 @@ use crate::ipc::{IPC_ID_BASE, IPCBody, IPCCommand, IPCMessage, commands_iter, ip
 use crate::state::AppState;
 
 pub struct EventSystem {
-    webview_tx: Sender<IPCMessage>,
+    pub webview_tx: Sender<IPCMessage>,
     event_loop: EventLoopProxy,
     pub app_state: Arc<RwLock<AppState>>,
     ipc_commands: Vec<&'static dyn IPCCommand>,
@@ -94,7 +94,7 @@ impl EventSystem {
                         .sure("Failed to respond to IPC command");
                 }
                 Err(err) => {
-                    tracing::error!(error = %err);
+                    tracing::error!(kind="ipc", error = %err);
                     self.send_empty(call_id)
                         .sure("Failed to respond to IPC command");
                 }

@@ -3,6 +3,7 @@ import * as IPC from "../gen/ipc-gen";
 import { isFocusElement } from "../helpers";
 import { invoke } from "../invoke/invoke";
 import { PreviewHandler } from "../preview/preview";
+import { addShortcut } from "../shortcuts";
 
 export const PAUSED = 0 as const;
 export const PLAYING = 1 as const;
@@ -132,12 +133,11 @@ function createPlayerHandle() {
 
   pause_btn__.onclick = togglePause;
 
-  w.addEventListener("keydown", (e) => {
-    if (isFocusElement(e.target) && e.target !== volume_ctrl__) return;
-    if (e.key === " ") {
-      e.preventDefault();
-      togglePause();
-    }
+  addShortcut("Toggle play/pause", " ", 0, (e) => {
+    if (e.target === volume_ctrl__) return;
+
+    e.preventDefault();
+    togglePause();
   });
 
   return {

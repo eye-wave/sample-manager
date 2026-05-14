@@ -1,5 +1,6 @@
-import { $el, w } from "../alias";
-import { isFocusElement } from "../helpers";
+import { $el } from "../alias";
+
+import { addShortcut } from "../shortcuts";
 import { TabFavorites, TabHandle } from "../sidebar/sidebar";
 import { search } from "./browse";
 import { PaginationHandler } from "./pagination";
@@ -16,13 +17,13 @@ export const TagInput = (
 
   let recentQuery = "";
 
-  w.addEventListener("keydown", (e) => {
-    if (isFocusElement(e.target)) return;
-    if (e.key === "/" || ((e.key === "k" || e.key === "K") && e.ctrlKey)) {
-      e.preventDefault();
-      input.focus();
-    }
-  });
+  const callback = (e: KeyboardEvent) => {
+    e.preventDefault();
+    input.focus();
+  };
+
+  addShortcut("Jump to search", "k", 0b100, callback);
+  addShortcut("Jump to search", "/", 0, callback);
 
   const addTag = (tag: string) => {
     if (!tag) return;

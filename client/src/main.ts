@@ -5,3 +5,4 @@ import "./browse/browse";
 import "./preview/preview";
 import "./settings/settings";
 import "./sidebar/sidebar";
+import "./terminal/terminal";

@@ -99,3 +99,8 @@ export const setLikedView = (liked: boolean, element: HTMLElement) => {
   element.textContent = liked ? "♥" : "♡";
   element.className = `fav ${liked ? "liked" : ""}`;
 };
+
+export function capitalize(str: string) {
+  const first = str.charAt(0).toUpperCase();
+  return first + str.slice(1).toLowerCase();
+}

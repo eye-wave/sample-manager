@@ -4,8 +4,9 @@ import type { PluginInfo } from "@typegen/PluginInfo";
 import type { SchemaFieldWithValue } from "@typegen/SchemaFieldWithValue";
 import { d, w } from "../alias";
 import * as IPC from "../gen/ipc-gen";
-import { updateCurrentTheme, updateTheme, updateThemeCss } from "../helpers";
+import { capitalize, updateCurrentTheme, updateTheme, updateThemeCss } from "../helpers";
 import { invoke, listen } from "../invoke/invoke";
+import { addShortcut, iterateShortcuts } from "../shortcuts";
 import { resizeHandle } from "../sidebar/resize";
 import { bindSettingInputs } from "./inputs";
 import { createPluginCard, renderSettings } from "./template";
@@ -21,6 +22,7 @@ declare const plugin_settings_body__: HTMLDivElement;
 declare const plugin_settings_label__: HTMLParagraphElement;
 declare const plugins_settings__: HTMLDivElement;
 declare const settings_body__: HTMLDivElement;
+declare const dial_tab_shortcuts__: HTMLDivElement;
 
 function createPatch() {
   type Patch = Partial<AppConfig>;
@@ -69,6 +71,7 @@ function showPane(target: string) {
   }
 
   for (const btn of tabBtns) {
+    btn.blur();
     if (btn.dataset.target === target) btn.classList.add("active");
     else btn.classList.remove("active");
   }
@@ -77,6 +80,7 @@ function showPane(target: string) {
 let previewedTheme = "";
 
 conf_btn__.onclick = async () => {
+  conf_btn__.blur();
   conf_dial__.showModal();
   patch.flush();
 
@@ -103,6 +107,23 @@ conf_btn__.onclick = async () => {
       }
     });
   } catch (_) {}
+
+  dial_tab_shortcuts__.innerHTML = "";
+
+  for (const [key, val] of iterateShortcuts()) {
+    const bitmask = +key.charAt(0);
+    const keys = [key.slice(1)];
+
+    (bitmask & (1 << 0)) !== 0 && keys.push("Ctrl");
+    (bitmask & (1 << 1)) !== 0 && keys.push("Shift");
+    (bitmask & (1 << 2)) !== 0 && keys.push("Alt");
+
+    const kbd = keys.map((k) => /* HTML */ `<kbd>${capitalize(k)}</kbd>`).join(" + ");
+
+    dial_tab_shortcuts__.innerHTML += /* HTML */ `<div>
+      <span>${val}</span>${" " + kbd}
+    </div>`;
+  }
 };
 
 const revertAndClose = () => {
@@ -143,8 +164,8 @@ add_plugin_btn__.onclick = async () => {
   if (!path) return;
 };
 
-w.addEventListener("keydown", (e) => {
-  if (conf_dial__.open && e.key === "Escape") {
+addShortcut("Close settings dialog", "Escape", 0, () => {
+  if (conf_dial__.open) {
     updateCurrentTheme();
     conf_dial__.close();
   }

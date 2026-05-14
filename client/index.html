@@ -60,6 +60,7 @@
                 <div>
                   <button class="btn btn-surface" data-target="dial_tab_pref__">Preferences</button>
                   <button class="btn btn-surface" data-target="dial_tab_plug__">Plugins</button>
+                  <button class="btn btn-surface" data-target="dial_tab_shortcuts__">Shortcuts</button>
                 </div>
 
                 <div style="display:contents" id="dial_tab_pref__">
@@ -76,6 +77,10 @@
                 <div style="display:none" id="dial_tab_plugin__">
                   <p class="section-label" id="plugin_settings_label__"></p>
                   <div id="plugin_settings_body__" style="display:contents"></div>
+                </div>
+
+                <div style="display:none" id="dial_tab_shortcuts__">
+                  <p class="section-label">Shortcuts</p>
                 </div>
               </div>
 
@@ -181,6 +186,9 @@
         <div class="bb-sep"></div>
         <div class="bb-item">Playback mode: <span>Loop</span></div>
       </div>
+
+      <!-- Terminal -->
+      <pre id="terminal_window__" style="display:none"></pre>
     </div>
   </body>
 </html>

@@ -16,15 +16,6 @@ impl<T, E: std::fmt::Display> LogErrorExt<T, E> for Result<T, E> {
     }
 }
 
-pub(super) fn init_logging() {
-    use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
-
-    tracing_subscriber::registry()
-        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
-        .with(fmt::layer())
-        .init();
-}
-
 #[derive(Debug, thiserror::Error)]
 pub enum SyncError {
     #[error("mutex poisoned")]

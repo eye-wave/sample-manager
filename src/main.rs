@@ -6,6 +6,7 @@ mod error;
 mod event;
 mod http;
 mod ipc;
+mod logger;
 mod plugins;
 mod schema;
 mod state;
@@ -16,8 +17,10 @@ pub type AStr = std::sync::Arc<str>;
 pub use error::{LogErrorExt, SyncError};
 
 fn main() {
-    error::init_logging();
-
     crate::state::app_paths::create_all_dirs().sure("Failed to create directories");
-    crate::window::App::build().run();
+    let win = crate::window::App::build();
+
+    logger::init_logging(win.webview_sender.clone());
+
+    win.run();
 }

@@ -1,5 +1,5 @@
-use std::rc::Rc;
 use std::sync::Arc;
+use std::{rc::Rc, sync::mpsc};
 
 use tao::window::Window;
 #[cfg(target_os = "windows")]
@@ -7,10 +7,13 @@ use wry::WebViewBuilderExtWindows;
 use wry::{WebView, WebViewBuilder};
 
 use crate::http::app_handler;
+use crate::ipc::IPCMessage;
 
 use super::event::{EventRunner, EventSystem};
 
 pub struct App {
+    pub webview_sender: mpsc::Sender<IPCMessage>,
+
     _webview: WebView,
     runner: EventRunner,
 }
@@ -19,6 +22,8 @@ pub const PROTOCOL: &str = "wry";
 impl App {
     pub fn build() -> Self {
         let (mut event_runner, event_system) = EventSystem::build();
+        let webview_sender = event_system.webview_tx.clone();
+
         let event_handle = Arc::new(event_system);
 
         let theme = {
@@ -65,6 +70,7 @@ impl App {
         App {
             _webview,
             runner: event_runner,
+            webview_sender,
         }
     }
 
