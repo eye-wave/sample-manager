@@ -114,9 +114,9 @@ conf_btn__.onclick = async () => {
     const bitmask = +key.charAt(0);
     const keys = [key.slice(1)];
 
-    (bitmask & (1 << 0)) !== 0 && keys.push("Ctrl");
+    (bitmask & (1 << 2)) !== 0 && keys.push("Ctrl");
     (bitmask & (1 << 1)) !== 0 && keys.push("Shift");
-    (bitmask & (1 << 2)) !== 0 && keys.push("Alt");
+    (bitmask & (1 << 0)) !== 0 && keys.push("Alt");
 
     const kbd = keys.map((k) => /* HTML */ `<kbd>${capitalize(k)}</kbd>`).join(" + ");
 
