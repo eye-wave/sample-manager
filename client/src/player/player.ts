@@ -51,6 +51,7 @@ function createPlayerHandle() {
 
   volume_ctrl__.oninput = () => {
     setVolume(denorm(+volume_ctrl__.value));
+    volume_ctrl__.blur();
   };
 
   volume_ctrl__.ondblclick = () => {

@@ -1,11 +1,10 @@
 import { $el, txt } from "../alias";
-import { renderTags, setLikedView } from "../helpers";
+import { renderTags, setLikedView, startDrag } from "../helpers";
 
 export type BrowseRow = ReturnType<typeof BrowseRow>;
 export const BrowseRow = (
   idx: number,
   onSelect?: (i: number, p: string) => void,
-  onDrag?: (p: string) => void,
   onLike?: (p: string, s: boolean) => void,
 ) => {
   const el = $el("div");
@@ -59,7 +58,7 @@ export const BrowseRow = (
 
   el.onclick = () => path && onSelect?.(idx, path);
   el.draggable = true;
-  el.ondragstart = () => path && onDrag?.(path);
+  el.ondragstart = () => path && startDrag(path);
 
   const highlight = (on: boolean) => el.classList[on ? "add" : "remove"]("highlight");
   const hide = () => {

@@ -251,7 +251,7 @@ body {
     width: 8px;
     height: 100%;
     cursor: col-resize;
-    z-index: 10;
+    z-index: 2;
 
     &::after {
       content: "";
@@ -359,7 +359,6 @@ body {
     gap: 6px;
     padding: 0 8px;
     cursor: pointer;
-    user-select: none;
 
     &:hover {
       background: var(--bg-hover);
@@ -1021,7 +1020,9 @@ dialog {
   border-radius: 6px;
   border: 1px solid var(--border);
 
-  &:empty { display: none; }
+  &:empty {
+    display: none;
+  }
 }
 
 .string-list-row {
@@ -1031,10 +1032,13 @@ dialog {
   color: var(--text-primary);
   border-bottom: 1px solid var(--border);
   cursor: pointer;
-  transition: color 0.12s, background 0.12s;
-  user-select: none;
+  transition:
+    color 0.12s,
+    background 0.12s;
 
-  &:last-child { border-bottom: none; }
+  &:last-child {
+    border-bottom: none;
+  }
 
   &:hover {
     color: var(--text-muted);
@@ -1062,7 +1066,9 @@ dialog {
   outline: none;
   transition: border-color 0.12s;
 
-  &:focus { border-color: var(--border-active); }
+  &:focus {
+    border-color: var(--border-active);
+  }
 }
 
 // --- Plugin card -----------------------------
@@ -1157,7 +1163,8 @@ dialog {
 
 #terminal_window__ {
   position: fixed;
-  top: 5vh; left: 5vw;
+  top: 5vh;
+  left: 5vw;
   background: #000000bb;
   color: #ccc;
   width: 90vw;
@@ -1169,6 +1176,14 @@ dialog {
   word-break: break-word;
   overflow-wrap: anywhere;
   overflow-y: scroll;
+  z-index: 3;
+
+  &,
+  & span {
+    -webkit-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+  }
 }
 
 kbd {
@@ -1176,7 +1191,6 @@ kbd {
   align-items: center;
   justify-content: center;
   gap: 3px;
-
 
   font-size: 12px;
   font-weight: 500;
@@ -1198,10 +1212,12 @@ kbd {
     inset 0 -1px 0 rgba(0, 0, 0, 0.25),
     0 1px 3px rgba(0, 0, 0, 0.35);
 
-  user-select: none;
   cursor: default;
-  transition: background 100ms ease, transform 80ms ease,
-              box-shadow 100ms ease, border-bottom-width 80ms ease;
+  transition:
+    background 100ms ease,
+    transform 80ms ease,
+    box-shadow 100ms ease,
+    border-bottom-width 80ms ease;
 
   &:hover {
     background: var(--bg-active);

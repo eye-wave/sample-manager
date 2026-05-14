@@ -1,9 +1,28 @@
-import { basename } from "../helpers";
+import { basename, startDrag } from "../helpers";
 import { loadNode } from "./lazy-load";
 import { SIDEBAR_FOLDER, SIDEBAR_ITEM } from "./template";
-import { FileType, type VFSNode } from "./vfs";
+import { FileType, type VFSChild } from "./vfs";
 
-export function renderNode(parent: HTMLElement, node: VFSNode, icon?: string): void {
+export function renderNode(parent: HTMLElement, node: VFSChild, icon?: string): void {
+  if (node.nodeType === FileType) {
+    parent.insertAdjacentHTML(
+      "beforeend",
+      SIDEBAR_ITEM(basename(node.path), node.ftype, node.path),
+    );
+
+    parent.querySelectorAll("[data-path]").forEach((i) => {
+      const item = i as HTMLDivElement;
+      const path = decodeURI(item.dataset.path ?? "");
+
+      if (path) {
+        item.draggable = true;
+        item.ondragstart = () => startDrag(path);
+      }
+    });
+
+    return;
+  }
+
   parent.insertAdjacentHTML("beforeend", SIDEBAR_FOLDER(node.displayName, icon));
   parent.insertAdjacentHTML(
     "beforeend",
@@ -30,14 +49,7 @@ export function renderNode(parent: HTMLElement, node: VFSNode, icon?: string): v
     node.loaded = true;
     for (const child of node.children) {
       if (node.visual?.childrenEl) {
-        if (child.nodeType === FileType) {
-          node.visual.childrenEl.insertAdjacentHTML(
-            "beforeend",
-            SIDEBAR_ITEM(basename(child.path), child.ftype, child.path),
-          );
-        } else {
-          renderNode(node.visual.childrenEl, child);
-        }
+        renderNode(node.visual.childrenEl, child);
       }
     }
   }

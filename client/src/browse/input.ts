@@ -22,8 +22,9 @@ export const TagInput = (
     input.focus();
   };
 
-  addShortcut("Jump to search", "k", 0b100, callback);
-  addShortcut("Jump to search", "/", 0, callback);
+  const description = "Jump to search";
+  addShortcut(description, "k", 0b100, callback);
+  addShortcut(description, "/", 0, callback);
 
   const addTag = (tag: string) => {
     if (!tag) return;

@@ -120,7 +120,7 @@ conf_btn__.onclick = async () => {
 
     const kbd = keys.map((k) => /* HTML */ `<kbd>${capitalize(k)}</kbd>`).join(" + ");
 
-    dial_tab_shortcuts__.innerHTML += /* HTML */ `<div>
+    dial_tab_shortcuts__.innerHTML += /* HTML */ `<div style="color:var(--text-primary)">
       <span>${val}</span>${" " + kbd}
     </div>`;
   }

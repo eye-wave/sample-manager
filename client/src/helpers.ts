@@ -104,3 +104,7 @@ export function capitalize(str: string) {
   const first = str.charAt(0).toUpperCase();
   return first + str.slice(1).toLowerCase();
 }
+
+export function startDrag(path: string) {
+  invoke(IPC.START_DRAG_FILE, path);
+}

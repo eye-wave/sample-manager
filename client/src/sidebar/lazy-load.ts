@@ -1,10 +1,8 @@
 import * as IPC from "../gen/ipc-gen";
-import { basename } from "../helpers";
 import { invoke } from "../invoke/invoke";
 import { parseVFS } from "./parse";
 import { renderNode } from "./render";
-import { SIDEBAR_ITEM } from "./template";
-import { FileType, type VFSChild, type VFSNode } from "./vfs";
+import type { VFSChild, VFSNode } from "./vfs";
 
 export async function loadNode(node: VFSNode): Promise<void> {
   if (node.loaded) return;
@@ -23,14 +21,7 @@ export async function loadNode(node: VFSNode): Promise<void> {
 
   if (node.visual?.childrenEl) {
     for (const child of node.children) {
-      if (child.nodeType === FileType) {
-        node.visual.childrenEl.insertAdjacentHTML(
-          "beforeend",
-          SIDEBAR_ITEM(basename(child.path), child.ftype, child.path),
-        );
-      } else {
-        renderNode(node.visual.childrenEl, child);
-      }
+      renderNode(node.visual.childrenEl, child);
     }
   }
 }

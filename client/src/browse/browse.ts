@@ -27,12 +27,8 @@ function onSelect(i: number, file: string) {
   lastSelected = i;
 }
 
-function onDrag(path: string) {
-  invoke(IPC.START_DRAG_FILE, path);
-}
-
 const pool: BrowseRow[] = Array.from({ length: POOL_SIZE }, (_, i) =>
-  BrowseRow(i, onSelect, onDrag, (p, s) => setLiked(p, s)),
+  BrowseRow(i, onSelect, (p, s) => setLiked(p, s)),
 );
 
 TagInput(search__, search_tags__, pool);
