@@ -14,11 +14,9 @@ fn add_plugin(body: IPCBody) -> IPCResponse {
     crate::with_state_mut!(body, state, {
         let path = PathBuf::from(body.req.to_string());
         let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-
         let bytes = fs::read(&path)?;
 
         state.plugin_handle.load(name, bytes);
-        state.loaded_plugins_info = state.plugin_handle.get_all_plugins_info(|_| {});
 
         state.mutate_config(|cfg| {
             cfg.plugins.insert(name.to_string());
@@ -40,18 +38,7 @@ fn disable_plugin(body: IPCBody) -> IPCResponse {
 
 fn get_all_plugins_info(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
-        let mut plugins_info = state.loaded_plugins_info.clone();
-        let loaded_plugins_info = state.plugin_handle.get_all_plugins_info(|_| {});
-
-        for p in plugins_info.iter_mut() {
-            if loaded_plugins_info
-                .iter()
-                .find(|pl| pl.meta.id == p.meta.id)
-                .is_none()
-            {
-                p.is_enabled = false
-            }
-        }
+        let plugins_info = state.plugin_handle.get_all_plugins_info(|_| {});
 
         let payload = serde_json::to_string(&plugins_info)?;
         let _ = body.webview_sender.send(IPCMessage {
@@ -75,7 +62,7 @@ fn configure_plugin_value(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
         let ConfigPluginValueUpdate { id, name, data } = serde_json::from_str(&body.req)?;
 
-        let pinfo = state.get_plugin_info(&id).ok_or(IPCError::empty())?;
+        let pinfo = state.get_plugin_info(id.clone()).ok_or(IPCError::empty())?;
         let bytes = pinfo
             .get_field(&name)
             .ok_or(IPCError::empty())?

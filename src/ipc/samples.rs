@@ -2,7 +2,8 @@ use std::fs;
 
 use crate::ipc::{IPCBody, IPCError, IPCMessage, IPCResponse, IntoIPCResponse, Poisoned, ok};
 use crate::state::samples::{
-    SearchRequest, WaveformData, draw_audio_and_save, process_directories, search_local, tag_string,
+    ScanMerge, SearchRequest, WaveformData, draw_audio_and_save, process_directories, search_local,
+    tag_string,
 };
 use crate::{LogErrorExt, ipc_commands};
 
@@ -53,8 +54,13 @@ fn start_sample_scan(body: IPCBody) -> IPCResponse {
     }
 
     std::thread::spawn(move || {
-        process_directories(dirs.iter(), thread_state, body.webview_sender)
-            .sure("Failed to process directories");
+        process_directories(
+            dirs.iter(),
+            ScanMerge::ReplaceUnder(dirs.clone()),
+            thread_state,
+            body.webview_sender,
+        )
+        .sure("Failed to process directories");
     });
 
     ok()

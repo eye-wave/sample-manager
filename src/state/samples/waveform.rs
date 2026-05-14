@@ -151,7 +151,6 @@ fn get_duration(input: &WaveformData, ffprobe: &str) -> std::io::Result<f32> {
 }
 
 pub enum DrawAudioMessage {
-    Exists { uri: String },
     FFmpegMissing,
     Result { uri: String },
 }
@@ -162,10 +161,6 @@ impl DrawAudioMessage {
         sender: mpsc::Sender<IPCMessage>,
     ) -> Result<(), mpsc::SendError<IPCMessage>> {
         match self {
-            DrawAudioMessage::Exists { uri } => sender.send(IPCMessage {
-                id: "read_audio",
-                payload: uri.clone(),
-            }),
             DrawAudioMessage::FFmpegMissing => sender.send(IPCMessage {
                 id: "read_audio",
                 payload: "ff-missing".to_string(),
@@ -189,7 +184,7 @@ pub fn draw_audio_and_save(
     let uri = thumbnail_uri(None, &hashed);
 
     if thumb_path.exists() {
-        return Ok(DrawAudioMessage::Exists { uri });
+        return Ok(DrawAudioMessage::Result { uri });
     }
 
     if ffpaths.is_none() {

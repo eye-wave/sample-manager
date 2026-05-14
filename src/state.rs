@@ -7,7 +7,7 @@ use std::sync::Arc;
 use crate::LogErrorExt;
 use crate::audio::AudioPlayer;
 use crate::plugins::{PluginId, PluginInfo, PluginRuntimeHandle};
-use crate::state::config::AppConfigPatch;
+use crate::state::config::{ConfigData, ConfigDataPatch};
 
 pub mod app_paths;
 pub mod config;
@@ -21,7 +21,6 @@ pub struct AppState {
     pub audio_player: AudioPlayer,
     pub favorite_samples: HashSet<String>,
     pub plugin_handle: PluginRuntimeHandle,
-    pub loaded_plugins_info: Vec<PluginInfo>,
 
     app_config: AppConfig,
 }
@@ -37,34 +36,19 @@ pub enum StateError {
 
 impl AppState {
     pub fn new() -> Self {
-        Self {
-            sample_registry: HashMap::new(),
-            audio_player: AudioPlayer::new(),
-            favorite_samples: HashSet::new(),
-            plugin_handle: PluginRuntimeHandle::spawn(),
-
-            app_config: AppConfig::default(),
-            loaded_plugins_info: Vec::new(),
-        }
-    }
-
-    pub fn init(&mut self) -> Result<(), StateError> {
-        let conf = fs::read(app_paths::config_file())?;
-        let conf: AppConfig = toml::from_slice(&conf)?;
-
         let favorite_samples: HashSet<_> = fs::read_to_string(app_paths::favorites_file())
             .map(|f| f.lines().map(|l| l.into()).collect())
             .unwrap_or_default();
 
-        self.app_config = conf;
-        self.favorite_samples = favorite_samples;
+        let conf = AppConfig::load(app_paths::config_file());
+        let plugin_handle = PluginRuntimeHandle::spawn();
 
-        for name in self.app_config.plugins.iter() {
+        for name in conf.plugins.iter() {
             let plugin_name = name.to_string() + ".zip";
             let path = app_paths::plugin_config_path().join(plugin_name);
 
             match fs::read(path) {
-                Ok(bytes) => self.plugin_handle.load(name, bytes),
+                Ok(bytes) => plugin_handle.load(name, bytes),
                 Err(err) => tracing::error!(
                     plugin = %name,
                     error = %err,
@@ -73,15 +57,20 @@ impl AppState {
             }
         }
 
-        self.loaded_plugins_info = self.plugin_handle.get_all_plugins_info(|_| {});
+        Self {
+            sample_registry: HashMap::new(),
+            audio_player: AudioPlayer::new(),
+            favorite_samples,
+            plugin_handle,
 
-        Ok(())
+            app_config: conf,
+        }
     }
 
     pub fn update_config<R, F: FnMut(&mut AppConfig) -> R>(&mut self, mut cb: F) -> R {
         let result = cb(&mut self.app_config);
 
-        if let Ok(contents) = toml::to_string(&self.app_config) {
+        if let Ok(contents) = toml::to_string::<ConfigData>(&self.app_config) {
             fs::write(app_paths::config_file(), contents).sure("Failed to write config file");
         }
 
@@ -115,18 +104,18 @@ impl AppState {
         &self.app_config
     }
 
-    pub fn patch_config(&mut self, patch: AppConfigPatch) {
+    pub fn patch_config(&mut self, patch: ConfigDataPatch) {
         self.app_config.patch(patch);
     }
 
-    pub fn mutate_config<F>(&mut self, mut cb: F)
+    pub fn mutate_config<F>(&mut self, cb: F)
     where
-        F: FnMut(&mut AppConfig),
+        F: FnMut(&mut ConfigData),
     {
-        cb(&mut self.app_config);
+        self.app_config.mutate(cb);
     }
 
-    pub fn get_plugin_info(&self, id: &PluginId) -> Option<&PluginInfo> {
-        self.loaded_plugins_info.iter().find(|p| p.meta.id == *id)
+    pub fn get_plugin_info(&self, id: PluginId) -> Option<PluginInfo> {
+        self.plugin_handle.get_plugin_info(id)
     }
 }

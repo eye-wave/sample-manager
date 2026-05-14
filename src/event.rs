@@ -39,8 +39,7 @@ impl EventSystem {
         let event_loop = EventLoopBuilder::<LoopEvent>::with_user_event().build();
         let proxy = event_loop.create_proxy();
 
-        let mut app_state = AppState::new();
-        app_state.init().sure("Failed to initialize app state");
+        let app_state = AppState::new();
 
         (
             EventRunner {

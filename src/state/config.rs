@@ -14,8 +14,8 @@ pub use theme::Theme;
 use ts_rs::TS;
 
 use crate::schema::{SchemaFieldOptions, SchemaFieldWithValue};
-use crate::state::app_paths;
 use crate::state::config::theme::list_themes;
+use crate::state::{StateError, app_paths};
 use crate::{AStr, LogErrorExt};
 
 // --- FFPaths ---
@@ -60,11 +60,61 @@ pub struct FFPathsRef<'a> {
 
 // --- AppConfig ---
 
+pub struct AppConfig {
+    inner: ConfigData,
+    path: &'static Path,
+}
+
+impl AppConfig {
+    pub fn load(path: &'static Path) -> Self {
+        if let Ok(inner) = fs::read(path)
+            .map_err(StateError::from)
+            .and_then(|bytes| toml::from_slice::<ConfigData>(&bytes).map_err(StateError::from))
+        {
+            Self { inner, path }
+        } else {
+            Self {
+                path,
+                inner: ConfigData::default(),
+            }
+        }
+    }
+
+    pub fn mutate<R>(&mut self, f: impl FnOnce(&mut ConfigData) -> R) -> R {
+        let result = f(&mut self.inner);
+        self.flush();
+        result
+    }
+
+    pub fn patch(&mut self, patch: ConfigDataPatch) {
+        self.mutate(|c| c.apply(patch));
+    }
+
+    fn flush(&self) {
+        if let Ok(contents) = toml::to_string(&self.inner) {
+            let _ = fs::write(self.path, contents);
+        }
+    }
+}
+
+impl std::ops::Deref for AppConfig {
+    type Target = ConfigData;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl std::ops::DerefMut for AppConfig {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
 #[derive(Debug, Default, Serialize, Deserialize, Patch, TS)]
 #[patch(attribute(derive(Clone, Debug, Deserialize)))]
 #[serde(default)]
 #[ts(export)]
-pub struct AppConfig {
+pub struct ConfigData {
     pub tracked_dirs: HashSet<PathBuf>,
     #[serde(flatten)]
     pub ffpaths: FFPaths,
@@ -73,7 +123,7 @@ pub struct AppConfig {
     pub color_theme: Option<String>,
 }
 
-impl AppConfig {
+impl ConfigData {
     pub fn get_current_theme(&self) -> Option<Theme> {
         self.color_theme.as_deref().and_then(|t| self.get_theme(t))
     }
@@ -102,10 +152,6 @@ impl AppConfig {
                 "Unknown config field: {field}"
             ))),
         }
-    }
-
-    pub fn patch(&mut self, patch: AppConfigPatch) {
-        self.apply(patch);
     }
 
     pub fn as_fields(&self) -> HashMap<AStr, SchemaFieldWithValue> {

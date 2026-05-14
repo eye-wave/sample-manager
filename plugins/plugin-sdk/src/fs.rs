@@ -40,7 +40,6 @@ pub fn read_file(path: &str) -> Result<Vec<u8>, FsError> {
         }
         -1 => Err(FsError::NotPermitted),
         -2 => Err(FsError::InvalidPath),
-        -3 => Err(FsError::PathTraversal),
         _ => Err(FsError::ReadError),
     }
 }

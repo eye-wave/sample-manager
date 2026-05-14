@@ -144,6 +144,15 @@ impl PluginRunner {
                         .collect();
                     let _ = reply_to.send(plugin_info_list);
                 }
+                Ok(Cmd::GetPluginInfo { id, reply_to }) => {
+                    let reply = if let Some(plugin) = self.plugins.get(&id) {
+                        Some(plugin.manifest.to_plugin_info(self.store.data(), |_| {}))
+                    } else {
+                        None
+                    };
+
+                    let _ = reply_to.send(reply);
+                }
                 Ok(Cmd::Download {
                     plugin_id,
                     url,
@@ -637,8 +646,7 @@ fn define_host_imports(
     //   >= 0  : bytes written into out_ptr
     //     -1  : filesystem capability not granted
     //     -2  : path is not valid utf-8
-    //     -3  : path traversal / outside allowed roots
-    //     -4  : file not found or read error
+    //     -3  : file not found or read error
     //
     // The host does not restrict which absolute paths are readable beyond
     // checking for traversal sequences — the user configured the path
@@ -679,15 +687,6 @@ fn define_host_imports(
                     }
                 };
 
-                if path.contains("..") {
-                    tracing::warn!(
-                        plugin = %fs_id,
-                        capability = "fs_read",
-                        "capability missing"
-                    );
-                    return -3;
-                }
-
                 let contents = match std::fs::read(&path) {
                     Ok(b) => b,
                     Err(e) => {
@@ -697,7 +696,7 @@ fn define_host_imports(
                             error = %e,
                             "fs_read failed"
                         );
-                        return -4;
+                        return -3;
                     }
                 };
 

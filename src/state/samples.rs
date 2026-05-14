@@ -133,15 +133,22 @@ impl FsSample {
     }
 }
 
+pub enum ScanMerge {
+    ReplaceAll,
+    ReplaceUnder(Vec<PathBuf>),
+}
+
 pub fn process_directories<'a>(
     dirs: impl Iterator<Item = &'a PathBuf>,
+    merge: ScanMerge,
     app_state: Arc<RwLock<AppState>>,
     sender: Sender<IPCMessage>,
 ) -> Result<(), SyncError> {
     use std::time::{Duration, Instant};
 
+    let dirs: Vec<PathBuf> = dirs.into_iter().cloned().collect();
     let mut sample_registry = Vec::<FsSample>::new();
-    let mut stack: Vec<PathBuf> = dirs.into_iter().cloned().collect();
+    let mut stack = dirs.clone();
 
     let mut time = Instant::now();
 
@@ -183,8 +190,23 @@ pub fn process_directories<'a>(
     tracing::info!("scan completed");
 
     let mut guard = app_state.write()?;
-    for s in sample_registry.iter() {
-        guard.sample_registry.insert(s.path.clone(), s.clone());
+
+    match merge {
+        ScanMerge::ReplaceAll => {
+            guard.sample_registry = sample_registry
+                .into_iter()
+                .map(|s| (s.path.clone(), s))
+                .collect();
+        }
+
+        ScanMerge::ReplaceUnder(roots) => {
+            guard
+                .sample_registry
+                .retain(|path, _| !roots.iter().any(|root| path.starts_with(root)));
+            guard
+                .sample_registry
+                .extend(sample_registry.into_iter().map(|s| (s.path.clone(), s)));
+        }
     }
 
     Ok(())

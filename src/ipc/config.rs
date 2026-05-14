@@ -1,13 +1,13 @@
 use crate::ipc::{IPCBody, IPCResponse, IntoIPCResponse, ok};
-use crate::state::config::AppConfigPatch;
-use crate::state::samples::process_directories;
+use crate::state::config::ConfigDataPatch;
+use crate::state::samples::{ScanMerge, process_directories};
 use crate::{LogErrorExt, ipc_commands};
 
 fn patch_config(body: IPCBody) -> IPCResponse {
     let mut is_new = false;
     let dirs = crate::with_state_mut!(body, state, {
         let patch = {
-            let mut patch: AppConfigPatch = serde_json::from_str(&body.req)?;
+            let mut patch: ConfigDataPatch = serde_json::from_str(&body.req)?;
 
             if let Some(td) = patch.tracked_dirs.as_mut() {
                 td.retain(|d| d.exists());
@@ -28,8 +28,13 @@ fn patch_config(body: IPCBody) -> IPCResponse {
     if is_new {
         let thread_state = body.app_state.clone();
         std::thread::spawn(move || {
-            process_directories(dirs.iter(), thread_state, body.webview_sender)
-                .sure("Failed to process directories");
+            process_directories(
+                dirs.iter(),
+                ScanMerge::ReplaceAll,
+                thread_state,
+                body.webview_sender,
+            )
+            .sure("Failed to process directories");
         });
     }
 

@@ -1,14 +1,13 @@
-use std::{
-    path::PathBuf,
-    sync::{Arc, mpsc},
-};
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::mpsc::{self};
 
 use plugin_wire::{WireEntry, sample::SampleSerialize};
 use wasmtime::{Instance, TypedFunc};
 
-use crate::AStr;
 use crate::ipc::IPCMessage;
 use crate::state::{config::FFPaths, samples::SearchRequest};
+use crate::{AStr, LogErrorExt};
 
 mod host;
 mod icon;
@@ -47,6 +46,10 @@ pub enum PluginRunnerCommand {
     },
     UnloadPlugin {
         id: PluginId,
+    },
+    GetPluginInfo {
+        id: PluginId,
+        reply_to: mpsc::SyncSender<Option<PluginInfo>>,
     },
     GetAllPluginsInfo {
         reply_to: mpsc::Sender<Vec<PluginInfo>>,
@@ -171,6 +174,16 @@ impl PluginRuntimeHandle {
             icon_cb: Box::new(icon_cb),
         });
         rx.recv().unwrap_or_default()
+    }
+
+    pub fn get_plugin_info(&self, plugin_id: PluginId) -> Option<PluginInfo> {
+        let (tx, rx) = std::sync::mpsc::sync_channel::<Option<PluginInfo>>(1);
+        let _ = self.sender.send(Cmd::GetPluginInfo {
+            id: plugin_id,
+            reply_to: tx,
+        });
+
+        rx.recv().sure("Failed to respond").flatten()
     }
 
     pub fn unload(&self, id: PluginId) {
