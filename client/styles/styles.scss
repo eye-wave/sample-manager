@@ -1,50 +1,51 @@
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-  font-family: inherit;
-  font-size: inherit;
-  scrollbar-width: none;
+@use "sass:map";
+@use "sass:string";
+@use "sass:math";
 
+// --- Functions ----------------------------------------------------------------
+
+@function svg-encode($string) {
+  @return url("data:image/svg+xml;utf8,#{string.insert('<svg xmlns=\'http://www.w3.org/2000/svg\' ' + $string + '</svg>', '', 0)}");
+}
+
+@function rem($px, $base: 16) {
+  @return math.div($px, $base) * 1rem;
+}
+
+@function border-alpha($opacity: 1) {
+  @return rgba(var(--border-rgb), $opacity);
+}
+
+// --- Placeholders -------------------------------------------------------------
+
+%no-scroll {
+  scrollbar-width: none;
   &::-webkit-scrollbar {
     display: none;
   }
 }
 
-html,
-body {
-  height: 100%;
-  overflow: hidden;
-}
-
-button,
-input {
-  outline: none;
-  border: 0;
-}
-
-input[type="radio"] {
-  display: none;
-}
-
-input::-webkit-outer-spin-button,
-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-// --- Base ------------------------------------
-
-body {
-  background: var(--bg-base);
-  color: var(--text-primary);
-  font-family: "Inter", system-ui, sans-serif;
-  font-size: 13px;
+%flex-column {
   display: flex;
   flex-direction: column;
 }
 
-// --- Helpers ---------------------------------
+%flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+%full-viewport {
+  height: 100%;
+  overflow: hidden;
+}
+
+%ellipsis-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 %label-micro {
   font-size: 10px;
@@ -60,26 +61,23 @@ body {
   border-radius: calc(var(--radius) / 4);
 }
 
-%icon-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: 1px solid var(--border);
-  cursor: pointer;
-  transition:
-    background 0.15s,
-    color 0.15s;
-}
-
 %list-grid {
   display: grid;
   grid-template-columns: 2fr 60px 60px 120px;
   padding: 0 14px;
 }
 
-@mixin form-input {
-  -moz-appearance: textfield;
+%interactive-element {
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+
+// --- Mixins -------------------------------------------------------------------
+
+@mixin form-input-base {
   appearance: none;
   background: var(--bg-hover);
   border: 1px solid var(--border);
@@ -90,9 +88,11 @@ body {
   outline: none;
   min-width: 0;
   font-family: inherit;
-  transition: border-color 0.15s;
   width: 100%;
   max-width: 320px;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
 
   &:focus {
     border-color: var(--border-active);
@@ -100,13 +100,111 @@ body {
   }
 }
 
-// --- Layout ----------------------------------
+@mixin custom-slider-track {
+  height: 6px;
+  background: var(--bg-base);
+  border: 1px solid var(--bg-hover);
+  border-radius: 4px;
+}
+
+@mixin custom-slider-thumb {
+  height: 14px;
+  width: 14px;
+  background: var(--accent-dim);
+  border-radius: 10px;
+}
+
+@mixin panel-shell($bg: var(--bg-panel), $radius: var(--radius)) {
+  background: $bg;
+  border-radius: $radius;
+  border: 1px solid var(--border);
+}
+
+@mixin icon-btn($size: 28px, $radius: 7px) {
+  width: $size;
+  height: $size;
+  border-radius: $radius;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  @extend %flex-center;
+  @extend %interactive-element;
+
+  &:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+}
+
+@mixin dashed-interactive($hover-color: var(--accent-dim)) {
+  border: 1px dashed var(--border);
+  color: var(--text-muted);
+  @extend %interactive-element;
+
+  &:hover {
+    border-color: $hover-color;
+    color: $hover-color;
+  }
+}
+
+// --- Icon map -----------------------------------------------------------------
+
+$icons: (
+  "min":
+    "viewBox='0 0 16 16'><path stroke='red' stroke-linecap='round' stroke-width='2' d='M3 11h10'/>",
+  "max":
+    "fill='none' viewBox='0 0 16 16'><rect width='10' height='10' x='3' y='3' stroke='red' stroke-width='2' rx='1'/>",
+  "close":
+    "viewBox='0 0 16 16'><path d='M4 4L12 12M12 4L4 12' stroke='red' stroke-width='2' stroke-linecap='round'/>",
+);
+
+// --- Reset / Base -------------------------------------------------------------
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  @extend %no-scroll;
+}
+
+html,
+body {
+  @extend %full-viewport;
+}
+
+body {
+  @extend %flex-column;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 13px;
+}
+
+button,
+input,
+select {
+  outline: none;
+  border: 0;
+  background: none;
+}
+
+input[type="radio"] {
+  display: none;
+}
+
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+// --- Layout -------------------------------------------------------------------
 
 .app {
-  display: flex;
-  flex-direction: column;
+  @extend %flex-column;
+  @extend %full-viewport;
   height: 100vh;
-  overflow: hidden;
 }
 
 .main {
@@ -115,7 +213,13 @@ body {
   overflow: hidden;
 }
 
-// --- Titlebar --------------------------------
+.center {
+  @extend %flex-column;
+  flex: 1;
+  overflow: hidden;
+}
+
+// --- Window chrome ------------------------------------------------------------
 
 .titlebar {
   display: flex;
@@ -130,12 +234,12 @@ body {
 
   button {
     font-weight: 600;
-    border: 0;
     border-radius: calc(var(--radius) / 3);
     background: var(--bg-panel);
     color: var(--accent);
     width: 16px;
     height: 16px;
+    @extend %interactive-element;
 
     &:hover {
       background: var(--bg-hover);
@@ -144,7 +248,23 @@ body {
   }
 }
 
-// --- Topbar ----------------------------------
+.icon::after {
+  content: "";
+  position: relative;
+  background: currentColor;
+  mask-image: var(--url);
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+@each $name, $svg-content in $icons {
+  .icon.#{$name}::after {
+    --url: #{svg-encode($svg-content)};
+  }
+}
+
+// --- Topbar -------------------------------------------------------------------
 
 .topbar {
   display: flex;
@@ -157,13 +277,10 @@ body {
   flex-shrink: 0;
 
   &-logo {
+    @extend %label-micro;
     font-size: 11px;
-    font-weight: 500;
     letter-spacing: 0.12em;
-    color: var(--text-muted);
-    text-transform: uppercase;
     margin-right: auto;
-
     span {
       color: var(--accent);
     }
@@ -179,7 +296,7 @@ body {
     border-radius: var(--radius);
     padding: 4px 10px;
     font-size: 11px;
-    cursor: pointer;
+    @extend %interactive-element;
 
     &:hover {
       background: var(--bg-hover);
@@ -187,8 +304,6 @@ body {
     }
   }
 }
-
-// --- Search ----------------------------------
 
 .search-wrap {
   display: flex;
@@ -215,18 +330,16 @@ body {
 
   input {
     display: block;
-    background: none;
     color: var(--text-primary);
     min-width: 80px;
     flex: 1;
-
     &::placeholder {
       color: var(--text-muted);
     }
   }
 }
 
-// --- Sidebar ---------------------------------
+// --- Sidebar ------------------------------------------------------------------
 
 .sidebar {
   width: 220px;
@@ -234,11 +347,10 @@ body {
   max-width: 480px;
   background: var(--bg-panel);
   border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
+  @extend %flex-column;
   flex-shrink: 0;
   position: relative;
-  overflow: hidden;
+  @extend %full-viewport;
 
   &-scroll {
     overflow-y: scroll;
@@ -246,21 +358,16 @@ body {
 
   &-resize {
     position: absolute;
-    top: 0;
-    right: 0;
+    inset: 0 0 0 auto;
     width: 8px;
-    height: 100%;
     cursor: col-resize;
     z-index: 2;
 
     &::after {
       content: "";
       position: absolute;
-      top: 0;
-      right: 0;
-      transform: translateX(0px);
+      inset: 0 0 0 auto;
       width: 2px;
-      height: 100%;
       background: var(--accent);
       opacity: 0;
       transition: opacity 0.15s;
@@ -291,7 +398,7 @@ body {
   padding: 6px 8px;
   color: var(--text-muted);
   border-radius: var(--radius);
-  cursor: pointer;
+  @extend %interactive-element;
 
   &:hover {
     background: var(--bg-hover);
@@ -308,32 +415,22 @@ body {
 .add-folder {
   width: 100%;
   background: var(--bg-surface);
-  border: 1px dashed var(--border);
-  color: var(--text-muted);
   border-radius: var(--radius);
   padding: 6px;
   font-size: 11px;
-  cursor: pointer;
-
-  &:hover {
-    border-color: var(--accent-dim);
-    color: var(--accent-dim);
-  }
+  @include dashed-interactive;
 }
 
-// --- Tree ------------------------------------
+// --- File tree ----------------------------------------------------------------
 
 .tree {
   &-section {
     color: var(--text-secondary);
     margin-bottom: 4px;
-    transition: background 0.1s;
     line-height: 1.2;
     word-break: break-all;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    @extend %ellipsis-text;
     text-align: left;
-    text-wrap: nowrap;
 
     &.item {
       background: var(--bg-base);
@@ -358,7 +455,7 @@ body {
     align-items: center;
     gap: 6px;
     padding: 0 8px;
-    cursor: pointer;
+    @extend %interactive-element;
 
     &:hover {
       background: var(--bg-hover);
@@ -375,9 +472,8 @@ body {
   &-arrow {
     font-size: 9px;
     color: var(--text-muted);
-    transition: transform 0.2s;
     display: inline-block;
-
+    transition: transform 0.2s;
     &.open {
       transform: rotate(90deg);
     }
@@ -400,21 +496,13 @@ body {
 
   &-children {
     padding-left: 14px;
-
     .tree-label {
       padding-left: 10px;
     }
   }
 }
 
-// --- Center / List ---------------------------
-
-.center {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
+// --- List / Table -------------------------------------------------------------
 
 .list {
   &-header {
@@ -428,17 +516,15 @@ body {
 
   &-col {
     @extend %label-micro;
-    cursor: pointer;
+    @extend %interactive-element;
 
     &:hover {
       color: var(--text-secondary);
     }
-
     &:nth-child(2),
     &:nth-child(3) {
       text-align: right;
     }
-
     &:nth-child(4) {
       padding-left: 8px;
     }
@@ -454,8 +540,7 @@ body {
     height: 36px;
     align-items: center;
     border-bottom: 1px solid var(--border);
-    cursor: pointer;
-    transition: background 0.1s;
+    @extend %interactive-element;
 
     &:hover,
     &.highlight {
@@ -487,32 +572,29 @@ body {
 
   &-label {
     color: var(--text-secondary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    @extend %ellipsis-text;
   }
 
-  &-type {
-    font-size: 10px;
-    color: var(--text-muted);
-    text-align: right;
-  }
-
+  &-type,
   &-bpm {
     color: var(--text-secondary);
     text-align: right;
   }
 
+  &-type {
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
   &-tags {
     display: flex;
     gap: 4px;
-    flex-wrap: nowrap;
     overflow: hidden;
     padding-left: 8px;
   }
 }
 
-// --- Tags ------------------------------------
+// --- Tags ---------------------------------------------------------------------
 
 .tags {
   display: flex;
@@ -526,8 +608,7 @@ body {
   color: var(--tag-text);
 
   &.x {
-    cursor: pointer;
-
+    @extend %interactive-element;
     &:hover {
       background: var(--accent-glow);
       color: var(--tag-text-secondary);
@@ -537,39 +618,28 @@ body {
 
 .add-tag {
   @extend %tag-base;
-  border: 1px dashed var(--border);
-  color: var(--text-muted);
-  cursor: pointer;
-  background: none;
-
-  &:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
+  @include dashed-interactive(var(--accent));
 }
 
 .fav {
   color: var(--text-muted);
   flex-shrink: 0;
-  cursor: pointer;
+  @extend %interactive-element;
 
-  &:hover {
-    color: var(--love);
-  }
+  &:hover,
   &.liked {
     color: var(--love);
   }
 }
 
-// --- Preview ---------------------------------
+// --- Preview / Waveform -------------------------------------------------------
 
 .preview {
   height: 160px;
   background: var(--bg-panel);
   border-top: 1px solid var(--border);
   flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
+  @extend %flex-column;
 
   &-header {
     display: flex;
@@ -584,16 +654,13 @@ body {
     font-size: 13px;
     font-weight: 500;
     color: var(--text-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
+    @extend %ellipsis-text;
     max-width: 300px;
-    white-space: nowrap;
   }
 
   &-body {
     position: relative;
-    display: flex;
-    flex-direction: column;
+    @extend %flex-column;
     flex: 1;
     overflow: hidden;
   }
@@ -614,10 +681,9 @@ body {
 }
 
 .wave-thumb {
-  inset: 0;
   position: absolute;
+  inset: 0 0 auto 0;
   height: 80px;
-  width: 100%;
   pointer-events: none;
 }
 
@@ -632,52 +698,37 @@ body {
   span {
     width: 64px;
   }
-
   #time_cur__ {
     text-align: right;
   }
 }
 
-@mixin slider-track {
-  height: 6px;
-  background: var(--bg-base);
-  border: 1px solid var(--bg-hover);
-  border-radius: 4px;
-}
-
-@mixin slider-thumb {
-  height: 14px;
-  width: 14px;
-  background: var(--accent-dim);
-  border-radius: 10px;
-}
-
-.volume {
-  width: 80px;
+%slider-base {
   appearance: none;
-  background: transparent;
   cursor: pointer;
 
   &::-webkit-slider-runnable-track {
-    @include slider-track;
+    @include custom-slider-track;
   }
-
   &::-moz-range-track {
-    @include slider-track;
+    @include custom-slider-track;
   }
-
   &::-webkit-slider-thumb {
-    @include slider-thumb;
-    -webkit-appearance: none;
+    @include custom-slider-thumb;
+    appearance: none;
     margin-top: -5px;
   }
-
   &::-moz-range-thumb {
-    @include slider-thumb;
+    @include custom-slider-thumb;
   }
 }
 
-// --- Bottom bar ------------------------------
+.volume {
+  @extend %slider-base;
+  width: 80px;
+}
+
+// --- Bottom bar ---------------------------------------------------------------
 
 .bottombar {
   height: 28px;
@@ -695,7 +746,6 @@ body {
     display: flex;
     align-items: center;
     gap: 5px;
-
     span {
       color: var(--text-secondary);
     }
@@ -715,8 +765,6 @@ body {
   }
 }
 
-// --- Pagination ------------------------------
-
 #pagination__ {
   padding: 4px;
   display: flex;
@@ -731,7 +779,7 @@ body {
     border: 1px solid var(--bg-surface);
 
     &:not(.ellipsis) {
-      cursor: pointer;
+      @extend %interactive-element;
     }
 
     &.active {
@@ -742,14 +790,15 @@ body {
   }
 }
 
-// --- Dialog ----------------------------------
+// --- Dialog / Modal -----------------------------------------------------------
 
 dialog {
   padding: 0;
   border: none;
   background: transparent;
-  max-width: 100vw;
-  max-height: 100vh;
+  @extend %full-viewport;
+  width: 100vw;
+  height: 100vh;
 
   &::backdrop {
     top: 20px;
@@ -758,11 +807,8 @@ dialog {
 }
 
 .dialog {
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-panel);
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
+  @extend %flex-column;
+  @include panel-shell;
   width: 100%;
   max-width: 680px;
   height: 640px;
@@ -783,15 +829,14 @@ dialog {
 
   input[type="text"],
   input[type="number"],
-  input[type="password"] {
-    @include form-input;
+  input[type="password"],
+  select {
+    @include form-input-base;
   }
 
   select {
-    @include form-input;
     width: 180px;
     max-width: 180px;
-    text-align: center;
     text-align-last: center;
   }
 
@@ -799,13 +844,13 @@ dialog {
     display: inline-block;
     position: relative;
 
-    & input[type="checkbox"] {
+    input[type="checkbox"] {
       position: absolute;
       inset: 0;
       opacity: 0;
     }
 
-    & label {
+    label {
       display: block;
       width: 44px;
       height: 24px;
@@ -813,34 +858,32 @@ dialog {
       background: var(--bg-panel);
       cursor: pointer;
       border: 1px solid var(--bg-hover);
+
+      &::after {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--accent-dim);
+        box-shadow: 0 0 3px var(--border);
+        transition: left 0.15s;
+      }
     }
 
-    & label::after {
-      content: "";
-      position: absolute;
-      top: 3px;
-      left: 3px;
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: var(--accent-dim);
-      box-shadow: 0 0px 3px var(--border);
-    }
-
-    & input:checked + label::after {
+    input:checked + label::after {
       left: 23px;
     }
-
-    & input:focus-visible + label {
+    input:focus-visible + label {
       border-color: var(--accent);
       background: var(--bg-active);
     }
   }
 
   &-shell {
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    @extend %flex-center;
     padding: 2rem 1rem;
     width: 100vw;
     height: 100vh;
@@ -868,11 +911,8 @@ dialog {
       height: 20px;
       background: var(--accent-glow);
       border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      @extend %flex-center;
       border: 1px solid var(--border-active);
-
       svg {
         display: block;
       }
@@ -880,28 +920,17 @@ dialog {
   }
 
   &-close-btn {
-    @extend %icon-btn;
-    width: 28px;
-    height: 28px;
-    border-radius: 7px;
-    color: var(--text-muted);
-
-    &:hover {
-      background: var(--bg-hover);
-      color: var(--text-primary);
-    }
+    @include icon-btn;
   }
 
   &-body {
     padding: 20px 22px;
-    display: flex;
-    flex-direction: column;
+    @extend %flex-column;
     gap: 6px;
   }
 
   &-container {
-    display: flex;
-    flex-direction: column;
+    @extend %flex-column;
     gap: 8px;
     max-height: 410px;
     overflow-y: scroll;
@@ -917,24 +946,20 @@ dialog {
   }
 }
 
-// --- Buttons ---------------------------------
+// --- Buttons ------------------------------------------------------------------
 
 .btn {
   font-size: 13px;
   font-weight: 500;
   padding: 7px 16px;
   border-radius: 8px;
-  cursor: pointer;
   border: 1px solid var(--border);
   font-family: inherit;
-  transition:
-    background 0.15s,
-    color 0.15s;
+  @extend %interactive-element;
 
   &-ghost {
     background: none;
     color: var(--text-muted);
-
     &:hover {
       background: var(--bg-hover);
       color: var(--text-secondary);
@@ -945,7 +970,6 @@ dialog {
     background: var(--accent);
     color: var(--bg-base);
     border-color: var(--accent);
-
     &:hover {
       background: var(--accent-dim);
       border-color: var(--accent-dim);
@@ -956,7 +980,6 @@ dialog {
     color: var(--text-muted);
     background: var(--bg-base);
     border-color: var(--bg-surface);
-
     &.active,
     &:hover {
       background: var(--bg-surface);
@@ -966,18 +989,15 @@ dialog {
   }
 }
 
-// --- Section label ---------------------------
+// --- Form fields --------------------------------------------------------------
 
 .section-label {
   @extend %label-micro;
   margin: 10px 0 4px;
-
   &:first-child {
     margin-top: 0;
   }
 }
-
-// --- Field row -------------------------------
 
 .field {
   display: flex;
@@ -995,8 +1015,7 @@ dialog {
   }
 
   &-label {
-    display: flex;
-    flex-direction: column;
+    @extend %flex-column;
     gap: 1px;
     font-size: 13px;
     color: var(--text-primary);
@@ -1012,14 +1031,12 @@ dialog {
 }
 
 .string-list-rows {
-  display: flex;
-  flex-direction: column;
+  @extend %flex-column;
   max-height: 160px;
   overflow-y: auto;
   overscroll-behavior: contain;
   border-radius: 6px;
   border: 1px solid var(--border);
-
   &:empty {
     display: none;
   }
@@ -1031,10 +1048,7 @@ dialog {
   font-size: 13px;
   color: var(--text-primary);
   border-bottom: 1px solid var(--border);
-  cursor: pointer;
-  transition:
-    color 0.12s,
-    background 0.12s;
+  @extend %interactive-element;
 
   &:last-child {
     border-bottom: none;
@@ -1050,34 +1064,19 @@ dialog {
 .string-list-row-text {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  @extend %ellipsis-text;
 }
 
 .string-list-input {
-  width: 100%;
+  @include form-input-base;
   background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 6px 10px;
-  font-size: 13px;
-  color: var(--text-primary);
-  outline: none;
-  transition: border-color 0.12s;
-
-  &:focus {
-    border-color: var(--border-active);
-  }
 }
 
-// --- Plugin card -----------------------------
+// --- Cards / Plugins ----------------------------------------------------------
 
 .card {
+  @include panel-shell;
   color: var(--text-primary);
-  background: var(--bg-panel);
-  border-radius: 8px;
-  border: 1px solid var(--border);
   width: 280px;
   padding: 16px;
   position: relative;
@@ -1089,11 +1088,8 @@ dialog {
     width: 32px;
     height: 32px;
     border-radius: calc(var(--radius) / 2);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    @extend %flex-center;
     overflow: hidden;
-
     svg {
       width: 32px;
       height: 32px;
@@ -1120,7 +1116,7 @@ dialog {
     color: var(--text-secondary);
     font-size: 13px;
     line-height: 1.4;
-    margin: 0 0 12px 0;
+    margin: 0 0 12px;
   }
 
   &-capabilities {
@@ -1146,7 +1142,7 @@ dialog {
     ul {
       max-height: 80px;
       overflow-y: auto;
-      margin: 8px 0 0 0;
+      margin: 8px 0 0;
       padding: 0 0 0 16px;
       color: var(--text-secondary);
       font-size: 11px;
@@ -1161,6 +1157,8 @@ dialog {
   }
 }
 
+// --- Debug terminal -----------------------------------------------------------
+
 #terminal_window__ {
   position: fixed;
   top: 5vh;
@@ -1171,7 +1169,6 @@ dialog {
   height: 90vh;
   border-radius: var(--radius);
   padding: 16px;
-
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
@@ -1180,38 +1177,32 @@ dialog {
 
   &,
   & span {
-    -webkit-user-select: text;
-    -ms-user-select: text;
     user-select: text;
   }
 }
 
-kbd {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
+// --- Keyboard keys ------------------------------------------------------------
 
+kbd {
+  @extend %flex-center;
+  display: inline-flex;
+  gap: 3px;
   font-size: 12px;
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
   color: var(--text-primary);
-
   padding: 5px 9px;
   min-width: 28px;
   min-height: 28px;
-
   background: var(--bg-surface);
   border-radius: 7px;
   border: 1px solid var(--border);
   border-bottom: 2.5px solid rgba(238, 229, 233, 0.18);
-
   box-shadow:
     inset 0 1px 0 rgba(238, 229, 233, 0.08),
     inset 0 -1px 0 rgba(0, 0, 0, 0.25),
     0 1px 3px rgba(0, 0, 0, 0.35);
-
   cursor: default;
   transition:
     background 100ms ease,
