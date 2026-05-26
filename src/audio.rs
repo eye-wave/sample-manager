@@ -1,6 +1,6 @@
+use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
-use std::{path::Path, sync::mpsc};
 
 mod decode;
 mod device;
@@ -13,7 +13,7 @@ use handle::{PlayerHandle, SharedAudioState};
 pub use handle::PlaybackState;
 
 use crate::audio::handle::PlayerFlags;
-use crate::ipc::IPCMessage;
+use crate::ipc::IPCSenderUI;
 
 pub struct AudioPlayer {
     handle: PlayerHandle,
@@ -44,7 +44,7 @@ macro_rules! with_decoder {
 }
 
 impl AudioPlayer {
-    pub fn new(webview_sender: mpsc::Sender<IPCMessage>) -> Self {
+    pub fn new(webview_sender: IPCSenderUI) -> Self {
         let shared_state = SharedAudioState::new(webview_sender);
         let audio_handle = PlayerHandle {
             shared: shared_state.clone(),

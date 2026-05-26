@@ -1,5 +1,5 @@
+use std::rc::Rc;
 use std::sync::Arc;
-use std::{rc::Rc, sync::mpsc};
 
 use tao::window::Window;
 #[cfg(target_os = "windows")]
@@ -7,12 +7,12 @@ use wry::WebViewBuilderExtWindows;
 use wry::{WebView, WebViewBuilder};
 
 use crate::http::app_handler;
-use crate::ipc::IPCMessage;
+use crate::ipc::IPCSenderUI;
 
 use super::event::{EventRunner, EventSystem};
 
 pub struct App {
-    pub webview_sender: mpsc::Sender<IPCMessage>,
+    pub webview_sender: IPCSenderUI,
 
     _webview: WebView,
     runner: EventRunner,

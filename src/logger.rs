@@ -1,5 +1,4 @@
 use std::io;
-use std::sync::mpsc;
 
 use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::fmt::writer::MakeWriterExt;
@@ -7,13 +6,13 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, fmt};
 
-use crate::ipc::IPCMessage;
+use crate::ipc::IPCSenderUI;
 
 mod ansi;
 
 #[derive(Clone)]
 struct ChannelWriter {
-    tx: mpsc::Sender<IPCMessage>,
+    tx: IPCSenderUI,
 }
 
 impl io::Write for ChannelWriter {
@@ -21,9 +20,7 @@ impl io::Write for ChannelWriter {
         let msg = str::from_utf8(buf)
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid utf-8"))?;
 
-        let _ = self
-            .tx
-            .send(IPCMessage::from(("log", ansi::ansi_to_html(msg))));
+        self.tx.send_msg("log", ansi::ansi_to_html(msg));
 
         Ok(buf.len())
     }
@@ -41,7 +38,7 @@ impl<'a> MakeWriter<'a> for ChannelWriter {
     }
 }
 
-pub(super) fn init_logging(tx: mpsc::Sender<IPCMessage>) {
+pub(super) fn init_logging(tx: IPCSenderUI) {
     let writer = std::io::stdout.and(ChannelWriter { tx });
 
     tracing_subscriber::registry()

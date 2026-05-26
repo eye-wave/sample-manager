@@ -2,11 +2,11 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::Path;
-use std::sync::{Arc, mpsc};
+use std::sync::Arc;
 
 use crate::LogErrorExt;
 use crate::audio::AudioPlayer;
-use crate::ipc::IPCMessage;
+use crate::ipc::IPCSenderUI;
 use crate::plugins::{PluginId, PluginInfo, PluginRuntimeHandle};
 use crate::state::config::{ConfigData, ConfigDataPatch};
 
@@ -36,7 +36,7 @@ pub enum StateError {
 }
 
 impl AppState {
-    pub fn new(webview_sender: mpsc::Sender<IPCMessage>) -> Self {
+    pub fn new(webview_sender: IPCSenderUI) -> Self {
         let favorite_samples: HashSet<_> = fs::read_to_string(app_paths::favorites_file())
             .map(|f| f.lines().map(|l| l.into()).collect())
             .unwrap_or_default();

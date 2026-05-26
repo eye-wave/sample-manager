@@ -1,11 +1,11 @@
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex, mpsc};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
 use atomic_float::AtomicF32;
 
 use crate::LogErrorExt;
-use crate::ipc::IPCMessage;
+use crate::ipc::IPCSenderUI;
 
 bitflags::bitflags! {
     #[derive(Clone, Copy)]
@@ -46,7 +46,7 @@ impl PlaybackState {
 pub struct SharedAudioState {
     flags: AtomicU8,
 
-    pub webview_sender: mpsc::Sender<IPCMessage>,
+    pub webview_sender: IPCSenderUI,
 
     pub sample_rate: AtomicU32,
     pub estimated_audio_len: AtomicU32,
@@ -58,7 +58,7 @@ pub struct SharedAudioState {
 }
 
 impl SharedAudioState {
-    pub fn new(webview_sender: mpsc::Sender<IPCMessage>) -> Arc<Self> {
+    pub fn new(webview_sender: IPCSenderUI) -> Arc<Self> {
         Arc::new(Self {
             webview_sender,
             flags: AtomicU8::new(PlayerFlags::PLAYING.bits()),

@@ -8,7 +8,6 @@ use ringbuf::wrap::caching::Caching;
 use ringbuf::{HeapRb, SharedRb, storage::Heap, traits::Split};
 
 use crate::LogErrorExt;
-use crate::ipc::IPCMessage;
 
 use super::handle::{PlayerFlags, SharedAudioState};
 
@@ -141,8 +140,6 @@ fn audio_loop<S>(
         shared_state.set_state(PlayerFlags::STOPPED);
         shared_state.clear_flag(PlayerFlags::DRAINING);
 
-        let _ = shared_state
-            .webview_sender
-            .send(IPCMessage::from(("a-eof", "")));
+        shared_state.webview_sender.send_str("a-eof", "");
     }
 }

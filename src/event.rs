@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::rc::Rc;
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc;
 use std::sync::{Arc, RwLock};
 
 use tao::window::ResizeDirection;
@@ -8,18 +8,20 @@ use tao::{event_loop::EventLoopBuilder, window::Window};
 use wry::WebView;
 
 use crate::LogErrorExt;
-use crate::ipc::{IPC_ID_BASE, IPCBody, IPCCommand, IPCMessage, commands_iter, ipc_strip_cmd_id};
+use crate::ipc::{
+    IPC_ID_BASE, IPCBody, IPCCommand, IPCMessage, IPCSenderUI, commands_iter, ipc_strip_cmd_id,
+};
 use crate::state::AppState;
 
 pub struct EventSystem {
-    pub webview_tx: Sender<IPCMessage>,
+    pub webview_tx: IPCSenderUI,
     event_loop: EventLoopProxy,
     pub app_state: Arc<RwLock<AppState>>,
     ipc_commands: Vec<&'static dyn IPCCommand>,
 }
 
 pub struct EventRunner {
-    webview_rx: Receiver<IPCMessage>,
+    webview_rx: mpsc::Receiver<IPCMessage>,
     event_loop: EventLoop,
     window_handle: Option<Arc<Window>>,
 }
@@ -35,6 +37,7 @@ pub(super) enum LoopEvent {
 impl EventSystem {
     pub fn build() -> (EventRunner, Self) {
         let (tx, rx) = mpsc::channel();
+        let tx = IPCSenderUI(tx);
 
         let event_loop = EventLoopBuilder::<LoopEvent>::with_user_event().build();
         let proxy = event_loop.create_proxy();

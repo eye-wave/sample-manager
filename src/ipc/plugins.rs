@@ -5,7 +5,7 @@ use plugin_wire::sample::SampleSerialize;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::ipc::{IPCBody, IPCError, IPCMessage, IPCResponse, IntoIPCResponse, ok};
+use crate::ipc::{IPCBody, IPCError, IPCResponse, IntoIPCResponse, ok};
 use crate::plugins::PluginId;
 use crate::state::{app_paths, samples::SearchRequest};
 use crate::{AStr, LogErrorExt};
@@ -41,9 +41,7 @@ fn get_all_plugins_info(body: IPCBody) -> IPCResponse {
         let plugins_info = state.plugin_handle.get_all_plugins_info(|_| {});
 
         let payload = serde_json::to_string(&plugins_info)?;
-        let _ = body
-            .webview_sender
-            .send(IPCMessage::from(("plugin-info", payload)));
+        body.webview_sender.send_msg("plugin-info", payload);
     });
 
     ok()
@@ -97,9 +95,8 @@ fn plugin_search_for_sample(body: IPCBody) -> IPCResponse {
             let count = files.len();
             let res = SearchResult { files, count };
 
-            let _ = body
-                .webview_sender
-                .send(IPCMessage::from(("search", serde_json::to_string(&res)?)));
+            body.webview_sender
+                .send_msg("search", serde_json::to_string(&res)?);
 
             Ok(())
         },

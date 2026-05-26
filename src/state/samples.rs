@@ -1,14 +1,13 @@
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::Sender;
 use std::sync::{Arc, RwLock};
 
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use plugin_wire::sample::{SampleMetadata, SampleSerialize, SampleSource};
 
-use crate::ipc::IPCMessage;
+use crate::ipc::IPCSenderUI;
 use crate::state::AppState;
-use crate::{AStr, LogErrorExt, SyncError};
+use crate::{AStr, SyncError};
 
 mod data;
 mod search;
@@ -142,7 +141,7 @@ pub fn process_directories<'a>(
     dirs: impl Iterator<Item = &'a PathBuf>,
     merge: ScanMerge,
     app_state: Arc<RwLock<AppState>>,
-    sender: Sender<IPCMessage>,
+    sender: IPCSenderUI,
 ) -> Result<(), SyncError> {
     use std::time::{Duration, Instant};
 
@@ -154,12 +153,7 @@ pub fn process_directories<'a>(
 
     while let Some(current_dir) = stack.pop() {
         if time.elapsed() >= Duration::from_millis(398) {
-            sender
-                .send(IPCMessage::from((
-                    "s_tick",
-                    sample_registry.len().to_string(),
-                )))
-                .sure("Failed to send IPC Message");
+            sender.send_msg("s_tick", sample_registry.len().to_string());
 
             time = Instant::now();
         }
@@ -180,12 +174,7 @@ pub fn process_directories<'a>(
         }
     }
 
-    sender
-        .send(IPCMessage::from((
-            "s_tick",
-            sample_registry.len().to_string(),
-        )))
-        .sure("Failed to send IPC Message");
+    sender.send_msg("s_tick", sample_registry.len().to_string());
 
     tracing::info!("scan completed");
 

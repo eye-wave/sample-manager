@@ -173,7 +173,7 @@ impl PluginRunner {
                             WaveformData::Bytes("wav", &bytes),
                             ffpaths.flatten(),
                         )?
-                        .send_to_webview(web_sender)?;
+                        .send_to_webview(web_sender);
 
                         fs::write(&save_path, bytes)?;
                         Ok(save_path)

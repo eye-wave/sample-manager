@@ -87,34 +87,35 @@ pub type IPCRequestBody<'a> = (usize, u32, &'a str);
 pub type IPCResponse = Result<std::borrow::Cow<'static, [u8]>, Box<dyn std::error::Error>>;
 
 #[derive(Clone)]
+pub struct IPCSenderUI(pub(super) mpsc::Sender<IPCMessage>);
+
+impl IPCSenderUI {
+    pub fn send_str(&self, id: &'static str, payload: &'static str) {
+        let _ = self.0.send(IPCMessage {
+            id,
+            payload: Cow::Borrowed(payload),
+        });
+    }
+
+    pub fn send_msg(&self, id: &'static str, payload: String) {
+        let _ = self.0.send(IPCMessage {
+            id,
+            payload: Cow::Owned(payload),
+        });
+    }
+}
+
+#[derive(Clone)]
 pub struct IPCBody {
     pub req: AStr,
     pub window_handle: Arc<Window>,
     pub app_state: Arc<RwLock<AppState>>,
-    pub webview_sender: mpsc::Sender<IPCMessage>,
+    pub webview_sender: IPCSenderUI,
 }
 
 pub struct IPCMessage {
     pub id: &'static str,
     pub payload: Cow<'static, str>,
-}
-
-impl From<(&'static str, &'static str)> for IPCMessage {
-    fn from((id, payload): (&'static str, &'static str)) -> Self {
-        Self {
-            id,
-            payload: Cow::Borrowed(payload),
-        }
-    }
-}
-
-impl From<(&'static str, String)> for IPCMessage {
-    fn from((id, payload): (&'static str, String)) -> Self {
-        Self {
-            id,
-            payload: Cow::Owned(payload),
-        }
-    }
 }
 
 pub trait IPCCommand: Send + Sync {

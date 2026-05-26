@@ -5,7 +5,7 @@ use std::sync::mpsc::{self};
 use plugin_wire::{WireEntry, sample::SampleSerialize};
 use wasmtime::{Instance, TypedFunc};
 
-use crate::ipc::IPCMessage;
+use crate::ipc::IPCSenderUI;
 use crate::state::{config::FFPaths, samples::SearchRequest};
 use crate::{AStr, LogErrorExt};
 
@@ -60,7 +60,7 @@ pub enum PluginRunnerCommand {
         url: String,
         reply_to: mpsc::SyncSender<Result<PathBuf, String>>,
         ffpaths: FFPaths,
-        web_sender: mpsc::Sender<IPCMessage>,
+        web_sender: IPCSenderUI,
     },
     SearchLocalRegistry {
         req: SearchRequest,
@@ -134,7 +134,7 @@ impl PluginRuntimeHandle {
         plugin_id: PluginId,
         url: &str,
         ffpaths: FFPaths,
-        web_sender: mpsc::Sender<IPCMessage>,
+        web_sender: IPCSenderUI,
     ) -> Result<PathBuf, String> {
         let (tx, rx) = mpsc::sync_channel(1);
 

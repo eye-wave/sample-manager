@@ -1,10 +1,9 @@
 use std::io::Write;
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
 
 use image::{ImageBuffer, Rgb};
 
-use crate::ipc::IPCMessage;
+use crate::ipc::IPCSenderUI;
 use crate::plugins::PluginId;
 use crate::state::config::FFPathsRef;
 use crate::state::samples::utils::{hash_path, thumbnail_path, thumbnail_uri};
@@ -156,17 +155,10 @@ pub enum DrawAudioMessage {
 }
 
 impl DrawAudioMessage {
-    pub fn send_to_webview(
-        &self,
-        sender: mpsc::Sender<IPCMessage>,
-    ) -> Result<(), mpsc::SendError<IPCMessage>> {
+    pub fn send_to_webview(&self, sender: IPCSenderUI) {
         match self {
-            DrawAudioMessage::FFmpegMissing => {
-                sender.send(IPCMessage::from(("read_audio", "ff-missing")))
-            }
-            DrawAudioMessage::Result { uri } => {
-                sender.send(IPCMessage::from(("read_audio", uri.clone())))
-            }
+            DrawAudioMessage::FFmpegMissing => sender.send_str("read_audio", "ff-missing"),
+            DrawAudioMessage::Result { uri } => sender.send_msg("read_audio", uri.clone()),
         }
     }
 }
