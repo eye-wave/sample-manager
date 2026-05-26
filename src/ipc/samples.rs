@@ -72,10 +72,9 @@ fn search_for_sample(body: IPCBody) -> IPCResponse {
     std::thread::spawn(move || {
         let state = body.app_state.read().unwrap();
         if let Ok(payload) = search_local(&req, &state) {
-            let _ = body.webview_sender.send(IPCMessage {
-                id: "search",
-                payload,
-            });
+            let _ = body
+                .webview_sender
+                .send(IPCMessage::from(("search", payload)));
         }
     });
 
@@ -89,10 +88,10 @@ fn add_sample_to_fav(body: IPCBody) -> IPCResponse {
         state.add_sample_to_fav(&body.req);
 
         body.webview_sender
-            .send(super::IPCMessage {
-                id: SET_FAV_ID,
-                payload: "1".to_string() + &body.req,
-            })
+            .send(super::IPCMessage::from((
+                SET_FAV_ID,
+                "1".to_string() + &body.req,
+            )))
             .sure("Failed to send IPC message");
 
         ok()
@@ -104,10 +103,10 @@ fn remove_sample_from_fav(body: IPCBody) -> IPCResponse {
         state.remove_sample_from_fav(body.req.to_string().as_ref());
 
         body.webview_sender
-            .send(super::IPCMessage {
-                id: SET_FAV_ID,
-                payload: "0".to_string() + &body.req,
-            })
+            .send(super::IPCMessage::from((
+                SET_FAV_ID,
+                "0".to_string() + &body.req,
+            )))
             .sure("Failed to send IPC message");
 
         ok()

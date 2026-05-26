@@ -161,14 +161,12 @@ impl DrawAudioMessage {
         sender: mpsc::Sender<IPCMessage>,
     ) -> Result<(), mpsc::SendError<IPCMessage>> {
         match self {
-            DrawAudioMessage::FFmpegMissing => sender.send(IPCMessage {
-                id: "read_audio",
-                payload: "ff-missing".to_string(),
-            }),
-            DrawAudioMessage::Result { uri } => sender.send(IPCMessage {
-                id: "read_audio",
-                payload: uri.clone(),
-            }),
+            DrawAudioMessage::FFmpegMissing => {
+                sender.send(IPCMessage::from(("read_audio", "ff-missing")))
+            }
+            DrawAudioMessage::Result { uri } => {
+                sender.send(IPCMessage::from(("read_audio", uri.clone())))
+            }
         }
     }
 }

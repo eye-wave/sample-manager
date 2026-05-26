@@ -35,6 +35,7 @@ function createPreview() {
   };
 
   let path = "";
+  let currentUri = "";
 
   return {
     get path() {
@@ -54,7 +55,10 @@ function createPreview() {
       wave_thumb__.style.background = `linear-gradient(to right,transparent ${p - margin}%,var(--text-primary) ${p}%,transparent ${p + margin}%)`;
     },
     set img(uri: string | undefined) {
+      if (!uri || currentUri === uri) return;
+
       waveform__.style.maskImage = `url("${uri === "ff-missing" ? missingUri("FFMPEG couldn't be found on your system path, install it or set it manually in the app settings.") : uri}")`;
+      currentUri = uri;
     },
 
     set label(label: string) {
@@ -74,7 +78,9 @@ function createPreview() {
 export const PreviewHandler = createPreview();
 
 listen("read_audio", (uri) => {
-  PreviewHandler.img = uri;
+  if (PreviewHandler.img !== uri) {
+    PreviewHandler.img = uri;
+  }
 });
 
 listen("s_tick", (n) => (s_total__.textContent = n));

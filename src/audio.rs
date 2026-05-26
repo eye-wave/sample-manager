@@ -1,6 +1,6 @@
-use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
+use std::{path::Path, sync::mpsc};
 
 mod decode;
 mod device;
@@ -13,6 +13,7 @@ use handle::{PlayerHandle, SharedAudioState};
 pub use handle::PlaybackState;
 
 use crate::audio::handle::PlayerFlags;
+use crate::ipc::IPCMessage;
 
 pub struct AudioPlayer {
     handle: PlayerHandle,
@@ -43,8 +44,8 @@ macro_rules! with_decoder {
 }
 
 impl AudioPlayer {
-    pub fn new() -> Self {
-        let shared_state = SharedAudioState::new();
+    pub fn new(webview_sender: mpsc::Sender<IPCMessage>) -> Self {
+        let shared_state = SharedAudioState::new(webview_sender);
         let audio_handle = PlayerHandle {
             shared: shared_state.clone(),
         };
@@ -167,5 +168,16 @@ impl AudioPlayer {
 
     pub fn set_volume(&self, volume: f32) {
         self.handle.set_volume(volume)
+    }
+
+    pub fn set_looping(&self, enabled: bool) {
+        self.handle.set_looping(enabled);
+        if let Some(decoder) = &self.decoder {
+            decoder.set_loop(enabled);
+        }
+    }
+
+    pub fn is_looping(&self) -> bool {
+        self.handle.is_looping()
     }
 }

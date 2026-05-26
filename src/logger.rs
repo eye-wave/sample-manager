@@ -21,10 +21,9 @@ impl io::Write for ChannelWriter {
         let msg = str::from_utf8(buf)
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid utf-8"))?;
 
-        let _ = self.tx.send(IPCMessage {
-            id: "log",
-            payload: ansi::ansi_to_html(msg),
-        });
+        let _ = self
+            .tx
+            .send(IPCMessage::from(("log", ansi::ansi_to_html(msg))));
 
         Ok(buf.len())
     }

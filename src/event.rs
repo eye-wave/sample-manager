@@ -39,7 +39,7 @@ impl EventSystem {
         let event_loop = EventLoopBuilder::<LoopEvent>::with_user_event().build();
         let proxy = event_loop.create_proxy();
 
-        let app_state = AppState::new();
+        let app_state = AppState::new(tx.clone());
 
         (
             EventRunner {

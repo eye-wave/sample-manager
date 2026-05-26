@@ -1,10 +1,11 @@
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, mpsc};
 use std::time::Duration;
 
 use atomic_float::AtomicF32;
 
 use crate::LogErrorExt;
+use crate::ipc::IPCMessage;
 
 bitflags::bitflags! {
     #[derive(Clone, Copy)]
@@ -15,6 +16,7 @@ bitflags::bitflags! {
         const SEEK_PENDING = 1 << 3;
         const FLUSHING     = 1 << 4;
         const DRAINING     = 1 << 5;
+        const LOOP         = 1 << 6;
     }
 }
 
@@ -44,6 +46,8 @@ impl PlaybackState {
 pub struct SharedAudioState {
     flags: AtomicU8,
 
+    pub webview_sender: mpsc::Sender<IPCMessage>,
+
     pub sample_rate: AtomicU32,
     pub estimated_audio_len: AtomicU32,
     pub samples_played: AtomicU64,
@@ -54,8 +58,9 @@ pub struct SharedAudioState {
 }
 
 impl SharedAudioState {
-    pub fn new() -> Arc<Self> {
+    pub fn new(webview_sender: mpsc::Sender<IPCMessage>) -> Arc<Self> {
         Arc::new(Self {
+            webview_sender,
             flags: AtomicU8::new(PlayerFlags::PLAYING.bits()),
             sample_rate: AtomicU32::new(44100),
             estimated_audio_len: AtomicU32::new(0),
@@ -151,9 +156,16 @@ impl PlayerHandle {
         }
 
         let sample_rate = self.shared.sample_rate.load(Ordering::Relaxed) as u64;
-        let played_ms = (played * 1000) / sample_rate;
+        let len_samples = (len_ms as u64 * sample_rate) / 1000;
+        let looping = self.shared.load_flags().contains(PlayerFlags::LOOP);
 
-        (played_ms as f64 / len_ms as f64).clamp(0.0, 1.0)
+        let pos_in_loop = if looping {
+            played % len_samples
+        } else {
+            played
+        };
+
+        (pos_in_loop as f64 / len_samples as f64).clamp(0.0, 1.0)
     }
 
     pub fn position_pretty(&self) -> String {
@@ -182,6 +194,18 @@ impl PlayerHandle {
         self.shared
             .volume
             .store(volume.clamp(0.0, 2.0), Ordering::Release);
+    }
+
+    pub fn set_looping(&self, enabled: bool) {
+        if enabled {
+            self.shared.set_flag(PlayerFlags::LOOP);
+        } else {
+            self.shared.clear_flag(PlayerFlags::LOOP);
+        }
+    }
+
+    pub fn is_looping(&self) -> bool {
+        self.shared.load_flags().contains(PlayerFlags::LOOP)
     }
 }
 

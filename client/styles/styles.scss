@@ -739,6 +739,14 @@ input::-webkit-inner-spin-button {
   flex-shrink: 0;
 }
 
+#playback_mode__ {
+  cursor: pointer;
+
+  &:hover {
+    color: var(--text-muted)
+  }
+}
+
 .bb {
   &-item {
     font-size: 10px;

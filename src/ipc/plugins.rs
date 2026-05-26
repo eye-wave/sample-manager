@@ -41,10 +41,9 @@ fn get_all_plugins_info(body: IPCBody) -> IPCResponse {
         let plugins_info = state.plugin_handle.get_all_plugins_info(|_| {});
 
         let payload = serde_json::to_string(&plugins_info)?;
-        let _ = body.webview_sender.send(IPCMessage {
-            id: "plugin-info",
-            payload,
-        });
+        let _ = body
+            .webview_sender
+            .send(IPCMessage::from(("plugin-info", payload)));
     });
 
     ok()
@@ -98,10 +97,9 @@ fn plugin_search_for_sample(body: IPCBody) -> IPCResponse {
             let count = files.len();
             let res = SearchResult { files, count };
 
-            let _ = body.webview_sender.send(IPCMessage {
-                id: "search",
-                payload: serde_json::to_string(&res)?,
-            });
+            let _ = body
+                .webview_sender
+                .send(IPCMessage::from(("search", serde_json::to_string(&res)?)));
 
             Ok(())
         },

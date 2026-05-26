@@ -96,7 +96,25 @@ pub struct IPCBody {
 
 pub struct IPCMessage {
     pub id: &'static str,
-    pub payload: String,
+    pub payload: Cow<'static, str>,
+}
+
+impl From<(&'static str, &'static str)> for IPCMessage {
+    fn from((id, payload): (&'static str, &'static str)) -> Self {
+        Self {
+            id,
+            payload: Cow::Borrowed(payload),
+        }
+    }
+}
+
+impl From<(&'static str, String)> for IPCMessage {
+    fn from((id, payload): (&'static str, String)) -> Self {
+        Self {
+            id,
+            payload: Cow::Owned(payload),
+        }
+    }
 }
 
 pub trait IPCCommand: Send + Sync {
@@ -226,12 +244,23 @@ mod test {
             })
             .collect();
 
-        contents += "\nexport type IPC_ID = \n";
-        contents += &commands_iter()
-            .enumerate()
-            .map(|(i, _)| (i + IPC_ID_BASE).to_string())
-            .intersperse("|".into())
-            .collect::<String>();
+        let max_id = commands_iter().count() + IPC_ID_BASE - 1;
+
+        contents += &format!(
+            r#"
+type Enumerate<
+    N extends number,
+    Acc extends number[] = []
+> = Acc['length'] extends N
+    ? Acc[number]
+    : Enumerate<N, [...Acc, Acc['length']]>;
+
+type Range<F extends number, T extends number> =
+    Exclude<Enumerate<T>, Enumerate<F>> | T;
+
+export type IPC_ID = Range<{}, {}>;"#,
+            IPC_ID_BASE, max_id
+        );
 
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("client/src/gen");
 

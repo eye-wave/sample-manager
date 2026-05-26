@@ -155,10 +155,10 @@ pub fn process_directories<'a>(
     while let Some(current_dir) = stack.pop() {
         if time.elapsed() >= Duration::from_millis(398) {
             sender
-                .send(IPCMessage {
-                    id: "s_tick",
-                    payload: sample_registry.len().to_string(),
-                })
+                .send(IPCMessage::from((
+                    "s_tick",
+                    sample_registry.len().to_string(),
+                )))
                 .sure("Failed to send IPC Message");
 
             time = Instant::now();
@@ -181,10 +181,10 @@ pub fn process_directories<'a>(
     }
 
     sender
-        .send(IPCMessage {
-            id: "s_tick",
-            payload: sample_registry.len().to_string(),
-        })
+        .send(IPCMessage::from((
+            "s_tick",
+            sample_registry.len().to_string(),
+        )))
         .sure("Failed to send IPC Message");
 
     tracing::info!("scan completed");

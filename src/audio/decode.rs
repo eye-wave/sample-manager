@@ -51,6 +51,7 @@ pub enum DecodeCommand {
     Seek { millis: u32 },
     Stop,
     FlushAndSignal,
+    SetLoop { enabled: bool },
 }
 
 pub struct AudioDecoderHandle {
@@ -101,6 +102,10 @@ impl AudioDecoderHandle {
     pub fn flush_and_signal(&self) {
         let _ = self.tx.send(DecodeCommand::FlushAndSignal);
     }
+
+    pub fn set_loop(&self, enabled: bool) {
+        let _ = self.tx.send(DecodeCommand::SetLoop { enabled });
+    }
 }
 
 fn decode_thread_loop(
@@ -109,12 +114,14 @@ fn decode_thread_loop(
     audio_state: Arc<SharedAudioState>,
     stream_config: SupportedStreamConfig,
 ) -> Result<(), DecodeError> {
-    let mut current = None;
+    let mut current: Option<DecoderState> = None;
+    let mut current_path: Option<PathBuf> = None;
 
     loop {
         while let Ok(cmd) = rx.try_recv() {
             match cmd {
                 DecodeCommand::Start { path } => {
+                    current_path = Some(path.clone());
                     audio_state.abort.store(false, Ordering::Release);
 
                     let signal_ready = || audio_state.set_ready();
@@ -167,6 +174,18 @@ fn decode_thread_loop(
                     audio_state.set_flag(PlayerFlags::FLUSHING);
                     audio_state.set_ready();
                 }
+
+                DecodeCommand::SetLoop { enabled } => {
+                    if enabled {
+                        audio_state.set_flag(PlayerFlags::LOOP);
+                    } else {
+                        audio_state.clear_flag(PlayerFlags::LOOP);
+
+                        audio_state.set_flag(PlayerFlags::FLUSHING);
+                        std::thread::sleep(Duration::from_millis(20));
+                        audio_state.clear_flag(PlayerFlags::FLUSHING);
+                    }
+                }
             }
         }
 
@@ -194,7 +213,20 @@ fn decode_thread_loop(
 
         if let Err(e) = decode_one_packet(decoder_state, &mut rb_prod) {
             if let DecodeError::EndOfFile = e {
-                audio_state.set_state(PlayerFlags::DRAINING);
+                let flags = audio_state.load_flags();
+                if flags.contains(PlayerFlags::LOOP) {
+                    if let Some(path) = &current_path {
+                        match init_decoder(path, audio_state.clone(), &stream_config) {
+                            Ok(decoder) => {
+                                current = Some(decoder);
+                                continue;
+                            }
+                            Err(e) => tracing::error!(error = %e, "loop restart failed"),
+                        }
+                    }
+                } else {
+                    audio_state.set_flag(PlayerFlags::DRAINING);
+                }
             } else {
                 tracing::error!(error = %e, "decode failed");
             }

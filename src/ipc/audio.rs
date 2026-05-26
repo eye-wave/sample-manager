@@ -82,6 +82,21 @@ fn set_volume(body: IPCBody) -> IPCResponse {
     })
 }
 
+fn get_looping(body: IPCBody) -> IPCResponse {
+    crate::with_state!(body, state, {
+        (state.audio_player.is_looping() as u8).to_string().finish()
+    })
+}
+
+fn set_looping(body: IPCBody) -> IPCResponse {
+    crate::with_state!(body, state, {
+        let looping = body.req.chars().next().map(|c| c == '1').unwrap_or(false);
+        state.audio_player.set_looping(looping);
+
+        ok()
+    })
+}
+
 crate::ipc_commands! {
     IPC_AUDIO = [
         get_audio_position_pretty,
@@ -92,6 +107,8 @@ crate::ipc_commands! {
         player_pause,
         player_stop,
         player_seek,
+        get_looping,
+        set_looping,
         get_volume,
         set_volume
     ]

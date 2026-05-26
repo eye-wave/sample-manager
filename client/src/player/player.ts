@@ -1,9 +1,9 @@
 import { w } from "../alias";
 import * as IPC from "../gen/ipc-gen";
-import { isFocusElement } from "../helpers";
-import { invoke } from "../invoke/invoke";
+import { invoke, listen } from "../invoke/invoke";
 import { PreviewHandler } from "../preview/preview";
 import { addShortcut } from "../shortcuts";
+import { makeSlider } from "./sliders";
 
 export const PAUSED = 0 as const;
 export const PLAYING = 1 as const;
@@ -19,65 +19,82 @@ declare const pause_btn__: HTMLButtonElement;
 declare const volume_ctrl__: HTMLInputElement;
 declare const volume_txt__: HTMLSpanElement;
 
+declare const playback_mode__: HTMLSpanElement;
+
 const RESUME_ICON = `<path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/>`;
 const PAUSE_ICON = `<rect x=14 y=3 width=5 height=18 rx="1"/><rect x=5 y=3 width=5 height=18 rx="1"/>`;
 
-function createPlayerHandle() {
-  const norm = (value: number) => (3 * Math.atan(value)) / Math.PI;
-  const denorm = (value: number) => Math.tan((Math.PI * value) / 3);
+const getPlaybackMode = async () => !!+(await invoke(IPC.GET_LOOPING));
 
-  volume_ctrl__.max = norm(2.01).toPrecision(4);
+async function updatePlaybackMode(looping: boolean): Promise<boolean> {
+  playback_mode__.textContent = looping ? "Loop" : "Oneshot";
+  return looping;
+}
 
-  const setVolumeText = (value: number) => {
-    volume_txt__.textContent = `${value > 1 ? "+" : ""}${(value * 100) | 0}%`;
-    volume_txt__.style.color = value > 1 ? "var(--accent)" : "var(--text-primary)";
-  };
-
-  const setVolume = (value: number) => {
-    invoke(IPC.SET_VOLUME, value);
-    setVolumeText(value);
-  };
-
-  const syncSlider = (value: number) => {
-    volume_ctrl__.value = norm(value) as unknown as string;
-  };
-
-  invoke(IPC.GET_VOLUME).then((value) => {
-    const volume = +value;
-
-    setVolumeText(volume);
-    syncSlider(volume);
+getPlaybackMode().then(updatePlaybackMode);
+playback_mode__.onclick = () => {
+  getPlaybackMode().then((m) => {
+    updatePlaybackMode(!m);
+    invoke(IPC.SET_LOOPING, !m ? "1" : "0");
   });
+};
 
-  volume_ctrl__.oninput = () => {
-    setVolume(denorm(+volume_ctrl__.value));
-    volume_ctrl__.blur();
-  };
+function createPlayerHandle() {
+  const playerState = (() => {
+    let playerState: PlayerState = STOPPED;
 
-  volume_ctrl__.ondblclick = () => {
-    const defaultVolume = 1;
+    return {
+      get() {
+        return playerState;
+      },
+      set(v: PlayerState) {
+        playerState = v;
+        svg.innerHTML = v === PLAYING ? PAUSE_ICON : RESUME_ICON;
+      },
+    };
+  })();
 
-    syncSlider(defaultVolume);
-    setVolume(defaultVolume);
-  };
-
-  let playerState = 2;
   let intervalId = -1;
 
+  listen("a-eof", () => playerState.set(STOPPED));
+
+  makeSlider({
+    ctrl: volume_ctrl__,
+    txt: volume_txt__,
+    max: 2.01,
+
+    norm: (value: number) => (3 * Math.atan(value)) / Math.PI,
+    denorm: (value: number) => Math.tan((Math.PI * value) / 3),
+
+    get: () => invoke(IPC.GET_VOLUME),
+    set: (v) => invoke(IPC.SET_VOLUME, v),
+
+    format: (v) => ((+v * 100) | 0) + "%",
+    color: (v) => (v > 1 ? "var(--accent)" : "var(--text-primary)"),
+  });
+
   const svg = pause_btn__.querySelector("svg") as SVGElement;
-  svg.innerHTML = RESUME_ICON;
+  playerState.set(STOPPED);
 
   function startTicker(ms = 100) {
     if (intervalId > -1) return;
 
+    let lastPos = 0;
+
     intervalId = w.setInterval(async () => {
-      const pos = await invoke(IPC.GET_AUDIO_POSITION);
+      const pos = +(await invoke(IPC.GET_AUDIO_POSITION));
       const [fmtCur, fmtEst] = (await invoke(IPC.GET_AUDIO_POSITION_PRETTY)).split("/");
 
       time_cur__.textContent = fmtCur;
       time_est__.textContent = fmtEst;
 
-      PreviewHandler.position = +pos;
+      if (pos < lastPos - 0.05) {
+        PreviewHandler.position = 0;
+      } else {
+        PreviewHandler.position = pos;
+      }
+
+      lastPos = pos;
     }, ms);
   }
 
@@ -86,59 +103,82 @@ function createPlayerHandle() {
     intervalId = -1;
   }
 
-  async function startPlaying(path: string, name: string, fav?: boolean, tagsList?: string[]) {
-    PreviewHandler.path = path;
-    PreviewHandler.label = name;
-    PreviewHandler.img = "";
-    PreviewHandler.position = 0;
+  async function startPlaying(
+    inpath?: string,
+    name?: string,
+    fav?: boolean,
+    tagsList?: string[],
+  ) {
+    if (inpath) PreviewHandler.path = inpath;
+    if (!PreviewHandler.path) return;
 
-    // const savedPath = await invoke(IPC.PLUGIN_DOWNLOAD_FILE, {
-    //   id: "plugin-id",
-    //   url: PreviewHandler.path,
-    // });
+    const path = inpath ?? PreviewHandler.path;
+
+    if (inpath) {
+      if (name) PreviewHandler.label = name;
+      PreviewHandler.img = "";
+      PreviewHandler.position = 0;
+
+      invoke(IPC.DRAW_AUDIO_FILE, path);
+
+      const tags = tagsList ? tagsList : (await invoke(IPC.TAG_PATH, path)).split(",");
+      const isFav =
+        fav === undefined ? (await invoke(IPC.IS_SAMPLE_FAV, path)) === "true" : fav;
+
+      PreviewHandler.tags = tags;
+      PreviewHandler.fav = isFav;
+    }
 
     await invoke(IPC.PLAY_AUDIO_FILE, path).then(() => {
-      playerState = PLAYING;
-      svg.innerHTML = PAUSE_ICON;
+      playerState.set(PLAYING);
+
       startTicker();
     });
-    invoke(IPC.DRAW_AUDIO_FILE, path);
-
-    const tags = tagsList ? tagsList : (await invoke(IPC.TAG_PATH, path)).split(",");
-    const isFav = fav === undefined ? (await invoke(IPC.IS_SAMPLE_FAV, path)) === "true" : fav;
-
-    PreviewHandler.tags = tags;
-    PreviewHandler.fav = isFav;
   }
 
   function pause() {
     invoke(IPC.PLAYER_PAUSE).then(() => {
-      playerState = PAUSED;
+      playerState.set(PAUSED);
       svg.innerHTML = RESUME_ICON;
       stopTicker();
     });
   }
 
-  function resume() {
-    invoke(IPC.PLAYER_RESUME).then(() => {
-      playerState = PLAYING;
+  async function resume() {
+    await invoke(IPC.PLAYER_RESUME).then(() => {
+      playerState.set(PLAYING);
       svg.innerHTML = PAUSE_ICON;
       startTicker();
     });
   }
 
-  function togglePause() {
-    if (playerState === PAUSED) resume();
-    else if (playerState === PLAYING) pause();
+  function onClick() {
+    const state = playerState.get();
+
+    if (state === PAUSED) resume();
+    else if (state === PLAYING) pause();
+    else {
+      const p = PreviewHandler.path;
+      p && startPlaying();
+    }
   }
 
-  pause_btn__.onclick = togglePause;
+  async function seek(pos: number) {
+    const state = playerState.get();
+
+    if (state === PAUSED) await resume();
+    else if (state === STOPPED) await startPlaying();
+
+    invoke(IPC.PLAYER_SEEK, pos);
+  }
+
+  pause_btn__.onclick = onClick;
 
   addShortcut("Toggle play/pause", " ", 0, (e) => {
     if (e.target === volume_ctrl__) return;
 
     e.preventDefault();
-    togglePause();
+    onClick();
   });
 
   return {
@@ -147,10 +187,7 @@ function createPlayerHandle() {
     },
     startPlaying,
     pause,
-    seek(pos: number) {
-      if (playerState === PAUSED) resume();
-      invoke(IPC.PLAYER_SEEK, pos);
-    },
+    seek,
   };
 }
 

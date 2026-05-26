@@ -8,6 +8,7 @@ use ringbuf::wrap::caching::Caching;
 use ringbuf::{HeapRb, SharedRb, storage::Heap, traits::Split};
 
 use crate::LogErrorExt;
+use crate::ipc::IPCMessage;
 
 use super::handle::{PlayerFlags, SharedAudioState};
 
@@ -60,7 +61,9 @@ impl AudioDevice {
                 device.build_output_stream(
                     &config.config(),
                     move |data: &mut [$T], _info: &cpal::OutputCallbackInfo| {
-                        audio_loop(data, &shared_cb, $chan as u64, &mut rb_cons)
+                        assert_no_alloc::assert_no_alloc(|| {
+                            audio_loop(data, &shared_cb, $chan as u64, &mut rb_cons)
+                        })
                     },
                     |err| tracing::error!(error = %err, "cpal stream error"),
                     None,
@@ -103,19 +106,9 @@ fn audio_loop<S>(
     let flushing = f.contains(PlayerFlags::FLUSHING);
     let draining = f.contains(PlayerFlags::DRAINING);
 
-    if draining && rb_cons.is_empty() {
-        shared_state.set_state(PlayerFlags::STOPPED);
-        shared_state.clear_flag(PlayerFlags::DRAINING);
-    }
-
     if paused || flushing {
         if flushing {
             rb_cons.clear();
-
-            for s in data.iter_mut() {
-                *s = S::EQUILIBRIUM;
-            }
-            return;
         }
 
         for s in data.iter_mut() {
@@ -135,6 +128,7 @@ fn audio_loop<S>(
                 played_samples += 1;
                 S::from_sample(f * volume)
             }
+
             None => S::EQUILIBRIUM,
         };
     }
@@ -142,4 +136,13 @@ fn audio_loop<S>(
     shared_state
         .samples_played
         .fetch_add(played_samples / num_channels, Ordering::Release);
+
+    if draining && rb_cons.is_empty() {
+        shared_state.set_state(PlayerFlags::STOPPED);
+        shared_state.clear_flag(PlayerFlags::DRAINING);
+
+        let _ = shared_state
+            .webview_sender
+            .send(IPCMessage::from(("a-eof", "")));
+    }
 }
