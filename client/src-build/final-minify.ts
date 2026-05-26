@@ -116,7 +116,7 @@ function commonDictionary(html: string) {
     "textContent",
   ];
 
-  const generateId = (i: number) => "D" + i.toString(36);
+  const generateId = (i: number) => "__Dict_" + i.toString(36);
 
   let dictCode = "const ";
 
