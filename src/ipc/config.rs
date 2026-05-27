@@ -1,7 +1,11 @@
 use crate::ipc::{IPCBody, IPCResponse, IntoIPCResponse, ok};
-use crate::state::config::ConfigDataPatch;
+use crate::state::config::{AppCacheSize, ConfigDataPatch};
 use crate::state::samples::{ScanMerge, process_directories};
 use crate::{LogErrorExt, ipc_commands};
+
+fn get_app_cache_size(_: IPCBody) -> IPCResponse {
+    serde_json::to_string(&AppCacheSize::read())?.finish()
+}
 
 fn patch_config(body: IPCBody) -> IPCResponse {
     let mut is_new = false;
@@ -55,6 +59,7 @@ fn get_config_field(body: IPCBody) -> IPCResponse {
 
 ipc_commands! {
     IPC_CONFIG = [
+        get_app_cache_size,
         patch_config,
         get_config_fields,
         get_config_field

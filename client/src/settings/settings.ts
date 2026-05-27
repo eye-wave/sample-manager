@@ -4,7 +4,13 @@ import type { PluginInfo } from "@typegen/PluginInfo";
 import type { SchemaFieldWithValue } from "@typegen/SchemaFieldWithValue";
 import { d, w } from "../alias";
 import * as IPC from "../gen/ipc-gen";
-import { capitalize, updateCurrentTheme, updateTheme, updateThemeCss } from "../helpers";
+import {
+  capitalize,
+  DialogManager,
+  updateCurrentTheme,
+  updateTheme,
+  updateThemeCss,
+} from "../helpers";
 import { invoke, listen } from "../invoke/invoke";
 import { addShortcut, iterateShortcuts } from "../shortcuts";
 import { resizeHandle } from "../sidebar/resize";
@@ -22,7 +28,8 @@ declare const plugin_settings_body__: HTMLDivElement;
 declare const plugin_settings_label__: HTMLParagraphElement;
 declare const plugins_settings__: HTMLDivElement;
 declare const settings_body__: HTMLDivElement;
-declare const dial_tab_shortcuts__: HTMLDivElement;
+declare const dial_tab_shortcuts_body__: HTMLDivElement;
+declare const dial_tab_cache_body__: HTMLDivElement;
 
 function createPatch() {
   type Patch = Partial<AppConfig>;
@@ -81,7 +88,7 @@ let previewedTheme = "";
 
 conf_btn__.onclick = async () => {
   conf_btn__.blur();
-  conf_dial__.showModal();
+  DialogManager.open("conf_dial__");
   patch.flush();
 
   invoke(IPC.GET_ALL_PLUGINS_INFO);
@@ -108,7 +115,7 @@ conf_btn__.onclick = async () => {
     });
   } catch (_) {}
 
-  dial_tab_shortcuts__.innerHTML = "";
+  dial_tab_shortcuts_body__.innerHTML = "";
 
   for (const [key, val] of iterateShortcuts()) {
     const bitmask = +key.charAt(0);
@@ -120,15 +127,17 @@ conf_btn__.onclick = async () => {
 
     const kbd = keys.map((k) => /* HTML */ `<kbd>${capitalize(k)}</kbd>`).join(" + ");
 
-    dial_tab_shortcuts__.innerHTML += /* HTML */ `<div style="color:var(--text-primary)">
+    dial_tab_shortcuts_body__.innerHTML += /* HTML */ `<div style="color:var(--text-primary)">
       <span>${val}</span>${" " + kbd}
     </div>`;
   }
+
+  dial_tab_cache_body__.innerHTML = await invoke(IPC.GET_APP_CACHE_SIZE)
 };
 
 const revertAndClose = () => {
   updateCurrentTheme();
-  conf_dial__.close();
+  DialogManager.close();
 };
 
 conf_dial__.onclick = (e: MouseEvent) => {
@@ -147,14 +156,14 @@ conf_dial__.onclick = (e: MouseEvent) => {
 
 dialog_close__.onclick = () => {
   updateCurrentTheme();
-  conf_dial__.close();
+  DialogManager.close();
 };
 
-conf_reset__.onclick = () => conf_dial__.close();
+conf_reset__.onclick = () => DialogManager.close();
 conf_save__.onclick = () => {
   if (previewedTheme) updateTheme(previewedTheme);
   invoke(IPC.PATCH_CONFIG, patch.send());
-  conf_dial__.close();
+  DialogManager.close();
 };
 
 add_plugin_btn__.onclick = async () => {
@@ -167,7 +176,7 @@ add_plugin_btn__.onclick = async () => {
 addShortcut("Close settings dialog", "Escape", 0, () => {
   if (conf_dial__.open) {
     updateCurrentTheme();
-    conf_dial__.close();
+    DialogManager.close();
   }
 });
 

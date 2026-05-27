@@ -11,8 +11,28 @@ declare const list_scroll__: HTMLDivElement;
 declare const search__: HTMLInputElement;
 declare const search_tags__: HTMLInputElement;
 declare const pagination__: HTMLDivElement;
+declare const online_plugin_btn__: HTMLButtonElement;
 
 export const POOL_SIZE = 100;
+
+let isOnlineSearch = false;
+
+invoke(IPC.ANY_ONLINE_PLUGIN_LOADED).then((loaded) => {
+  if (!+loaded) return;
+
+  online_plugin_btn__.style.display = "";
+});
+
+online_plugin_btn__.onclick = () => {
+  isOnlineSearch = !isOnlineSearch;
+  if (isOnlineSearch) {
+    online_plugin_btn__.classList.remove("btn-surface");
+    online_plugin_btn__.classList.add("btn-primary");
+  } else {
+    online_plugin_btn__.classList.remove("btn-primary");
+    online_plugin_btn__.classList.add("btn-surface");
+  }
+};
 
 let lastSelected = 0;
 function onSelect(i: number, file: string) {

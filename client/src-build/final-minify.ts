@@ -9,6 +9,7 @@ async function main() {
 
   let output = file;
 
+  output = moveHeadScriptToBodyEnd(output);
   output = shortenHtmlIds(output);
 
   output = await minifyHTML(output, {
@@ -21,29 +22,26 @@ async function main() {
     collapseBooleanAttributes: true,
   });
 
-  output = moveHeadScriptToBodyEnd(output);
-
-  output = output.replace("\n/*$vite$:1*/", "").replace(" crossorigin type=module", "");
   output = commonDictionary(output);
+  output = output
+    .replace("\n/*$vite$:1*/", "")
+    .replaceAll('crossorigin=""', "")
+    .replaceAll("type=module", "");
+
   output = await minifyInlineScripts(output);
 
   await writeFile("dist/index.html", output);
 }
 
 function moveHeadScriptToBodyEnd(html: string) {
-  const scriptMatch = html.match(
-    /<head[^>]*>[\s\S]*?<script[\s\S]*?<\/script>[\s\S]*?<\/head>/i,
-  );
-  if (!scriptMatch) return html;
+  const $ = load(html);
 
-  const headBlock = scriptMatch[0];
+  const script = $("script").first();
+  script.remove();
 
-  const scriptTagMatch = headBlock.match(/<script[\s\S]*?<\/script>/i);
-  if (!scriptTagMatch) return html;
+  $("body").append(script);
 
-  const scriptTag = scriptTagMatch[0];
-  const withoutScript = html.replace(scriptTag, "");
-  return withoutScript.replace(/<\/body>/i, `${scriptTag}</body>`);
+  return $.html();
 }
 
 export const idFactory = (
@@ -82,7 +80,14 @@ function shortenHtmlIds(html: string): string {
   let output = html;
 
   for (const [oldId, newId] of map) {
-    output = output.replaceAll(oldId, newId);
+    let ref = 0
+
+    output = output.replaceAll(oldId, () => { return ++ref, newId });
+
+    if ( ref === 1 ) {
+      console.warn(`Element ${oldId} is unused.`)
+      output = output.replaceAll(`id="${newId}"`, "")
+    }
   }
 
   return output;
@@ -134,23 +139,24 @@ function commonDictionary(html: string) {
 
   dictCode = dictCode.replace(/,$/, ";");
 
-  html = html.replace("<script>", "<script>" + dictCode);
+  html = html.replace(/<script[^>]*>/, "<script>" + dictCode);
 
   return html;
 }
 
 export async function minifyInlineScripts(html: string): Promise<string> {
-  const scriptRegex = /<script\b[^>]*>([\s\S]*?)<\/script>/gi;
+  const $ = load(html);
 
-  const matches = [...html.matchAll(scriptRegex)];
+  const scripts = $("script");
 
-  for (const match of matches) {
-    const fullTag = match[0];
-    const jsCode = match[1];
+  for (let i = 0; i < scripts.length; i++) {
+    const el = scripts[i];
+    const script = $(el);
 
-    if (!jsCode.trim()) continue;
+    const code = script.html();
+    if (!code || !code.trim()) continue;
 
-    const result = await minifyJS(jsCode, {
+    const result = await minifyJS(code, {
       compress: true,
       mangle: {
         toplevel: true,
@@ -159,8 +165,8 @@ export async function minifyInlineScripts(html: string): Promise<string> {
 
     if (!result.code) continue;
 
-    html = html.replace(fullTag, fullTag.replace(jsCode, result.code));
+    script.html(result.code);
   }
 
-  return html;
+  return $.html();
 }

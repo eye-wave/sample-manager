@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use ts_rs::TS;
 
 use serde::ser::Error;
 use serde::{Deserialize, Serialize};
@@ -11,8 +12,8 @@ mod cache;
 mod color;
 mod theme;
 
+pub use cache::AppCacheSize;
 pub use theme::Theme;
-use ts_rs::TS;
 
 use crate::schema::{SchemaFieldOptions, SchemaFieldWithValue};
 use crate::state::config::theme::list_themes;

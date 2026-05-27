@@ -10,6 +10,20 @@ use crate::plugins::PluginId;
 use crate::state::{app_paths, samples::SearchRequest};
 use crate::{AStr, LogErrorExt};
 
+fn any_online_plugin_loaded(body: IPCBody) -> IPCResponse {
+    crate::with_state!(body, state, {
+        ((state
+            .plugin_handle
+            .get_all_plugins_info(|_| {})
+            .iter()
+            .filter(|p| p.capabilities.network)
+            .count()
+            > 0) as u8)
+            .to_string()
+            .finish()
+    })
+}
+
 fn add_plugin(body: IPCBody) -> IPCResponse {
     crate::with_state_mut!(body, state, {
         let path = PathBuf::from(body.req.to_string());
@@ -158,6 +172,7 @@ fn get_plugin_paths(body: IPCBody) -> IPCResponse {
 
 crate::ipc_commands! {
     IPC_PLUGINS = [
+        any_online_plugin_loaded,
         add_plugin,
         disable_plugin,
         get_all_plugins_info,

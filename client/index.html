@@ -40,8 +40,6 @@
           </button>
         </div>
 
-        <load src="./hello.html" />
-
         <button id="conf_btn__" class="topbar-btn"><load src="assets/icons/settings.svg" />Settings</button>
 
         <!-- Settings -->
@@ -65,6 +63,7 @@
                   <button class="btn btn-surface" data-target="dial_tab_pref__">Preferences</button>
                   <button class="btn btn-surface" data-target="dial_tab_plug__">Plugins</button>
                   <button class="btn btn-surface" data-target="dial_tab_shortcuts__">Shortcuts</button>
+                  <button class="btn btn-surface" data-target="dial_tab_cache">Cache</button>
                 </div>
 
                 <div style="display:contents" id="dial_tab_pref__">
@@ -85,6 +84,12 @@
 
                 <div style="display:none" id="dial_tab_shortcuts__">
                   <p class="section-label">Shortcuts</p>
+                  <div id="dial_tab_shortcuts_body__"></div>
+                </div>
+
+                <div style="display:none" id="dial_tab_cache">
+                  <p class="section-label">App cache</p>
+                  <div id="dial_tab_cache_body__"></div>
                 </div>
               </div>
 
@@ -192,7 +197,9 @@
       </div>
 
       <!-- Terminal -->
-      <pre id="terminal_window__" style="display:none"></pre>
+      <dialog id="terminal_window__">
+        <pre id="terminal_body__"></pre>
+      </dialog>
     </div>
   </body>
 </html>

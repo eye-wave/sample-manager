@@ -1,4 +1,4 @@
-import { d } from "./alias";
+import { d, w } from "./alias";
 import * as IPC from "./gen/ipc-gen";
 import { invoke } from "./invoke/invoke";
 
@@ -108,3 +108,30 @@ export function capitalize(str: string) {
 export function startDrag(path: string) {
   invoke(IPC.START_DRAG_FILE, path);
 }
+
+export const DialogManager = (() => {
+  const ids: string[] = [];
+
+  let current: null | string = null;
+
+  // @ts-expect-error
+  const dial = (id = current): HTMLDialogElement | null => w?.[id] as HTMLDialogElement;
+
+  return {
+    close() {
+      ids.forEach((id) => dial(id)?.close());
+      current = null;
+    },
+    open(id: string) {
+      if (current !== null && current !== id) return false;
+
+      const d = dial(id);
+      if (!d) return;
+
+      current = id;
+      if (!ids.includes(id)) ids.push(id);
+      !d.open && d.showModal();
+      return d.open;
+    },
+  };
+})();
