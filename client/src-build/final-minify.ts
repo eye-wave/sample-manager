@@ -46,18 +46,19 @@ function moveHeadScriptToBodyEnd(html: string) {
   return withoutScript.replace(/<\/body>/i, `${scriptTag}</body>`);
 }
 
-export const idFactory = (prefix: string) => {
-  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
+export const idFactory = (
+  prefix: string,
+  alphabet = "abcdefghijklmnopqrstuvwxyz0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+) => {
   let count = 0;
 
-  return () => {
-    let n = count++;
+  return (i?: number) => {
+    let n = i ?? count++;
 
     let result = "";
     while (n >= 0) {
-      result = alphabet[n % 63] + result;
-      n = Math.floor(n / 63) - 1;
+      result = alphabet[n % alphabet.length] + result;
+      n = Math.floor(n / alphabet.length) - 1;
     }
 
     return prefix + result;
@@ -67,24 +68,21 @@ export const idFactory = (prefix: string) => {
 function shortenHtmlIds(html: string): string {
   const $ = load(html);
 
-  const gen = idFactory("x");
+  const gen = idFactory("X", "abcdefghijklmnopqrstuvwxyz0123456789_");
   const map = new Map<string, string>();
 
   $("[id]").each((_, el) => {
     const oldId = $(el).attr("id");
-    if (oldId?.endsWith("__")) {
-      if (!map.has(oldId)) {
-        map.set(oldId, gen());
-      }
-    }
+    if (!oldId?.endsWith("__")) return;
+    if (map.has(oldId)) return;
+
+    map.set(oldId, gen());
   });
 
   let output = html;
 
   for (const [oldId, newId] of map) {
-    const escaped = oldId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(escaped, "g");
-    output = output.replace(re, newId);
+    output = output.replaceAll(oldId, newId);
   }
 
   return output;
@@ -116,12 +114,12 @@ function commonDictionary(html: string) {
     "textContent",
   ];
 
-  const generateId = (i: number) => "__Dict_" + i.toString(36);
+  const gen = idFactory("__DICT__");
 
   let dictCode = "const ";
 
   keywords.forEach((k, i) => {
-    const id = generateId(i);
+    const id = gen(i);
 
     const r1 = new RegExp(`\\?\\.${k}`, "g");
     const r2 = new RegExp(`\\.${k}`, "g");

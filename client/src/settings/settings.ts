@@ -158,7 +158,7 @@ conf_save__.onclick = () => {
 };
 
 add_plugin_btn__.onclick = async () => {
-  const opt: PickFileOptions = { filters: ["*.zip"], label: "Zipped plugin files" };
+  const opt: PickFileOptions = { filters: ["*.zip"], label: "*.zip zipped plugin files" };
 
   const path = await invoke(IPC.PICK_FILE, opt);
   if (!path) return;

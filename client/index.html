@@ -25,12 +25,22 @@
       <div class="topbar">
         <div class="topbar-logo"><span>S</span>ampleVault</div>
 
+        <button class="btn btn-surface" id="online_plugin_btn__" style="display:none">
+          <load src="assets/icons/online.svg" />
+        </button>
+
         <div class="search-wrap">
           <load src="assets/icons/search.svg" />
 
           <div id="search_tags__"></div>
           <input id="search__" placeholder="Search samples, tags, packs…" autocomplete="off" />
+
+          <button class="" id="search_filter_btn__">
+            <load src="assets/icons/search-filter.svg" />
+          </button>
         </div>
+
+        <load src="./hello.html" />
 
         <button id="conf_btn__" class="topbar-btn"><load src="assets/icons/settings.svg" />Settings</button>
 
@@ -157,7 +167,7 @@
               ></svg>
             </button>
             <span id="time_est__">00:00</span>
-            <div style="flex: 1; display: flex; align-items: center; gap: 8px">
+            <div class="full-flex">
               <input
                 class="volume"
                 type="range"

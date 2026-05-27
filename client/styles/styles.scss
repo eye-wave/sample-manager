@@ -75,6 +75,12 @@
     border-color 0.15s;
 }
 
+.full-flex {
+  flex:1;
+  gap:8px;
+  @extend %flex-center;
+}
+
 // --- Mixins -------------------------------------------------------------------
 
 @mixin form-input-base {

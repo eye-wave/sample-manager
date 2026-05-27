@@ -7,6 +7,7 @@ use serde::ser::Error;
 use serde::{Deserialize, Serialize};
 use struct_patch::Patch;
 
+mod cache;
 mod color;
 mod theme;
 
