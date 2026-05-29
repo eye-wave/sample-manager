@@ -9,3 +9,5 @@ function toggle() {
 addShortcut("Toggle debug window", "t", 0b110, toggle);
 
 listen("log", (e) => (terminal_body__.innerHTML += e));
+
+terminal_close__.onclick = DialogManager.close;

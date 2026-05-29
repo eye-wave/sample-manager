@@ -1174,12 +1174,8 @@ dialog {
 // --- Debug terminal -----------------------------------------------------------
 
 #terminal_body__ {
-  position: fixed;
-  top: 5vh;
-  left: 5vw;
   background: #000000bb;
   color: #ccc;
-  width: 90vw;
   height: 90vh;
   border-radius: var(--radius);
   padding: 16px;
@@ -1187,7 +1183,6 @@ dialog {
   word-break: break-word;
   overflow-wrap: anywhere;
   overflow-y: scroll;
-  z-index: 3;
 
   &,
   & span {
