@@ -104,7 +104,7 @@ impl From<&FsSample> for SampleSerialize {
             name: value
                 .path
                 .file_name()
-                .unwrap()
+                .unwrap_or_default()
                 .to_string_lossy()
                 .to_string(),
             path: Some(value.path.to_string_lossy().to_string()),
