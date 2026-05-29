@@ -1,17 +1,18 @@
-use crate::ipc::{IPCBody, IPCResponse, IntoIPCResponse, ok};
+use crate::ipc::{IPCBody, IPCResponse, IntoIPCJsonResponse, IntoIPCResponse, ok};
 use crate::state::config::{AppCacheSize, ConfigDataPatch};
 use crate::state::samples::{ScanMerge, process_directories};
 use crate::{LogErrorExt, ipc_commands};
 
 fn get_app_cache_size(_: IPCBody) -> IPCResponse {
-    serde_json::to_string(&AppCacheSize::read())?.finish()
+    AppCacheSize::read().finish_json()
 }
 
 fn patch_config(body: IPCBody) -> IPCResponse {
     let mut is_new = false;
-    let dirs = crate::with_state_mut!(body, state, {
+    let dirs = {
         let patch = {
-            let mut patch: ConfigDataPatch = serde_json::from_str(&body.req)?;
+            let mut state = body.write_state()?;
+            let mut patch: ConfigDataPatch = body.parse_req()?;
 
             if let Some(td) = patch.tracked_dirs.as_mut() {
                 td.retain(|d| d.exists());
@@ -26,11 +27,11 @@ fn patch_config(body: IPCBody) -> IPCResponse {
         };
 
         patch.tracked_dirs.clone()
-    })
+    }
     .unwrap_or_default();
 
     if is_new {
-        let thread_state = body.app_state.clone();
+        let thread_state = body.clone_state_lock();
         std::thread::spawn(move || {
             process_directories(
                 dirs.iter(),
@@ -46,15 +47,13 @@ fn patch_config(body: IPCBody) -> IPCResponse {
 }
 
 fn get_config_fields(body: IPCBody) -> IPCResponse {
-    crate::with_state!(body, state, {
-        serde_json::to_string(&state.get_config().as_fields())?.finish()
-    })
+    let state = body.read_state()?;
+    state.get_config().as_fields().finish_json()
 }
 
 fn get_config_field(body: IPCBody) -> IPCResponse {
-    crate::with_state!(body, state, {
-        state.get_config().get_field_as_json(&body.req)?.finish()
-    })
+    let state = body.read_state()?;
+    state.get_config().get_field_as_json(&body.req)?.finish()
 }
 
 ipc_commands! {

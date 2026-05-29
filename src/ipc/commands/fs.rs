@@ -3,11 +3,11 @@ use std::path::Path;
 use serde::Deserialize;
 use ts_rs::TS;
 
-use crate::ipc::{IPCBody, IPCResponse, IntoIPCResponse, ok};
+use crate::ipc::{IPCBody, IPCResponse, IntoIPCJsonResponse, IntoIPCResponse, ok};
 use crate::{LogErrorExt, ipc_commands};
 
 fn open_folder(_body: IPCBody) -> IPCResponse {
-    tinyfiledialogs::select_folder_dialog("Select folder", "").finish()
+    tinyfiledialogs::select_folder_dialog("Select folder", "").finish_json()
 }
 
 #[derive(Deserialize, TS)]
@@ -18,7 +18,7 @@ struct PickFileOptions<'a> {
 }
 
 fn pick_file(body: IPCBody) -> IPCResponse {
-    let opt: PickFileOptions = serde_json::from_str(&body.req)?;
+    let opt: PickFileOptions = body.parse_req()?;
 
     let file = tinyfiledialogs::open_file_dialog(
         "Upload a plugin file:",

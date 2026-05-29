@@ -1,6 +1,6 @@
 use std::fs;
 
-use crate::ipc::{IPCBody, IPCError, IPCResponse, IntoIPCResponse, Poisoned, ok};
+use crate::ipc::{IPCBody, IPCError, IPCResponse, IntoIPCResponse, ok};
 use crate::state::FsSample;
 use crate::state::samples::{
     SampleEntry, ScanMerge, SearchRequest, WaveformData, draw_audio_and_save, process_directories,
@@ -15,35 +15,32 @@ fn add_sample_folder(body: IPCBody) -> IPCResponse {
         Err(IPCError::from("Path is empty"))?;
     }
 
-    crate::with_state_mut!(body, state, {
-        state.update_config(|cfg| {
-            cfg.tracked_dirs.insert(path.into());
-        });
+    let mut state = body.write_state()?;
+    state.update_config(|cfg| {
+        cfg.tracked_dirs.insert(path.into());
+    });
 
-        b"Ok".finish()
-    })
+    "Ok".finish()
 }
 
 fn get_sample_folders(body: IPCBody) -> IPCResponse {
-    crate::with_state!(body, state, {
-        state
-            .get_config()
-            .tracked_dirs
-            .iter()
-            .map(|d| d.to_string_lossy().to_string() + "\n")
-            .collect::<String>()
-            .finish()
-    })
+    let state = body.read_state()?;
+    state
+        .get_config()
+        .tracked_dirs
+        .iter()
+        .map(|d| d.to_string_lossy().to_string() + "\n")
+        .collect::<String>()
+        .finish()
 }
 
 fn start_sample_scan(body: IPCBody) -> IPCResponse {
-    let path = body.req;
-
-    let thread_state = body.app_state.clone();
+    let thread_state = body.clone_state_lock();
+    let path = &body.req;
 
     let dirs = {
         if path.is_empty() {
-            let guard = body.app_state.read().map_err(|_| Poisoned)?;
+            let guard = body.read_state()?;
             guard.get_config().tracked_dirs.iter().cloned().collect()
         } else {
             vec![path.to_string().into()]
@@ -71,7 +68,7 @@ fn search_for_sample(body: IPCBody) -> IPCResponse {
     let req: SearchRequest = serde_json::from_str(&body.req)?;
 
     std::thread::spawn(move || {
-        let state = body.app_state.read().unwrap();
+        let state = body.read_state().unwrap();
         if let Ok(payload) = search_local(&req, &state) {
             body.webview_sender.send_msg("search", payload);
         }
@@ -81,37 +78,34 @@ fn search_for_sample(body: IPCBody) -> IPCResponse {
 }
 
 fn get_sample_metadata(body: IPCBody) -> IPCResponse {
-    crate::with_state!(body, state, {
-        let sample = FsSample::new(body.req.as_ref());
+    let state = body.read_state()?;
+    let sample = FsSample::new(body.req.as_ref());
 
-        sample.to_json(&state)?.finish()
-    })
+    sample.to_json(&state)?.finish()
 }
 
 const SET_FAV_ID: &str = "set-fav";
 
 fn toggle_sample_fav(body: IPCBody) -> IPCResponse {
-    crate::with_state_mut!(body, state, {
-        let is_fav = state.favorite_samples.contains(body.req.as_ref());
+    let mut state = body.write_state()?;
+    let is_fav = state.favorite_samples.contains(body.req.as_ref());
 
-        if is_fav {
-            state.remove_sample_from_fav(&body.req);
-        } else {
-            state.add_sample_to_fav(&body.req);
-        }
+    if is_fav {
+        state.remove_sample_from_fav(&body.req);
+    } else {
+        state.add_sample_to_fav(&body.req);
+    }
 
-        let prefix = if is_fav { "0" } else { "1" };
-        body.webview_sender
-            .send_msg(SET_FAV_ID, prefix.to_string() + &body.req);
+    let prefix = if is_fav { "0" } else { "1" };
+    body.webview_sender
+        .send_msg(SET_FAV_ID, prefix.to_string() + &body.req);
 
-        ok()
-    })
+    ok()
 }
 
 fn is_sample_fav(body: IPCBody) -> IPCResponse {
-    crate::with_state!(body, state, {
-        (state.favorite_samples.contains(body.req.as_ref())).finish()
-    })
+    let state = body.read_state()?;
+    (state.favorite_samples.contains(body.req.as_ref())).finish()
 }
 
 fn tag_path(body: IPCBody) -> IPCResponse {
@@ -124,7 +118,10 @@ fn tag_path(body: IPCBody) -> IPCResponse {
 }
 
 fn draw_audio_file(body: IPCBody) -> IPCResponse {
-    let ffpaths = crate::with_state!(body, state, { state.get_config().ffpaths.clone() });
+    let ffpaths = {
+        let state = body.read_state()?;
+        state.get_config().ffpaths.clone()
+    };
 
     std::thread::spawn(move || {
         let path = body.req.clone();

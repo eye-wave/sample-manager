@@ -30,7 +30,7 @@ pub type EventLoop = tao::event_loop::EventLoop<LoopEvent>;
 pub type EventLoopProxy = tao::event_loop::EventLoopProxy<LoopEvent>;
 
 pub(super) enum LoopEvent {
-    JS(u32, Cow<'static, [u8]>),
+    JS(u32, Cow<'static, str>),
     Resize(ResizeDirection),
 }
 
@@ -83,12 +83,12 @@ impl EventSystem {
         if let Some((cmd_id, call_id, payload)) = ipc_strip_cmd_id(body)
             && let Some(cmd) = self.ipc_commands.get(cmd_id - IPC_ID_BASE)
         {
-            let body = IPCBody {
-                webview_sender: self.webview_tx.clone(),
-                req: Arc::from(payload),
-                window_handle: window_handle.clone(),
-                app_state: self.app_state.clone(),
-            };
+            let body = IPCBody::new(
+                self.app_state.clone(),
+                Arc::from(payload),
+                window_handle.clone(),
+                self.webview_tx.clone(),
+            );
 
             match cmd.respond(body) {
                 Ok(bytes) => {
@@ -107,7 +107,7 @@ impl EventSystem {
     pub fn send(
         &self,
         call_id: u32,
-        message: Cow<'static, [u8]>,
+        message: Cow<'static, str>,
     ) -> Result<(), tao::event_loop::EventLoopClosed<LoopEvent>> {
         self.event_loop.send_event(LoopEvent::JS(call_id, message))
     }
@@ -117,7 +117,7 @@ impl EventSystem {
         call_id: u32,
     ) -> Result<(), tao::event_loop::EventLoopClosed<LoopEvent>> {
         self.event_loop
-            .send_event(LoopEvent::JS(call_id, Cow::Borrowed(&[])))
+            .send_event(LoopEvent::JS(call_id, Cow::Borrowed("")))
     }
 }
 
@@ -160,14 +160,12 @@ impl EventRunner {
                     }
                 }
 
-                Event::UserEvent(LoopEvent::JS(call_id, bytes)) => {
-                    if let Ok(payload_str) = str::from_utf8(bytes) {
-                        let payload = escape_for_template_literal(payload_str);
-                        let code = format!("_r({call_id},`{}`)", payload);
-                        webview
-                            .evaluate_script(&code)
-                            .sure("Failed to evauate webview script");
-                    }
+                Event::UserEvent(LoopEvent::JS(call_id, payload)) => {
+                    let payload = escape_for_template_literal(payload);
+                    let code = format!("_r({call_id},`{}`)", payload);
+                    webview
+                        .evaluate_script(&code)
+                        .sure("Failed to evauate webview script");
                 }
                 Event::UserEvent(LoopEvent::Resize(dir)) => {
                     window
