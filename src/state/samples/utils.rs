@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::PathBuf;
 
 #[cfg(not(target_os = "windows"))]
@@ -22,12 +21,8 @@ pub fn thumbnail_path(hashed: &str) -> PathBuf {
     app_paths::thumbnail_cache_path().join(hashed)
 }
 
-pub fn sync_path(id: &PluginId, hashed: &str) -> std::io::Result<PathBuf> {
-    let parent = app_paths::plugin_sync_path().join(format!("plug_{id}"));
-
-    fs::create_dir_all(&parent)?;
-
-    Ok(parent.join(format!("{hashed}.wav")))
+pub fn sync_path(id: &PluginId) -> PathBuf {
+    app_paths::plugin_sync_path().join(format!("plug_{id}"))
 }
 
 pub fn thumbnail_uri(id: Option<PluginId>, hashed: &str) -> String {

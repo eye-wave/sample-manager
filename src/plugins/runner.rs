@@ -1,17 +1,19 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
-use std::sync::mpsc;
+use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 
-use plugin_wire::{WireEntry, encode_search_request, parse_frame, sample::SampleSerialize};
+use plugin_wire::{WireEntry, encode_search_request, parse_frame};
 use rayon::prelude::*;
 use wasmtime::{Caller, Engine, Linker, Module, Store};
 
 use crate::ipc::IPCMessage;
 use crate::plugins::manifest::config_key;
 use crate::state::app_paths;
-use crate::state::samples::{SearchRequest, WaveformData, draw_audio_and_save, filter_samples};
+use crate::state::samples::{
+    PluginSample, SampleEntry, SearchRequest, WaveformData, draw_audio_and_save, filter_samples,
+};
 use crate::{AStr, LogErrorExt};
 
 use super::host::{HostState, PendingDownload};
@@ -86,6 +88,8 @@ struct IndexCache {
     fetched_at: Instant,
 }
 
+pub type PluginSearchResult = Vec<Arc<Vec<PluginSample>>>;
+
 // -- runner --------------------------------------------------------------------
 
 pub(super) struct PluginRunner {
@@ -148,20 +152,25 @@ impl PluginRunner {
                         let _ = reply_to.send(Some(filename));
                     }
                 }
-                Ok(Cmd::Search { id, req, reply_to }) => {
-                    let result = self.run_search(&id, &req);
-                    if let Ok(results) = result.as_ref() {
-                        self.store
-                            .data_mut()
-                            .write_sample_cache(&id, results.iter());
-                    }
+                Ok(Cmd::Search { req, reply_to }) => {
+                    let plugin_ids: Vec<_> = self.plugins.keys().cloned().collect();
 
-                    let res = result
-                        .as_ref()
-                        .map(|r| r.iter().map(|f| f.into()).collect::<Vec<SampleSerialize>>());
+                    let result = plugin_ids
+                        .iter()
+                        .filter_map(|id| self.run_search(id, &req).ok())
+                        .flatten()
+                        .collect::<Vec<_>>();
 
-                    let _ = reply_to.send(res.map_err(|e| e.to_string()));
+                    self.store.data_mut().insert_sample_cache(result.iter());
+
+                    let reply = result
+                        .iter()
+                        .filter_map(|s| s.to_serialize().ok())
+                        .collect::<Vec<_>>();
+
+                    let _ = reply_to.send(Ok(reply));
                 }
+
                 Ok(Cmd::GetAllPluginsInfo { reply_to, icon_cb }) => {
                     let plugin_info_list = self
                         .plugins
@@ -182,6 +191,7 @@ impl PluginRunner {
                 Ok(Cmd::Download {
                     plugin_id,
                     url,
+                    name,
                     reply_to,
                     ffpaths,
                     web_sender,
@@ -190,28 +200,38 @@ impl PluginRunner {
 
                     let response = (|| -> Result<_, PluginRuntimeError> {
                         let bytes = self.call_wasm_download(&plugin_id, &url)?;
-                        let hashed = hash_path(Some(&plugin_id), &url);
-                        let save_path = sync_path(&plugin_id, &hashed)?;
 
-                        draw_audio_and_save(
+                        let mut save_path = sync_path(&plugin_id);
+                        save_path.extend(name.components());
+
+                        let _ = draw_audio_and_save(
                             Some(&plugin_id),
                             &url,
                             WaveformData::Bytes("wav", &bytes),
                             ffpaths.flatten(),
-                        )?
-                        .send_to_webview(web_sender);
+                        )
+                        .map(|e| e.send_to_webview(web_sender));
 
-                        fs::write(&save_path, bytes)?;
+                        if let Some(parent) = save_path.parent() {
+                            fs::create_dir_all(parent)?;
+                            fs::write(&save_path, bytes)?;
+                        }
+
                         Ok(save_path)
                     })();
 
                     let _ = reply_to.send(response.map_err(|e| e.to_string()));
                 }
                 Ok(Cmd::SearchLocalRegistry { reply_to, req }) => {
-                    let res = self.store.data().search_local_registry(&req);
+                    let samples: PluginSearchResult = self
+                        .plugins
+                        .keys()
+                        .map(|id| self.store.data().search_local_registry_for(&req, id))
+                        .collect();
 
-                    let _ = reply_to.send(res);
+                    let _ = reply_to.send(samples);
                 }
+
                 Err(_) => break,
             }
         }
@@ -260,7 +280,11 @@ impl PluginRunner {
 
     // -- search dispatch -------------------------------------------------------
 
-    fn run_search(&mut self, id: &PluginId, req: &SearchRequest) -> Result<Vec<WireEntry>, String> {
+    fn run_search(
+        &mut self,
+        id: &PluginId,
+        req: &SearchRequest,
+    ) -> Result<Vec<PluginSample>, String> {
         let search_mode = self
             .plugins
             .get(id)
@@ -270,7 +294,14 @@ impl PluginRunner {
             .clone();
 
         match search_mode {
-            SearchMode::Delegated => self.call_wasm_search(id, req),
+            SearchMode::Delegated => {
+                let entries = self.call_wasm_search(id, req)?;
+                Ok(entries
+                    .into_iter()
+                    .map(|e| PluginSample::new(e, id.clone()))
+                    .collect())
+            }
+
             SearchMode::HostIndexed { ttl_secs } => {
                 let ttl = Duration::from_secs(ttl_secs);
                 let needs_refresh = self
@@ -293,9 +324,9 @@ impl PluginRunner {
                 let cache = self.index_cache.get(id).unwrap();
                 Ok(filter_samples(cache.entries.par_iter(), req)
                     .1
-                    .iter()
-                    .map(|f| (**f).clone())
-                    .collect::<Vec<WireEntry>>())
+                    .into_iter()
+                    .map(|e| PluginSample::new(e.clone(), id.clone()))
+                    .collect())
             }
         }
     }

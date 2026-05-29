@@ -51,6 +51,8 @@ d.querySelectorAll(".dialog-body button").forEach((el) => {
 tabIds.push("dial_tab_plugin__");
 
 function showPane(target: string) {
+  dial_current_plug_btn__.style.display = "none";
+
   for (const id of tabIds) {
     // @ts-expect-error
     const el = w[id] as HTMLDivElement;
@@ -155,7 +157,7 @@ add_plugin_btn__.onclick = async () => {
   const path = await invoke(IPC.PICK_FILE, opt);
   if (!path) return;
 
-  invoke(IPC.ADD_PLUGIN,path)
+  invoke(IPC.ADD_PLUGIN, path);
 };
 
 function bindPluginCards(pluginsInfo: PluginInfo[]) {
@@ -171,6 +173,9 @@ function bindPluginCards(pluginsInfo: PluginInfo[]) {
         showPane("dial_tab_plugin__");
 
         plugin_uninstall_btn__.dataset.plugin = info.id;
+
+        dial_current_plug_btn__.style.display = "";
+        dial_current_plug_btn__.textContent = info.name;
 
         plugin_settings_label__.textContent = "Plugin " + info.name;
         plugin_settings_body__.innerHTML = renderSettings(info);

@@ -1,13 +1,13 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::mpsc::{self};
 
-use plugin_wire::{WireEntry, sample::SampleSerialize};
 use wasmtime::{Instance, TypedFunc};
 
 use crate::ipc::IPCSenderUI;
+use crate::plugins::runner::PluginSearchResult;
 use crate::state::config::FFPaths;
-use crate::state::samples::SearchRequest;
+use crate::state::samples::{SampleSerialize, SearchRequest};
 use crate::{AStr, LogErrorExt};
 
 mod host;
@@ -38,7 +38,6 @@ pub enum PluginRunnerCommand {
         reply_to: mpsc::SyncSender<PluginId>,
     },
     Search {
-        id: PluginId,
         req: SearchRequest,
         reply_to: mpsc::SyncSender<Result<Vec<SampleSerialize>, String>>,
     },
@@ -64,14 +63,15 @@ pub enum PluginRunnerCommand {
     },
     Download {
         plugin_id: PluginId,
-        url: String,
+        url: AStr,
+        name: Arc<Path>,
         reply_to: mpsc::SyncSender<Result<PathBuf, String>>,
         ffpaths: FFPaths,
         web_sender: IPCSenderUI,
     },
     SearchLocalRegistry {
         req: SearchRequest,
-        reply_to: mpsc::SyncSender<Arc<Vec<WireEntry>>>,
+        reply_to: mpsc::SyncSender<PluginSearchResult>,
     },
 }
 
@@ -84,10 +84,16 @@ pub struct PluginRuntimeHandle {
 #[derive(Debug, thiserror::Error)]
 pub enum PluginSendError {
     #[error("MPSC send error")]
-    Send(#[from] mpsc::SendError<PluginRunnerCommand>),
+    Send(#[from] Box<mpsc::SendError<PluginRunnerCommand>>),
 
     #[error("MPSC receive error")]
     Recv(#[from] mpsc::RecvError),
+}
+
+impl From<mpsc::SendError<PluginRunnerCommand>> for PluginSendError {
+    fn from(err: mpsc::SendError<PluginRunnerCommand>) -> Self {
+        PluginSendError::Send(Box::new(err))
+    }
 }
 
 impl PluginRuntimeHandle {
@@ -137,7 +143,7 @@ impl PluginRuntimeHandle {
     pub fn search_local_registry(
         &self,
         req: &SearchRequest,
-    ) -> Result<Arc<Vec<WireEntry>>, PluginSendError> {
+    ) -> Result<PluginSearchResult, PluginSendError> {
         let (tx, rx) = mpsc::sync_channel(1);
 
         self.sender.send(Cmd::SearchLocalRegistry {
@@ -152,6 +158,7 @@ impl PluginRuntimeHandle {
         &self,
         plugin_id: PluginId,
         url: &str,
+        name: &Path,
         ffpaths: FFPaths,
         web_sender: IPCSenderUI,
     ) -> Result<PathBuf, String> {
@@ -160,7 +167,8 @@ impl PluginRuntimeHandle {
         self.sender
             .send(Cmd::Download {
                 plugin_id,
-                url: url.to_string(),
+                url: Arc::from(url),
+                name: Arc::from(name),
                 reply_to: tx,
                 ffpaths,
                 web_sender,
@@ -170,14 +178,10 @@ impl PluginRuntimeHandle {
         rx.recv().map_err(|e| e.to_string())?
     }
 
-    pub fn search(&self, id: PluginId, req: SearchRequest) -> Result<Vec<SampleSerialize>, String> {
+    pub fn search(&self, req: SearchRequest) -> Result<Vec<SampleSerialize>, String> {
         let (tx, rx) = mpsc::sync_channel(1);
         self.sender
-            .send(Cmd::Search {
-                id,
-                req,
-                reply_to: tx,
-            })
+            .send(Cmd::Search { req, reply_to: tx })
             .map_err(|e| e.to_string())?;
 
         rx.recv().map_err(|e| e.to_string())?

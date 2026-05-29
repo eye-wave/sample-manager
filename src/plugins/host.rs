@@ -10,7 +10,7 @@ use serde::{Serialize, de::DeserializeOwned};
 
 use crate::LogErrorExt;
 use crate::schema::SchemaField;
-use crate::state::samples::{SearchRequest, filter_samples};
+use crate::state::samples::{PluginSample, SearchRequest, filter_samples};
 use crate::{AStr, plugins::PluginId, state::app_paths};
 
 pub type StorageKey = (PluginId, AStr);
@@ -28,6 +28,7 @@ pub enum HostError {
     Postcard(#[from] postcard::Error),
 }
 
+#[derive(Default)]
 pub struct HostState {
     pub storage: HashMap<StorageKey, Vec<u8>>,
     pub secrets: HashMap<StorageKey, Vec<u8>>,
@@ -46,12 +47,7 @@ impl Drop for HostState {
 
 impl HostState {
     pub(super) fn new() -> Self {
-        let mut state = Self {
-            storage: HashMap::new(),
-            secrets: HashMap::new(),
-            entry_cache: HashMap::new(),
-            pending_download: None,
-        };
+        let mut state = Self::default();
         // Best-effort load — if it fails we start fresh
         let _ = state.load_from_disk();
         state
@@ -68,6 +64,8 @@ impl HostState {
         Self::load(&mut self.storage, app_paths::plugin_storage_file())?;
         Self::load(&mut self.secrets, app_paths::plugin_secret_storage_file())?;
         Self::load(&mut self.entry_cache, app_paths::plugin_entry_cache_file())?;
+
+        println!("{:?}", self.entry_cache);
 
         Ok(())
     }
@@ -110,28 +108,34 @@ impl HostState {
         self.secrets.insert(key, data);
     }
 
-    pub fn write_sample_cache<'a>(
-        &mut self,
-        plugin_id: &PluginId,
-        results: impl Iterator<Item = &'a WireEntry>,
-    ) {
-        if let Some(container) = self.entry_cache.get_mut(plugin_id) {
-            for r in results {
-                container.insert(r.clone());
+    pub fn insert_sample_cache<'a>(&mut self, results: impl Iterator<Item = &'a PluginSample>) {
+        for r in results {
+            if let Some(container) = self.entry_cache.get_mut(&r.plugin_id) {
+                container.insert(r.entry.clone());
             }
         }
     }
 
-    pub fn search_local_registry(&self, req: &SearchRequest) -> Arc<Vec<WireEntry>> {
+    pub fn search_local_registry_for(
+        &self,
+        req: &SearchRequest,
+        plugin_id: &PluginId,
+    ) -> Arc<Vec<PluginSample>> {
         let entries = self
             .entry_cache
-            .values()
+            .get(plugin_id)
+            .into_iter()
             .flat_map(|c| c.iter())
             .par_bridge();
 
         let results = filter_samples(entries, req);
-
-        Arc::new(results.1.iter().map(|c| (*c).clone()).collect())
+        Arc::new(
+            results
+                .1
+                .iter()
+                .map(|c| PluginSample::new((*c).clone(), plugin_id.clone()))
+                .collect(),
+        )
     }
 
     /// Assembles the current stored config values for a plugin as a

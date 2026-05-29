@@ -3,11 +3,11 @@ import type { BusEvent } from "./bus/events";
 export type { BusEvent } from "./bus/events";
 export * as BUS from "./bus/events";
 
-type Handler<T> = (payload: T) => void;
+type Handler<T = any> = (payload: T) => void;
 
 type Slot = {
   event: BusEvent;
-  handler: Handler<unknown>;
+  handler: Handler;
 };
 
 const bus: Slot[] = [];
@@ -22,7 +22,7 @@ export function emit<T>(event: BusEvent, payload?: T) {
   }
 }
 
-export function on(event: BusEvent, handler: Handler<unknown>) {
+export function on(event: BusEvent, handler: Handler) {
   const slot: Slot = { event, handler };
 
   bus.push(slot);

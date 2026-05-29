@@ -1,13 +1,13 @@
 import type { SampleEntry } from "@typegen/SampleEntry";
 import { BUS } from "../bus";
-import { basename, setLikedView } from "../helpers";
+import { basename, debounce, setLikedView } from "../helpers";
 import { invoke, IPC, listen } from "../invoke/invoke";
 import { TagInput } from "./input";
 import { PaginationHandler } from "./pagination";
-import { BrowseRow } from "./row";
+import { BrowseRow, type OnSelectProps } from "./row";
 import { PreviewHandler } from "../preview/preview";
 import { emit } from "../bus";
-import { callSampleSearch, toggleFav } from "../api";
+import { callOnlineSearch, callSampleSearch, downloadFile, toggleFav } from "../api";
 
 export const POOL_SIZE = 100;
 
@@ -31,14 +31,22 @@ online_plugin_btn__.onclick = () => {
 };
 
 let lastSelected = 0;
-function onSelect(i: number, file: string) {
+async function onSelect(i: number, props: OnSelectProps) {
+  let path ="";
+
+  if (props.type === "plug") {
+    console.log(props)
+    path = await downloadFile(props);
+  }
+  else path = props.path
+
   pool[lastSelected]?.highlight(false);
 
   const current = pool[i];
   if (!current) return;
 
   current.highlight(true);
-  emit(BUS.PLAY_SONG, file);
+  emit(BUS.PLAY_SONG, path);
 
   lastSelected = i;
 }
@@ -81,14 +89,18 @@ listen("set-fav", (payload) => {
 });
 
 const PAGE_SIZE = 50;
+
+const debouncedOnlineSearch = debounce(callOnlineSearch, 350);
 export async function search(query: string, tags: string[], fav = false) {
-  callSampleSearch({
+  const params = {
     query,
     limit: PAGE_SIZE,
     offset: (PaginationHandler.page - 1) * PAGE_SIZE,
     tags,
     isFav: fav,
-  });
+  };
+
+  (isOnlineSearch ? debouncedOnlineSearch : callSampleSearch)(params);
 
   PaginationHandler.display(true);
 }
@@ -110,8 +122,12 @@ listen("search", (payload) => {
     if (i < files.length) {
       const item = files[i];
 
-      row.update(basename(item.name), null, item.is_fav, item.tags);
-      if (item.path) row.setPath(item.path);
+      row.update(basename(item.name), null, item.isFav, item.tags);
+      if (item.source === "native" ) row.setPath(item.path)
+      else {
+        row.setUrl(item.url, item.id)
+        row.name = item.name
+      };
     } else {
       row.hide();
     }

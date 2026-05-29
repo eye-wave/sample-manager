@@ -1,10 +1,17 @@
 import { $el, txt } from "../alias";
 import { renderTags, setLikedView, startDrag } from "../helpers";
 
+export type OnSelectProps =
+  | {
+      type: "native";
+      path: string;
+    }
+  | { type: "plug"; id: string; url: string; name: string };
+
 export type BrowseRow = ReturnType<typeof BrowseRow>;
 export const BrowseRow = (
   idx: number,
-  onSelect?: (i: number, p: string) => void,
+  onSelect?: (i: number, props: OnSelectProps) => void,
   onFavToggle?: (p: string) => void,
 ) => {
   const el = $el("div");
@@ -33,6 +40,8 @@ export const BrowseRow = (
   el.querySelector(".item-bpm")?.appendChild(bpmEl);
 
   let path: string | null = null;
+  let url: string | null = null;
+  let pluginId: string | null = null;
 
   let storedName = "";
   let storedTags: string[] = [];
@@ -52,7 +61,17 @@ export const BrowseRow = (
     el.style.display = "";
   };
 
-  el.onclick = () => path && onSelect?.(idx, path);
+  el.onclick = () => {
+    const props =
+      pluginId === null
+        ? { type: "native" as const, path }
+        : ({ type: "plug" as const, url, id: pluginId, name: storedName } as Partial<OnSelectProps>);
+
+    if (props.type === "native" && !props.path) return;
+    if (props.type === "plug" && !props.url && !props.id) return;
+
+    onSelect?.(idx, props as OnSelectProps);
+  };
   el.draggable = true;
   el.ondragstart = () => path && startDrag(path);
 
@@ -71,6 +90,9 @@ export const BrowseRow = (
   hide();
 
   return {
+    set name(s: string) {
+      storedName = s
+    },
     get name() {
       return storedName;
     },
@@ -84,9 +106,17 @@ export const BrowseRow = (
     hide,
     setPath(p: string) {
       path = p;
+      pluginId = null
     },
     get path() {
       return path;
+    },
+    setUrl(u: string, id: string) {
+      url = u;
+      pluginId = id;
+    },
+    get url() {
+      return url;
     },
   };
 };

@@ -47,7 +47,11 @@ function createPlayerHandle() {
 
   let intervalId = -1;
 
-  listen("a-eof", () => playerState.set(STOPPED));
+  listen("a-eof", () => {
+    playerState.set(STOPPED);
+    stopTicker();
+    PreviewHandler.position = 1;
+  });
 
   makeSlider({
     ctrl: volume_ctrl__,

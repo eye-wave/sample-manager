@@ -1,14 +1,14 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use plugin_wire::sample::SampleSerialize;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::ipc::{IPCBody, IPCError, IPCResponse, IntoIPCJsonResponse, IntoIPCResponse, ok};
+use crate::ipc::{IPCBody, IPCError, IPCResponse, IntoIPCResponse, ok};
 use crate::plugins::PluginId;
 use crate::state::app_paths::extract_plugin_path;
-use crate::state::{app_paths, samples::SearchRequest};
+use crate::state::samples::utils::sync_path;
+use crate::state::samples::{SampleSerialize, SearchRequest};
 use crate::{AStr, LogErrorExt};
 
 fn any_online_plugin_loaded(body: IPCBody) -> IPCResponse {
@@ -36,10 +36,9 @@ fn add_plugin(body: IPCBody) -> IPCResponse {
     });
 
     let out_path = extract_plugin_path(&path);
-    let sync_path = app_paths::plugin_sync_path().join(plug_id.as_ref());
 
     fs::copy(path, out_path)?;
-    fs::create_dir(sync_path)?;
+    fs::create_dir(sync_path(&plug_id))?;
 
     body.webview_sender.send_ping("plug-add");
 
@@ -66,8 +65,7 @@ fn uninstall_plugin(body: IPCBody) -> IPCResponse {
             conf.plugins.remove(&name);
         });
 
-        let sync_path = app_paths::plugin_sync_path().join(id.as_ref());
-        fs::remove_dir(sync_path)?;
+        let _ = fs::remove_dir(sync_path(&id));
     }
 
     ok()
@@ -112,19 +110,12 @@ struct SearchResult {
     count: usize,
 }
 
-#[derive(Debug, Deserialize)]
-struct SearchRequestWithId {
-    id: PluginId,
-    #[serde(flatten)]
-    search: SearchRequest,
-}
-
 fn plugin_search_for_sample(body: IPCBody) -> IPCResponse {
-    let req: SearchRequestWithId = body.parse_req()?;
+    let req: SearchRequest = body.parse_req()?;
 
     std::thread::spawn(move || {
         let state = body.read_state().unwrap();
-        let files = state.plugin_handle.search(req.id, req.search).unwrap();
+        let files = state.plugin_handle.search(req).unwrap();
         let count = files.len();
         let res = SearchResult { files, count };
 
@@ -134,22 +125,24 @@ fn plugin_search_for_sample(body: IPCBody) -> IPCResponse {
     ok()
 }
 
-#[derive(Deserialize)]
-struct IdWithPath<'a> {
+#[derive(Deserialize, TS)]
+#[ts(export)]
+struct DownloadRequest<'a> {
     id: PluginId,
     url: &'a str,
+    name: &'a Path,
 }
 
 fn plugin_download_file(body: IPCBody) -> IPCResponse {
     let state = body.read_state()?;
-    let IdWithPath { id, url } = body.parse_req()?;
+    let DownloadRequest { id, url, name } = body.parse_req()?;
 
     let paths = state.get_config().ffpaths.clone();
 
     state
         .plugin_handle
-        .download(id, url, paths, body.webview_sender.clone())?
-        .finish_json()
+        .download(id, url, name, paths, body.webview_sender.clone())?
+        .finish()
 }
 
 #[derive(Serialize, TS)]
@@ -169,7 +162,7 @@ fn get_plugin_paths(body: IPCBody) -> IPCResponse {
     let lines = info
         .iter()
         .filter_map(|plug| {
-            let path = app_paths::plugin_sync_path().join(plug.meta.id.as_ref());
+            let path = sync_path(&plug.meta.id);
 
             serde_json::to_string(&PluginSidebarView {
                 name: &plug.meta.name,

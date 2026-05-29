@@ -103,3 +103,19 @@ export function capitalize(str: string) {
 export function startDrag(path: string) {
   invoke(IPC.START_DRAG_FILE, path);
 }
+
+export function debounce<T extends (...args: any[]) => void>(
+  fn: T,
+  delay: number,
+): (...args: Parameters<T>) => void {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  return function (...args: Parameters<T>): void {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+    timeoutId = setTimeout(() => {
+      fn(...args);
+    }, delay);
+  };
+}

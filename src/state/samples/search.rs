@@ -1,17 +1,18 @@
+use std::cmp::Reverse;
 use std::path::Path;
 
 use fuzzy_matcher::skim::SkimMatcherV2;
-use plugin_wire::sample::SampleSerialize;
 use rayon::{iter::Either, prelude::*};
 use serde::Deserialize;
 use ts_rs::TS;
 
+use crate::AStr;
+use crate::LogErrorExt;
 use crate::plugins::PluginSendError;
 use crate::state::{
     AppState,
-    samples::{SampleEntry, clean_up_string},
+    samples::{SampleEntry, SampleSerialize, clean_up_string},
 };
-use crate::{AStr, LogErrorExt};
 
 #[derive(Clone, Debug, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -25,129 +26,116 @@ pub struct SearchRequest {
 }
 
 impl SearchRequest {
-    pub fn with_cleared_offsets(&self) -> Self {
-        let mut partial = self.clone();
-
-        partial.offset = 0;
-        partial.limit = 0;
-
-        partial
+    fn without_pagination(&self) -> Self {
+        Self {
+            offset: 0,
+            limit: 0,
+            ..self.clone()
+        }
     }
 }
 
 pub fn search_local(req: &SearchRequest, state: &AppState) -> Result<String, PluginSendError> {
-    let no_offset_req = req.with_cleared_offsets();
-    let plugin_filtered = state.plugin_handle.search_local_registry(&no_offset_req)?;
+    let unpaged = req.without_pagination();
 
-    let items = if req.is_fav {
-        Either::Left(state.favorite_samples.iter().filter_map(|f| {
-            let key = Path::new(f);
-            state.sample_registry.get(key)
-        }))
+    let native_iter = if req.is_fav {
+        Either::Left(
+            state
+                .favorite_samples
+                .iter()
+                .filter_map(|f| state.sample_registry.get(Path::new(f))),
+        )
     } else {
         Either::Right(state.sample_registry.values())
     };
 
-    let (count1, found_local) = filter_samples(items.par_bridge(), &no_offset_req);
+    let (native_count, native_hits) = score_and_sort(native_iter.par_bridge(), &unpaged);
 
-    let (count2, found) = filter_samples_dyn(
-        plugin_filtered
-            .iter()
-            .filter(|e| !req.is_fav || e.is_fav(state))
-            .map(|e| e as &dyn SampleEntry)
-            .chain(found_local.iter().map(|e| *e as &dyn SampleEntry))
-            .par_bridge(),
-        &no_offset_req,
-    );
+    let plugin_registry = state.plugin_handle.search_local_registry(&unpaged)?;
+    let plugin_iter = plugin_registry
+        .par_iter()
+        .flat_map(|a| a.par_iter())
+        .filter(|e| !req.is_fav || e.is_fav(state).unwrap_or(false))
+        .map(|e| e as &dyn SampleEntry);
 
-    let count = count1 + count2;
-    let found = slice_output(&found, req);
+    let (plugin_count, plugin_hits) = score_and_sort(plugin_iter, &unpaged);
 
-    let found = found
+    let total = native_count + plugin_count;
+
+    let mut merged: Vec<SampleSerialize> = native_hits
+        .into_iter()
+        .filter_map(|e| e.to_serialize().ok())
+        .chain(
+            plugin_hits
+                .into_iter()
+                .filter_map(|e| e.to_serialize().ok()),
+        )
+        .collect();
+
+    let query = clean_up_string(&req.query);
+    let matcher = SkimMatcherV2::default().smart_case();
+    let tag_refs: Vec<&str> = req.tags.iter().map(|s| s.as_ref()).collect();
+    merged.sort_by_key(|s| {
+        Reverse(if req.is_fav && query.is_empty() {
+            i64::MAX
+        } else {
+            s.score(&query, &tag_refs, &matcher)
+        })
+    });
+
+    let page = paginate(&merged, req);
+
+    let body = page
         .iter()
-        .filter_map(|e| e.to_json(state).sure("Failed to serialize to json"))
+        .filter_map(|e| e.to_json(state).sure("Failed to serialize"))
         .intersperse(",\n".into())
         .collect::<String>();
 
-    Ok(format!(r#"{{"count":{count},"files":[{found}]}}"#))
+    Ok(format!(r#"{{"count":{total},"files":[{body}]}}"#))
 }
 
-fn slice_output<'a, T>(slice: &'a [T], req: &'a SearchRequest) -> &'a [T] {
-    if req.limit == 0 {
-        return slice;
-    }
-
-    let start = req.offset.min(slice.len());
-    let end = (start + req.limit).min(slice.len());
-
-    &slice[start..end]
-}
-
-fn process_and_slice_entries<I, T, O>(
-    entries: I,
+pub fn score_and_sort<'a, T>(
+    iter: impl ParallelIterator<Item = &'a T>,
     req: &SearchRequest,
-    map_to_output: impl Fn(I::Item) -> (T, O) + Sync + Send,
-) -> (usize, Vec<O>)
+) -> (usize, Vec<&'a T>)
 where
-    I: ParallelIterator,
-    I::Item: Send,
-    T: AsAsDynSampleEntry + Send,
-    O: Clone + Send,
+    T: SampleEntry + ?Sized + 'a,
 {
     let query = clean_up_string(&req.query);
     let matcher = SkimMatcherV2::default().smart_case();
     let tag_refs: Vec<&str> = req.tags.iter().map(|s| s.as_ref()).collect();
 
-    let mut result: Vec<(O, i64)> = entries
+    let mut scored: Vec<(&T, i64)> = iter
         .map(|item| {
-            let (sample_ref, output_data) = map_to_output(item);
-            let s = sample_ref.as_dyn_sample_entry();
-
             let score = if req.is_fav && query.is_empty() {
                 i64::MAX
             } else {
-                s.score(&query, &tag_refs, &matcher)
+                item.score(&query, &tag_refs, &matcher)
             };
-
-            (output_data, score)
+            (item, score)
         })
-        .filter(|(_, score)| *score > 0)
+        .filter(|(_, score)| *score > i64::MIN)
         .collect();
 
-    result.sort_by_key(|&(_, score)| std::cmp::Reverse(score));
+    scored.sort_by_key(|&(_, s)| Reverse(s));
 
-    let sliced = slice_output(&result, req);
-    let sliced = sliced.iter().map(|(out, _)| out.clone()).collect();
-
-    (result.len(), sliced)
+    let count = scored.len();
+    let items = scored.into_iter().map(|(item, _)| item).collect();
+    (count, items)
 }
 
 pub fn filter_samples<'a, T: SampleEntry + Sized>(
     entries: impl ParallelIterator<Item = &'a T>,
     req: &SearchRequest,
 ) -> (usize, Vec<&'a T>) {
-    process_and_slice_entries(entries, req, |s| (s, s))
+    score_and_sort(entries, req)
 }
 
-pub fn filter_samples_dyn<'a>(
-    entries: impl ParallelIterator<Item = &'a dyn SampleEntry>,
-    req: &SearchRequest,
-) -> (usize, Vec<SampleSerialize>) {
-    process_and_slice_entries(entries, req, |s| (s, s.to_base()))
-}
-
-trait AsAsDynSampleEntry {
-    fn as_dyn_sample_entry(&self) -> &dyn SampleEntry;
-}
-
-impl<T: SampleEntry + Sized> AsAsDynSampleEntry for &T {
-    fn as_dyn_sample_entry(&self) -> &dyn SampleEntry {
-        *self as &dyn SampleEntry
+fn paginate<'a, T>(items: &'a [T], req: &SearchRequest) -> &'a [T] {
+    if req.limit == 0 {
+        return items;
     }
-}
-
-impl AsAsDynSampleEntry for &dyn SampleEntry {
-    fn as_dyn_sample_entry(&self) -> &dyn SampleEntry {
-        *self
-    }
+    let start = req.offset.min(items.len());
+    let end = (start + req.limit).min(items.len());
+    &items[start..end]
 }

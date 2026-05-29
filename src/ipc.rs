@@ -1,5 +1,5 @@
-use std::borrow::Cow;
 use std::sync::mpsc;
+use std::{borrow::Cow, path::PathBuf};
 
 use serde::Serialize;
 
@@ -95,6 +95,12 @@ pub trait IntoIPCResponse {
 impl IntoIPCResponse for String {
     fn finish(self) -> IPCResponse {
         Ok(Cow::Owned(self))
+    }
+}
+
+impl IntoIPCResponse for PathBuf {
+    fn finish(self) -> IPCResponse {
+        Ok(Cow::Owned(self.to_string_lossy().to_string()))
     }
 }
 
