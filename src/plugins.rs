@@ -23,6 +23,7 @@ pub use manifest::{PluginId, PluginInfo};
 
 pub struct PluginInstance {
     pub instance: Instance,
+    pub filename: String,
     pub manifest: PluginManifest,
     pub fn_search: TypedFunc<(u32, u32), u32>,
     pub fn_get_index: Option<TypedFunc<(u32, u32), u32>>,
@@ -34,6 +35,7 @@ pub enum PluginRunnerCommand {
     LoadPlugin {
         name: AStr,
         bytes: Vec<u8>,
+        reply_to: mpsc::SyncSender<PluginId>,
     },
     Search {
         id: PluginId,
@@ -47,6 +49,10 @@ pub enum PluginRunnerCommand {
     },
     UnloadPlugin {
         id: PluginId,
+    },
+    UninstallPlugin {
+        id: PluginId,
+        reply_to: mpsc::SyncSender<Option<String>>,
     },
     GetPluginInfo {
         id: PluginId,
@@ -101,11 +107,23 @@ impl PluginRuntimeHandle {
         Self { sender: tx }
     }
 
-    pub fn load(&self, name: &str, bytes: Vec<u8>) {
+    pub fn load(&self, name: &str, bytes: Vec<u8>) -> Result<PluginId, mpsc::RecvError> {
+        let (tx, rx) = mpsc::sync_channel(1);
+
         let _ = self.sender.send(Cmd::LoadPlugin {
             bytes,
             name: Arc::from(name),
+            reply_to: tx,
         });
+
+        rx.recv()
+    }
+
+    pub fn uninstall(&self, id: PluginId) -> Option<String> {
+        let (tx, rx) = mpsc::sync_channel(1);
+        let _ = self.sender.send(Cmd::UninstallPlugin { id, reply_to: tx });
+
+        rx.recv().ok().flatten()
     }
 
     pub fn set_config_field(&self, id: PluginId, name: AStr, data: Vec<u8>) {

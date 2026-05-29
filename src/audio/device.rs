@@ -140,6 +140,6 @@ fn audio_loop<S>(
         shared_state.set_state(PlayerFlags::STOPPED);
         shared_state.clear_flag(PlayerFlags::DRAINING);
 
-        shared_state.webview_sender.send_str("a-eof", "");
+        shared_state.webview_sender.send_ping("a-eof");
     }
 }

@@ -49,6 +49,13 @@ pub struct IPCSenderUI(pub(super) mpsc::Sender<IPCMessage>);
 
 type Id = &'static str;
 impl IPCSenderUI {
+    pub fn send_ping(&self, id: Id) {
+        let _ = self.0.send(IPCMessage {
+            id,
+            payload: Cow::Borrowed(""),
+        });
+    }
+
     pub fn send_str(&self, id: Id, payload: &'static str) {
         let _ = self.0.send(IPCMessage {
             id,

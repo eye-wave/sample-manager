@@ -45,11 +45,12 @@ impl AppState {
         let plugin_handle = PluginRuntimeHandle::spawn();
 
         for name in conf.plugins.iter() {
-            let plugin_name = name.to_string() + ".zip";
-            let path = app_paths::plugin_config_path().join(plugin_name);
+            let path = app_paths::plugin_path(name);
 
             match fs::read(path) {
-                Ok(bytes) => plugin_handle.load(name, bytes),
+                Ok(bytes) => {
+                    let _ = plugin_handle.load(name, bytes);
+                }
                 Err(err) => tracing::error!(
                     plugin = %name,
                     error = %err,

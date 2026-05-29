@@ -10,6 +10,7 @@ use wasmtime::{Caller, Engine, Linker, Module, Store};
 
 use crate::ipc::IPCMessage;
 use crate::plugins::manifest::config_key;
+use crate::state::app_paths;
 use crate::state::samples::{SearchRequest, WaveformData, draw_audio_and_save, filter_samples};
 use crate::{AStr, LogErrorExt};
 
@@ -107,20 +108,45 @@ impl PluginRunner {
         })
     }
 
+    fn unload_plugin(&mut self, id: PluginId) {
+        self.plugins.remove(&id);
+        self.index_cache.remove(&id);
+    }
+
     pub fn run(mut self, rx: mpsc::Receiver<Cmd>) {
         loop {
             match rx.recv() {
-                Ok(Cmd::LoadPlugin { name, bytes }) => {
-                    if let Err(e) = self.load_plugin(&bytes) {
-                        tracing::error!(plugin = %name, error = %e, "failed to load plugin");
+                Ok(Cmd::LoadPlugin {
+                    name,
+                    bytes,
+                    reply_to,
+                }) => match self.load_plugin(name.to_string(), &bytes) {
+                    Ok(id) => {
+                        let _ = reply_to.send(id);
                     }
-                }
+                    Err(e) => tracing::error!(plugin = %name, error = %e, "failed to load plugin"),
+                },
                 Ok(Cmd::SetConfigField { id, name, data }) => {
                     self.store.data_mut().set_item(config_key(&id, &name), data);
                 }
-                Ok(Cmd::UnloadPlugin { id }) => {
-                    self.plugins.remove(&id);
-                    self.index_cache.remove(&id);
+                Ok(Cmd::UnloadPlugin { id }) => self.unload_plugin(id),
+                Ok(Cmd::UninstallPlugin { id, reply_to }) => {
+                    let Some(plugin) = self.plugins.get(&id) else {
+                        let _ = reply_to.send(None);
+                        continue;
+                    };
+
+                    let filename = plugin.filename.clone();
+                    let path = app_paths::plugin_path(&filename);
+                    if !path.exists() {
+                        let _ = reply_to.send(None);
+                        continue;
+                    }
+
+                    self.unload_plugin(id);
+                    if fs::remove_file(path).is_ok() {
+                        let _ = reply_to.send(Some(filename));
+                    }
                 }
                 Ok(Cmd::Search { id, req, reply_to }) => {
                     let result = self.run_search(&id, &req);
@@ -191,9 +217,15 @@ impl PluginRunner {
         }
     }
 
-    fn load_plugin(&mut self, bytes: &[u8]) -> Result<(), PluginRuntimeError> {
+    fn load_plugin(
+        &mut self,
+        filename: String,
+        bytes: &[u8],
+    ) -> Result<PluginId, PluginRuntimeError> {
         let (manifest, wasm_bytes) = PluginManifest::load_from_bytes(bytes)?;
         let module = Module::new(&self.engine, &wasm_bytes)?;
+
+        let plug_id = manifest.id.clone();
 
         let mut linker = Linker::<HostState>::new(&self.engine);
         define_host_imports(&mut linker, &manifest)?;
@@ -214,6 +246,7 @@ impl PluginRunner {
             id,
             PluginInstance {
                 instance,
+                filename,
                 manifest,
                 fn_search,
                 fn_get_index,
@@ -222,7 +255,7 @@ impl PluginRunner {
             },
         );
 
-        Ok(())
+        Ok(plug_id)
     }
 
     // -- search dispatch -------------------------------------------------------

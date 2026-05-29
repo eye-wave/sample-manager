@@ -42,6 +42,8 @@ export const DialogManager = (() => {
     },
     open(id: string) {
       if (current !== null) return false;
+      // @ts-expect-error
+      document.activeElement?.blur()
 
       const d = dial(id);
       if (!d) return;

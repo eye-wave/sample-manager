@@ -1,4 +1,7 @@
-use std::{path::PathBuf, sync::OnceLock};
+use std::{
+    path::{Path, PathBuf},
+    sync::OnceLock,
+};
 
 pub const APP_NAME: &str = "SampleVault";
 const PLUGIN_DIR: &str = "plug-ins";
@@ -59,4 +62,17 @@ define_paths! {
     fn plugin_sync_path => data.join("Samples") = path
     fn plugin_cache_path => cache.join(PLUGIN_DIR) = path
     fn plugin_config_path => config.join(PLUGIN_DIR) = path
+}
+
+pub fn plugin_path(id: &str) -> PathBuf {
+    plugin_config_path().join(id.to_string() + ".zip")
+}
+
+pub fn extract_plugin_path(path: &Path) -> PathBuf {
+    let short = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default();
+
+    plugin_path(short)
 }

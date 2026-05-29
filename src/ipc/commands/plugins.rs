@@ -7,6 +7,7 @@ use ts_rs::TS;
 
 use crate::ipc::{IPCBody, IPCError, IPCResponse, IntoIPCJsonResponse, IntoIPCResponse, ok};
 use crate::plugins::PluginId;
+use crate::state::app_paths::extract_plugin_path;
 use crate::state::{app_paths, samples::SearchRequest};
 use crate::{AStr, LogErrorExt};
 
@@ -24,15 +25,23 @@ fn any_online_plugin_loaded(body: IPCBody) -> IPCResponse {
 
 fn add_plugin(body: IPCBody) -> IPCResponse {
     let mut state = body.write_state()?;
-
     let path = PathBuf::from(body.req.to_string());
+
     let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
     let bytes = fs::read(&path)?;
 
-    state.plugin_handle.load(name, bytes);
+    let plug_id = state.plugin_handle.load(name, bytes)?;
     state.mutate_config(|cfg| {
         cfg.plugins.insert(name.to_string());
     });
+
+    let out_path = extract_plugin_path(&path);
+    let sync_path = app_paths::plugin_sync_path().join(plug_id.as_ref());
+
+    fs::copy(path, out_path)?;
+    fs::create_dir(sync_path)?;
+
+    body.webview_sender.send_ping("plug-add");
 
     ok()
 }
@@ -44,6 +53,24 @@ fn disable_plugin(body: IPCBody) -> IPCResponse {
     state.plugin_handle.unload(id);
 
     todo!()
+}
+
+fn uninstall_plugin(body: IPCBody) -> IPCResponse {
+    let mut state = body.write_state()?;
+    let id = PluginId::new(&body.req)?;
+
+    if let Some(name) = state.plugin_handle.uninstall(id.clone()) {
+        body.webview_sender.send_msg("plug-rm", id.to_string());
+
+        state.mutate_config(|conf| {
+            conf.plugins.remove(&name);
+        });
+
+        let sync_path = app_paths::plugin_sync_path().join(id.as_ref());
+        fs::remove_dir(sync_path)?;
+    }
+
+    ok()
 }
 
 fn get_all_plugins_info(body: IPCBody) -> IPCResponse {
@@ -125,6 +152,14 @@ fn plugin_download_file(body: IPCBody) -> IPCResponse {
         .finish_json()
 }
 
+#[derive(Serialize, TS)]
+#[ts(export)]
+struct PluginSidebarView<'a> {
+    name: &'a str,
+    path: &'a Path,
+    icon: Option<AStr>,
+}
+
 fn get_plugin_paths(body: IPCBody) -> IPCResponse {
     let state = body.read_state()?;
     let info = state.plugin_handle.get_all_plugins_info(|icon| {
@@ -135,13 +170,6 @@ fn get_plugin_paths(body: IPCBody) -> IPCResponse {
         .iter()
         .filter_map(|plug| {
             let path = app_paths::plugin_sync_path().join(plug.meta.id.as_ref());
-
-            #[derive(Serialize)]
-            struct PluginSidebarView<'a> {
-                name: &'a str,
-                path: &'a Path,
-                icon: Option<AStr>,
-            }
 
             serde_json::to_string(&PluginSidebarView {
                 name: &plug.meta.name,
@@ -161,6 +189,7 @@ crate::ipc_commands! {
         any_online_plugin_loaded,
         add_plugin,
         disable_plugin,
+        uninstall_plugin,
         get_all_plugins_info,
         configure_plugin_value,
         plugin_search_for_sample,

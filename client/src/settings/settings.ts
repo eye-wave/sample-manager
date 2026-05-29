@@ -10,6 +10,7 @@ import { resizeHandle } from "../sidebar/resize";
 import { bindSettingInputs } from "./inputs";
 import { createPluginCard, renderSettings } from "./template";
 import { DialogManager } from "../dialog";
+import { getConfigFields } from "../api";
 
 function createPatch() {
   type Patch = Partial<AppConfig>;
@@ -64,6 +65,10 @@ function showPane(target: string) {
   }
 }
 
+async function refreshPluginList() {
+  invoke(IPC.GET_ALL_PLUGINS_INFO);
+}
+
 let previewedTheme = "";
 
 conf_btn__.onclick = async () => {
@@ -71,12 +76,10 @@ conf_btn__.onclick = async () => {
   DialogManager.open("conf_dial__");
   patch.flush();
 
-  invoke(IPC.GET_ALL_PLUGINS_INFO);
+  refreshPluginList();
 
   try {
-    const config: Record<string, SchemaFieldWithValue> = JSON.parse(
-      await invoke(IPC.GET_CONFIG_FIELDS),
-    );
+    const config = await getConfigFields();
 
     settings_body__.innerHTML = renderSettings({ id: "__APP_SETTINGS__", config });
     bindSettingInputs(settings_body__, (field, data) => {
@@ -151,32 +154,51 @@ add_plugin_btn__.onclick = async () => {
 
   const path = await invoke(IPC.PICK_FILE, opt);
   if (!path) return;
+
+  invoke(IPC.ADD_PLUGIN,path)
 };
+
+function bindPluginCards(pluginsInfo: PluginInfo[]) {
+  plugins_settings__.innerHTML = pluginsInfo.map((i) => createPluginCard(i)).join("");
+  (plugins_settings__.querySelectorAll(".btn") as NodeListOf<HTMLButtonElement>).forEach(
+    (btn) => {
+      const plugId = btn.dataset.id as string;
+
+      const info = pluginsInfo.find((p) => p.id === plugId);
+      if (!info) return;
+
+      btn.onclick = () => {
+        showPane("dial_tab_plugin__");
+
+        plugin_uninstall_btn__.dataset.plugin = info.id;
+
+        plugin_settings_label__.textContent = "Plugin " + info.name;
+        plugin_settings_body__.innerHTML = renderSettings(info);
+
+        bindSettingInputs(plugin_settings_body__);
+      };
+    },
+  );
+}
 
 listen("plugin-info", (data) => {
   const pluginsInfo: PluginInfo[] = [];
   try {
     const items: PluginInfo[] = JSON.parse(data);
-    items.forEach((i) => {
-      pluginsInfo.push(i);
-    });
+    items.forEach((i) => pluginsInfo.push(i));
   } catch {}
 
-  plugins_settings__.innerHTML = pluginsInfo.map((i) => createPluginCard(i)).join("");
-  (plugins_settings__.querySelectorAll(".btn") as HTMLButtonElement[]).forEach((el) => {
-    const btn = el as HTMLButtonElement;
-    const plugId = btn.dataset.id as string;
-
-    const info = pluginsInfo.find((p) => p.id === plugId);
-    if (!info) return;
-
-    btn.onclick = () => {
-      showPane("dial_tab_plugin__");
-
-      plugin_settings_label__.textContent = "Plugin " + info.name;
-      plugin_settings_body__.innerHTML = renderSettings(info);
-
-      bindSettingInputs(plugin_settings_body__);
-    };
-  });
+  bindPluginCards(pluginsInfo);
 });
+
+listen("plug-add", () => refreshPluginList());
+
+plugin_uninstall_btn__.onclick = () => {
+  const id = plugin_uninstall_btn__.dataset.plugin;
+  if (!id) return;
+
+  invoke(IPC.UNINSTALL_PLUGIN, id).then(() => {
+    showPane("dial_tab_plug__");
+    refreshPluginList();
+  });
+};
