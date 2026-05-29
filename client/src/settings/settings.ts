@@ -3,7 +3,6 @@ import type { PickFileOptions } from "@typegen/PickFileOptions";
 import type { PluginInfo } from "@typegen/PluginInfo";
 import type { SchemaFieldWithValue } from "@typegen/SchemaFieldWithValue";
 import { d, w } from "../alias";
-import * as IPC from "../gen/ipc-gen";
 import {
   capitalize,
   DialogManager,
@@ -11,7 +10,7 @@ import {
   updateTheme,
   updateThemeCss,
 } from "../helpers";
-import { invoke, listen } from "../invoke/invoke";
+import { invoke, IPC, listen } from "../invoke/invoke";
 import { addShortcut, iterateShortcuts } from "../shortcuts";
 import { resizeHandle } from "../sidebar/resize";
 import { bindSettingInputs } from "./inputs";
@@ -132,7 +131,7 @@ conf_btn__.onclick = async () => {
     </div>`;
   }
 
-  dial_tab_cache_body__.innerHTML = await invoke(IPC.GET_APP_CACHE_SIZE)
+  dial_tab_cache_body__.innerHTML = await invoke(IPC.GET_APP_CACHE_SIZE);
 };
 
 const revertAndClose = () => {

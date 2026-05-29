@@ -1,5 +1,7 @@
-import { w } from "../alias";
 import * as IPC from "../gen/ipc-gen";
+import { w } from "../alias";
+
+export * as IPC from "../gen/ipc-gen";
 
 type PromiseReturn = {
   resolve: (value: string | PromiseLike<string>) => void;

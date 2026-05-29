@@ -6,7 +6,8 @@ use plugin_wire::{WireEntry, sample::SampleSerialize};
 use wasmtime::{Instance, TypedFunc};
 
 use crate::ipc::IPCSenderUI;
-use crate::state::{config::FFPaths, samples::SearchRequest};
+use crate::state::config::FFPaths;
+use crate::state::samples::SearchRequest;
 use crate::{AStr, LogErrorExt};
 
 mod host;

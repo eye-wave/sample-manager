@@ -1,7 +1,6 @@
 import { d, w } from "./alias";
-import * as IPC from "./gen/ipc-gen";
 import { updateCurrentTheme } from "./helpers";
-import { invoke } from "./invoke/invoke";
+import { invoke, IPC } from "./invoke/invoke";
 
 /// BUILD start
 w.oncontextmenu = (e) => e.preventDefault();

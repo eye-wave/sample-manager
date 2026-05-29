@@ -111,7 +111,7 @@ function createPagination() {
     },
     setPages(totalPages: number): void {
       max = totalPages;
-      current = 1;
+      if (current > max) current = Math.max(1, max);
       build();
     },
 

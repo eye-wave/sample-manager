@@ -1,7 +1,8 @@
-import { getCurrentSample } from "../browse/browse";
-import { basename, renderTags, setLiked, setLikedView } from "../helpers";
+import { toggleFav } from "../api";
+import { basename, renderTags, setLikedView } from "../helpers";
 import { listen } from "../invoke/invoke";
 import { playerHandle } from "../player/player";
+
 import { missingUri } from "./missing";
 
 declare const waveform__: HTMLDivElement;
@@ -14,15 +15,8 @@ declare const preview_fav__: HTMLSpanElement;
 declare const s_total__: HTMLSpanElement;
 
 preview_fav__.onclick = () => {
-  if (!PreviewHandler.label) return;
-  const [path, isfav] = getCurrentSample() ?? [PreviewHandler.path, PreviewHandler.fav];
-  if (path !== PreviewHandler.path) {
-    setLiked(PreviewHandler.path, !PreviewHandler.fav);
-    PreviewHandler.fav = !PreviewHandler.fav;
-  } else {
-    setLiked(path, !isfav);
-    PreviewHandler.fav = !isfav;
-  }
+  if (!PreviewHandler.path) return;
+  toggleFav(PreviewHandler.path);
 };
 
 function createPreview() {
@@ -87,9 +81,8 @@ listen("s_tick", (n) => (s_total__.textContent = n));
 
 listen("set-fav", (payload) => {
   const fav = !!+payload.charAt(0);
-  const label = basename(payload.slice(1));
 
-  if (PreviewHandler.label === label) {
+  if (PreviewHandler.label === payload) {
     PreviewHandler.fav = fav;
   }
 });

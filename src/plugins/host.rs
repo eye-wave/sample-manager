@@ -131,7 +131,7 @@ impl HostState {
 
         let results = filter_samples(entries, req);
 
-        Arc::new(results.iter().map(|c| (*c).clone()).collect())
+        Arc::new(results.1.iter().map(|c| (*c).clone()).collect())
     }
 
     /// Assembles the current stored config values for a plugin as a

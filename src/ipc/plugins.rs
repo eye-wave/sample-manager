@@ -12,15 +12,14 @@ use crate::{AStr, LogErrorExt};
 
 fn any_online_plugin_loaded(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
-        ((state
+        (state
             .plugin_handle
             .get_all_plugins_info(|_| {})
             .iter()
             .filter(|p| p.capabilities.network)
             .count()
-            > 0) as u8)
-            .to_string()
-            .finish()
+            > 0)
+        .finish()
     })
 }
 

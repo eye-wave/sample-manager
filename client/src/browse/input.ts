@@ -71,18 +71,19 @@ export const TagInput = (
 
     if (!query.length && !isFav) {
       recentQuery = "";
-
       for (const p of pool) p.hide();
       PaginationHandler.display(false);
-
       return;
     }
 
     recentQuery = query;
-
     list_scroll__.scrollTo({ top: 0 });
-    search(query, tags, 1, isFav);
+    PaginationHandler.setPage(1);
+    search(query, tags, isFav);
   };
 
-  PaginationHandler.onClick = (p) => search(recentQuery, tags, p);
+  PaginationHandler.onClick = () => {
+    const isFav = TabHandle.tab === TabFavorites;
+    search(recentQuery, tags, isFav);
+  };
 };

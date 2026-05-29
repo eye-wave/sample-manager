@@ -80,13 +80,16 @@ function shortenHtmlIds(html: string): string {
   let output = html;
 
   for (const [oldId, newId] of map) {
-    let ref = 0
+    let ref = 0;
 
-    output = output.replaceAll(oldId, () => { return ++ref, newId });
+    output = output.replaceAll(oldId, () => {
+      ref += 1;
+      return newId;
+    });
 
-    if ( ref === 1 ) {
-      console.warn(`Element ${oldId} is unused.`)
-      output = output.replaceAll(`id="${newId}"`, "")
+    if (ref === 1) {
+      console.warn(`Element ${oldId} is unused.`);
+      output = output.replaceAll(`id="${newId}"`, "");
     }
   }
 
@@ -154,7 +157,7 @@ export async function minifyInlineScripts(html: string): Promise<string> {
     const script = $(el);
 
     const code = script.html();
-    if (!code || !code.trim()) continue;
+    if (!code?.trim()) continue;
 
     const result = await minifyJS(code, {
       compress: true,

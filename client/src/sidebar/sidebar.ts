@@ -1,9 +1,9 @@
 import { $el, d } from "../alias";
-import { search } from "../browse/browse";
-import * as IPC from "../gen/ipc-gen";
-import { basename } from "../helpers";
-import { invoke } from "../invoke/invoke";
-import { playerHandle } from "../player/player";
+import { clearHighlight, search } from "../browse/browse";
+import { PaginationHandler } from "../browse/pagination";
+import { emit } from "../bus";
+import { BUS } from "../bus";
+import { invoke, IPC } from "../invoke/invoke";
 import { parseVFS } from "./parse";
 import { renderNode } from "./render";
 import { initSidebarResize } from "./resize";
@@ -88,7 +88,8 @@ async function onClick(e: Event) {
 
   const path = decodeURI(url);
 
-  playerHandle.startPlaying(path, basename(path));
+  emit(BUS.PLAY_SONG, path);
+  clearHighlight();
 }
 
 sidebar__.onclick = onClick;
@@ -117,17 +118,17 @@ export const TabHandle: { tab: 0 | 1 } = {
 };
 
 tlib__.onchange = () => {
-  const checked = tlib__.checked;
-  if (!checked) return;
-
+  if (!tlib__.checked) return;
   TabHandle.tab = TabLibrary;
-  search("", [], 1, false);
+
+  PaginationHandler.setPage(1);
+  search("", [], false);
 };
 
 tfav__.onchange = () => {
-  const checked = tfav__.checked;
-  if (!checked) return;
-
+  if (!tfav__.checked) return;
   TabHandle.tab = TabFavorites;
-  search("", [], 1, true);
+
+  PaginationHandler.setPage(1);
+  search("", [], true);
 };

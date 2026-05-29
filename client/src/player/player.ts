@@ -1,6 +1,7 @@
 import { w } from "../alias";
-import * as IPC from "../gen/ipc-gen";
-import { invoke, listen } from "../invoke/invoke";
+import { getSampleMetedata } from "../api";
+import { BUS, on } from "../bus";
+import { invoke, IPC, listen } from "../invoke/invoke";
 import { PreviewHandler } from "../preview/preview";
 import { addShortcut } from "../shortcuts";
 import { makeSlider } from "./sliders";
@@ -103,30 +104,21 @@ function createPlayerHandle() {
     intervalId = -1;
   }
 
-  async function startPlaying(
-    inpath?: string,
-    name?: string,
-    fav?: boolean,
-    tagsList?: string[],
-  ) {
+  async function startPlaying(inpath?: string) {
     if (inpath) PreviewHandler.path = inpath;
     if (!PreviewHandler.path) return;
 
     const path = inpath ?? PreviewHandler.path;
 
     if (inpath) {
-      if (name) PreviewHandler.label = name;
+      const meta = await getSampleMetedata(inpath);
+      PreviewHandler.label = meta.name;
       PreviewHandler.img = "";
       PreviewHandler.position = 0;
 
       invoke(IPC.DRAW_AUDIO_FILE, path);
 
-      const tags = tagsList ? tagsList : (await invoke(IPC.TAG_PATH, path)).split(",");
-      const isFav =
-        fav === undefined ? (await invoke(IPC.IS_SAMPLE_FAV, path)) === "true" : fav;
-
-      PreviewHandler.tags = tags;
-      PreviewHandler.fav = isFav;
+      PreviewHandler.tags = meta.tags;
     }
 
     await invoke(IPC.PLAY_AUDIO_FILE, path).then(() => {
@@ -181,11 +173,12 @@ function createPlayerHandle() {
     onClick();
   });
 
+  on(BUS.PLAY_SONG, (path: string) => startPlaying(path));
+
   return {
     get state() {
       return playerState;
     },
-    startPlaying,
     pause,
     seek,
   };

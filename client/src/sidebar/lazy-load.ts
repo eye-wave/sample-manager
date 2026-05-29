@@ -1,5 +1,4 @@
-import * as IPC from "../gen/ipc-gen";
-import { invoke } from "../invoke/invoke";
+import { invoke, IPC } from "../invoke/invoke";
 import { parseVFS } from "./parse";
 import { renderNode } from "./render";
 import type { VFSChild, VFSNode } from "./vfs";

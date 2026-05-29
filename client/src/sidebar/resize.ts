@@ -1,6 +1,5 @@
 import { d, w } from "../alias";
-import * as IPC from "../gen/ipc-gen";
-import { invoke } from "../invoke/invoke";
+import { invoke, IPC } from "../invoke/invoke";
 
 const MIN_WIDTH = 160;
 const MAX_WIDTH = 480;

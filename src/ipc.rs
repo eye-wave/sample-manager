@@ -141,6 +141,15 @@ impl<T: IntoBytes> IntoIPCResponse for Option<T> {
     }
 }
 
+impl IntoIPCResponse for bool {
+    fn finish(self) -> IPCResponse {
+        const TRUE: IPCResponse = IPCResponse::Ok(Cow::Borrowed(b"1"));
+        const FALSE: IPCResponse = IPCResponse::Ok(Cow::Borrowed(b"0"));
+
+        if self { TRUE } else { FALSE }
+    }
+}
+
 pub(super) fn ipc_strip_cmd_id(req: &str) -> Option<IPCRequestBody<'_>> {
     let mut parts = req.splitn(3, ':');
 
@@ -256,7 +265,7 @@ type Enumerate<
     ? Acc[number]
     : Enumerate<N, [...Acc, Acc['length']]>;
 
-type Range<F extends number, T extends number> =
+export type Range<F extends number, T extends number> =
     Exclude<Enumerate<T>, Enumerate<F>> | T;
 
 export type IPC_ID = Range<{}, {}>;"#,

@@ -1,11 +1,13 @@
 import type { SampleEntry } from "@typegen/SampleEntry";
-import * as IPC from "../gen/ipc-gen";
-import { basename, setLiked, setLikedView } from "../helpers";
-import { invoke, listen } from "../invoke/invoke";
-import { playerHandle } from "../player/player";
+import { BUS } from "../bus";
+import { basename, setLikedView } from "../helpers";
+import { invoke, IPC, listen } from "../invoke/invoke";
 import { TagInput } from "./input";
 import { PaginationHandler } from "./pagination";
 import { BrowseRow } from "./row";
+import { PreviewHandler } from "../preview/preview";
+import { emit } from "../bus";
+import { callSampleSearch, toggleFav } from "../api";
 
 declare const list_scroll__: HTMLDivElement;
 declare const search__: HTMLInputElement;
@@ -42,26 +44,35 @@ function onSelect(i: number, file: string) {
   if (!current) return;
 
   current.highlight(true);
-  playerHandle.startPlaying(file, current.name, current.isFav, current.tags);
+  emit(BUS.PLAY_SONG, file);
 
   lastSelected = i;
 }
 
+export function clearHighlight() {
+  pool[lastSelected]?.highlight(false);
+  lastSelected = 0;
+}
+
+export function syncHighlight() {
+  const playingPath = PreviewHandler.path;
+
+  for (let i = 0; i < POOL_SIZE; i++) {
+    const row = pool[i];
+    const isPlaying = !!playingPath && row.path === playingPath;
+    row.highlight(isPlaying);
+    if (isPlaying) lastSelected = i;
+  }
+}
+
 const pool: BrowseRow[] = Array.from({ length: POOL_SIZE }, (_, i) =>
-  BrowseRow(i, onSelect, (p, s) => setLiked(p, s)),
+  BrowseRow(i, onSelect, (p) => toggleFav(p)),
 );
 
 TagInput(search__, search_tags__, pool);
 
 for (const item of pool) {
   list_scroll__.insertBefore(item.el as Node, pagination__);
-}
-
-export function getCurrentSample(): [string, boolean] | null {
-  const current = pool[lastSelected];
-  if (!current.path) return null;
-
-  return [current.path, current.isFav];
 }
 
 listen("set-fav", (payload) => {
@@ -76,19 +87,16 @@ listen("set-fav", (payload) => {
 });
 
 const PAGE_SIZE = 50;
-export async function search(query: string, tags: string[], offset: number, fav = false) {
-  const params = {
+export async function search(query: string, tags: string[], fav = false) {
+  callSampleSearch({
     query,
     limit: PAGE_SIZE,
-    offset: (offset - 1) * PAGE_SIZE,
+    offset: (PaginationHandler.page - 1) * PAGE_SIZE,
     tags,
-    is_fav: fav,
-  };
-
-  invoke(IPC.SEARCH_FOR_SAMPLE, params);
+    isFav: fav,
+  });
 
   PaginationHandler.display(true);
-  PaginationHandler.setPage(offset);
 }
 
 listen("search", (payload) => {
@@ -114,4 +122,6 @@ listen("search", (payload) => {
       row.hide();
     }
   }
+
+  syncHighlight();
 });

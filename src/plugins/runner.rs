@@ -259,6 +259,7 @@ impl PluginRunner {
 
                 let cache = self.index_cache.get(id).unwrap();
                 Ok(filter_samples(cache.entries.par_iter(), req)
+                    .1
                     .iter()
                     .map(|f| (**f).clone())
                     .collect::<Vec<WireEntry>>())

@@ -5,7 +5,7 @@ export type BrowseRow = ReturnType<typeof BrowseRow>;
 export const BrowseRow = (
   idx: number,
   onSelect?: (i: number, p: string) => void,
-  onLike?: (p: string, s: boolean) => void,
+  onFavToggle?: (p: string) => void,
 ) => {
   const el = $el("div");
   el.className = "list-item hidden";
@@ -32,27 +32,23 @@ export const BrowseRow = (
   el.querySelector(".item-type")?.appendChild(typeEl);
   el.querySelector(".item-bpm")?.appendChild(bpmEl);
 
-  let isLiked = false;
   let path: string | null = null;
 
   let storedName = "";
   let storedTags: string[] = [];
 
   const update = (name: string, bpm: number | null, liked: boolean, tags: string[] = []) => {
-    isLiked = liked;
     setLikedView(liked, favEl);
 
     storedName = name;
     storedTags = tags;
 
     labelEl.setAttribute("title", name);
-
     labelText.nodeValue = name;
     typeEl.nodeValue = bpm ? "Loop" : "One-shot";
     bpmEl.nodeValue = (bpm ? bpm : "-") as string;
 
     renderTags(tagsEl, tags);
-
     el.style.display = "";
   };
 
@@ -68,12 +64,7 @@ export const BrowseRow = (
 
   favEl.onclick = (e) => {
     if (!path) return;
-
-    onLike?.(path, !isLiked);
-    isLiked = !isLiked;
-
-    setLikedView(isLiked, favEl);
-
+    onFavToggle?.(path);
     e.stopPropagation();
   };
 
@@ -96,9 +87,6 @@ export const BrowseRow = (
     },
     get path() {
       return path;
-    },
-    get isFav() {
-      return isLiked;
     },
   };
 };

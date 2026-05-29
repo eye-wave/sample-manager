@@ -1,9 +1,10 @@
 use std::fs;
 
 use crate::ipc::{IPCBody, IPCError, IPCResponse, IntoIPCResponse, Poisoned, ok};
+use crate::state::FsSample;
 use crate::state::samples::{
-    ScanMerge, SearchRequest, WaveformData, draw_audio_and_save, process_directories, search_local,
-    tag_string,
+    SampleEntry, ScanMerge, SearchRequest, WaveformData, draw_audio_and_save, process_directories,
+    search_local, tag_string,
 };
 use crate::{LogErrorExt, ipc_commands};
 
@@ -79,25 +80,29 @@ fn search_for_sample(body: IPCBody) -> IPCResponse {
     ok()
 }
 
-const SET_FAV_ID: &str = "set-fav";
+fn get_sample_metadata(body: IPCBody) -> IPCResponse {
+    crate::with_state!(body, state, {
+        let sample = FsSample::new(body.req.as_ref());
 
-fn add_sample_to_fav(body: IPCBody) -> IPCResponse {
-    crate::with_state_mut!(body, state, {
-        state.add_sample_to_fav(&body.req);
-
-        body.webview_sender
-            .send_msg(SET_FAV_ID, "1".to_string() + &body.req);
-
-        ok()
+        sample.to_json(&state)?.finish()
     })
 }
 
-fn remove_sample_from_fav(body: IPCBody) -> IPCResponse {
-    crate::with_state_mut!(body, state, {
-        state.remove_sample_from_fav(body.req.to_string().as_ref());
+const SET_FAV_ID: &str = "set-fav";
 
+fn toggle_sample_fav(body: IPCBody) -> IPCResponse {
+    crate::with_state_mut!(body, state, {
+        let is_fav = state.favorite_samples.contains(body.req.as_ref());
+
+        if is_fav {
+            state.remove_sample_from_fav(&body.req);
+        } else {
+            state.add_sample_to_fav(&body.req);
+        }
+
+        let prefix = if is_fav { "0" } else { "1" };
         body.webview_sender
-            .send_msg(SET_FAV_ID, "0".to_string() + &body.req);
+            .send_msg(SET_FAV_ID, prefix.to_string() + &body.req);
 
         ok()
     })
@@ -105,11 +110,7 @@ fn remove_sample_from_fav(body: IPCBody) -> IPCResponse {
 
 fn is_sample_fav(body: IPCBody) -> IPCResponse {
     crate::with_state!(body, state, {
-        state
-            .favorite_samples
-            .contains(body.req.as_ref())
-            .to_string()
-            .finish()
+        (state.favorite_samples.contains(body.req.as_ref())).finish()
     })
 }
 
@@ -144,11 +145,11 @@ fn draw_audio_file(body: IPCBody) -> IPCResponse {
 
 ipc_commands! {
     IPC_SAMPLES = [
-        add_sample_to_fav,
-        remove_sample_from_fav,
+        toggle_sample_fav,
         is_sample_fav,
         add_sample_folder,
         get_sample_folders,
+        get_sample_metadata,
         start_sample_scan,
         search_for_sample,
         tag_path,

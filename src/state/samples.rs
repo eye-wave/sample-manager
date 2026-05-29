@@ -35,7 +35,7 @@ fn is_sample_file(path: &Path) -> bool {
 
 #[derive(Debug, Clone)]
 pub struct FsSample {
-    pub path: Arc<Path>,
+    pub path: PathBuf,
     pub tags: Vec<&'static str>,
 
     search_str: AStr,
@@ -120,12 +120,13 @@ impl From<&FsSample> for SampleSerialize {
 }
 
 impl FsSample {
-    pub fn new(path: Arc<Path>) -> Self {
-        let search_str = Arc::from(clean_up_string(&path.to_string_lossy()));
-        let tags = tag_string(&path.to_string_lossy());
+    pub fn new(path: impl AsRef<Path>) -> Self {
+        let path_str = &path.as_ref().to_string_lossy();
+        let search_str = Arc::from(clean_up_string(path_str));
+        let tags = tag_string(path_str);
 
         Self {
-            path,
+            path: PathBuf::from(path.as_ref()),
             search_str,
             tags,
         }
@@ -169,7 +170,7 @@ pub fn process_directories<'a>(
             if file_path.is_dir() {
                 stack.push(file_path);
             } else if is_sample_file(&file_path) {
-                sample_registry.push(FsSample::new(Arc::from(file_path)));
+                sample_registry.push(FsSample::new(file_path));
             }
         }
     }

@@ -83,9 +83,7 @@ fn set_volume(body: IPCBody) -> IPCResponse {
 }
 
 fn get_looping(body: IPCBody) -> IPCResponse {
-    crate::with_state!(body, state, {
-        (state.audio_player.is_looping() as u8).to_string().finish()
-    })
+    crate::with_state!(body, state, { state.audio_player.is_looping().finish() })
 }
 
 fn set_looping(body: IPCBody) -> IPCResponse {

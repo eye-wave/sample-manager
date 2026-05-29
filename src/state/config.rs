@@ -115,7 +115,7 @@ impl std::ops::DerefMut for AppConfig {
 #[derive(Debug, Default, Serialize, Deserialize, Patch, TS)]
 #[patch(attribute(derive(Clone, Debug, Deserialize)))]
 #[serde(default)]
-#[ts(export)]
+#[ts(export, rename = "AppConfig")]
 pub struct ConfigData {
     pub tracked_dirs: HashSet<PathBuf>,
     #[serde(flatten)]

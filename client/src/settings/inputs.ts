@@ -1,6 +1,5 @@
 import type { SchemaFieldWithValue as Field } from "@typegen/SchemaFieldWithValue";
-import * as IPC from "../gen/ipc-gen";
-import { invoke } from "../invoke/invoke";
+import { invoke, IPC } from "../invoke/invoke";
 
 export function renderField(key: string, field: Field) {
   return /* HTML */ `

@@ -1,8 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
-use std::path::Path;
-use std::sync::Arc;
+use std::path::PathBuf;
 
 use crate::LogErrorExt;
 use crate::audio::AudioPlayer;
@@ -14,11 +13,12 @@ pub mod app_paths;
 pub mod config;
 pub mod samples;
 
+pub use samples::FsSample;
+
 use config::AppConfig;
-use samples::FsSample;
 
 pub struct AppState {
-    pub sample_registry: HashMap<Arc<Path>, FsSample>,
+    pub sample_registry: HashMap<PathBuf, FsSample>,
     pub audio_player: AudioPlayer,
     pub favorite_samples: HashSet<String>,
     pub plugin_handle: PluginRuntimeHandle,

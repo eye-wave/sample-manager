@@ -1,6 +1,5 @@
 import { d, w } from "./alias";
-import * as IPC from "./gen/ipc-gen";
-import { invoke } from "./invoke/invoke";
+import { invoke, IPC } from "./invoke/invoke";
 
 export function escapeHTML(str: string) {
   return str
@@ -91,10 +90,6 @@ export function isFocusElement(el?: EventTarget | null) {
   return tags.includes((el as HTMLElement)?.tagName ?? "");
 }
 
-export function setLiked(path: string, state: boolean) {
-  invoke(state ? IPC.ADD_SAMPLE_TO_FAV : IPC.REMOVE_SAMPLE_FROM_FAV, path);
-}
-
 export const setLikedView = (liked: boolean, element: HTMLElement) => {
   element.textContent = liked ? "♥" : "♡";
   element.className = `fav ${liked ? "liked" : ""}`;
@@ -119,7 +114,9 @@ export const DialogManager = (() => {
 
   return {
     close() {
-      ids.forEach((id) => dial(id)?.close());
+      ids.forEach((id) => {
+        dial(id)?.close();
+      });
       current = null;
     },
     open(id: string) {
