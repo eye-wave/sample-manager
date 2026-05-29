@@ -35,7 +35,6 @@ async function onSelect(i: number, props: OnSelectProps) {
   let path ="";
 
   if (props.type === "plug") {
-    console.log(props)
     path = await downloadFile(props);
   }
   else path = props.path
@@ -121,6 +120,7 @@ listen("search", (payload) => {
 
     if (i < files.length) {
       const item = files[i];
+      item.source==="plugin" && console.log(item)
 
       row.update(basename(item.name), null, item.isFav, item.tags);
       if (item.source === "native" ) row.setPath(item.path)

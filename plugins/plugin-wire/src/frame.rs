@@ -148,6 +148,20 @@ impl WireEntry {
         self.str_content[self.description_end..self.tags_end].split(',')
     }
 
+    pub fn clear_url(&mut self) {
+        let url_len = self.url_end - self.path_end;
+
+        if url_len == 0 {
+            return;
+        }
+
+        self.str_content.drain(self.path_end..self.url_end);
+
+        self.url_end -= url_len;
+        self.description_end -= url_len;
+        self.tags_end -= url_len;
+    }
+
     /// Serialize this entry's fixed header + str_content into `buf`.
     fn write_into(&self, buf: &mut Vec<u8>) {
         let str_bytes = self.str_content.as_bytes();

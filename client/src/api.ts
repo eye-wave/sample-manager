@@ -16,7 +16,7 @@ export const isFav = async (path: string) => !!+(await invoke(IPC.IS_SAMPLE_FAV,
 
 export const callSampleSearch = async (params: SearchRequest) =>
   invoke(IPC.SEARCH_FOR_SAMPLE, params);
-export const callOnlineSearch = async (params: SearchRequest & { id: string }) =>
+export const callOnlineSearch = async (params: SearchRequest) =>
   invoke(IPC.PLUGIN_SEARCH_FOR_SAMPLE, params);
 
 export const getPluginPaths = (): Promise<PluginSidebarView[]> =>

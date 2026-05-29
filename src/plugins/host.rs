@@ -35,6 +35,7 @@ pub struct HostState {
     pub pending_download: Option<PendingDownload>,
 
     entry_cache: HashMap<PluginId, HashSet<WireEntry>>,
+    local_cache: HashMap<AStr, PluginSample>,
 }
 
 impl Drop for HostState {
@@ -64,8 +65,6 @@ impl HostState {
         Self::load(&mut self.storage, app_paths::plugin_storage_file())?;
         Self::load(&mut self.secrets, app_paths::plugin_secret_storage_file())?;
         Self::load(&mut self.entry_cache, app_paths::plugin_entry_cache_file())?;
-
-        println!("{:?}", self.entry_cache);
 
         Ok(())
     }
@@ -108,12 +107,34 @@ impl HostState {
         self.secrets.insert(key, data);
     }
 
-    pub fn insert_sample_cache<'a>(&mut self, results: impl Iterator<Item = &'a PluginSample>) {
-        for r in results {
-            if let Some(container) = self.entry_cache.get_mut(&r.plugin_id) {
-                container.insert(r.entry.clone());
-            }
+    pub fn insert_search_cache<'a>(&mut self, items: impl Iterator<Item = &'a PluginSample>) {
+        for item in items {
+            self.local_cache
+                .insert(Arc::from(item.url.as_str()), item.clone());
         }
+    }
+
+    pub fn insert_cached_sample(&mut self, url: AStr) {
+        let Some(sample) = self.local_cache.get(&url) else {
+            return;
+        };
+
+        let plug_id = &sample.plugin_id;
+
+        let container = match self.entry_cache.get_mut(plug_id) {
+            Some(container) => container,
+            None => {
+                self.entry_cache.insert(plug_id.clone(), HashSet::new());
+                self.entry_cache.get_mut(plug_id).unwrap()
+            }
+        };
+
+        let mut sample = sample.entry.clone();
+
+        sample.clear_url();
+        container.insert(sample);
+
+        let _ = self.flush_cache();
     }
 
     pub fn search_local_registry_for(
@@ -121,23 +142,26 @@ impl HostState {
         req: &SearchRequest,
         plugin_id: &PluginId,
     ) -> Arc<Vec<PluginSample>> {
+        let empty_set: std::collections::HashSet<WireEntry> = HashSet::new();
+
         let entries = self
-            .entry_cache
-            .get(plugin_id)
-            .into_iter()
-            .flat_map(|c| c.iter())
+            .local_cache
+            .iter()
+            .filter(|s| s.1.plugin_id == *plugin_id)
+            .map(|s| &s.1.entry)
+            .chain(self.entry_cache.get(plugin_id).unwrap_or(&empty_set).iter())
             .par_bridge();
 
         let results = filter_samples(entries, req);
+
         Arc::new(
             results
                 .1
                 .iter()
-                .map(|c| PluginSample::new((*c).clone(), plugin_id.clone()))
+                .map(|wire_ref| PluginSample::new((*wire_ref).clone(), plugin_id.clone()))
                 .collect(),
         )
     }
-
     /// Assembles the current stored config values for a plugin as a
     /// plain string map. Used when passing config into `get_index`.
     pub fn get_plugin_config(

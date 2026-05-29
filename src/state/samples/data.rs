@@ -81,14 +81,14 @@ pub trait SampleEntry: std::fmt::Debug + Sync {
     }
 }
 
-// PluginSample  (wraps WireEntry + carries plugin id)
+// PluginSample (wraps WireEntry + carries plugin id)
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PluginSample {
     pub entry: WireEntry,
     pub plugin_id: PluginId,
     /// Cached so hash_key() can return a &str without alloc.
-    url: String,
+    pub url: String,
 }
 
 impl PluginSample {

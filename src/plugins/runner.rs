@@ -157,11 +157,11 @@ impl PluginRunner {
 
                     let result = plugin_ids
                         .iter()
-                        .filter_map(|id| self.run_search(id, &req).ok())
+                        .filter_map(|id| self.run_search(id, &req).sure("Failed to run search"))
                         .flatten()
                         .collect::<Vec<_>>();
 
-                    self.store.data_mut().insert_sample_cache(result.iter());
+                    self.store.data_mut().insert_search_cache(result.iter());
 
                     let reply = result
                         .iter()
@@ -216,6 +216,8 @@ impl PluginRunner {
                             fs::create_dir_all(parent)?;
                             fs::write(&save_path, bytes)?;
                         }
+
+                        self.store.data_mut().insert_cached_sample(url);
 
                         Ok(save_path)
                     })();
