@@ -5,15 +5,6 @@ import { playerHandle } from "../player/player";
 
 import { missingUri } from "./missing";
 
-declare const waveform__: HTMLDivElement;
-declare const wave_thumb__: HTMLDivElement;
-
-declare const preview_label__: HTMLSpanElement;
-declare const preview_tags__: HTMLDivElement;
-declare const preview_fav__: HTMLSpanElement;
-
-declare const s_total__: HTMLSpanElement;
-
 preview_fav__.onclick = () => {
   if (!PreviewHandler.path) return;
   toggleFav(PreviewHandler.path);

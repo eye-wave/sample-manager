@@ -1,3 +1,5 @@
+#!/usr/bin/env bun
+
 import { readFile, writeFile } from "node:fs/promises";
 import { load } from "cheerio";
 import { minify as minifyHTML } from "html-minifier-terser";

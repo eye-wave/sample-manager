@@ -3,32 +3,13 @@ import type { PickFileOptions } from "@typegen/PickFileOptions";
 import type { PluginInfo } from "@typegen/PluginInfo";
 import type { SchemaFieldWithValue } from "@typegen/SchemaFieldWithValue";
 import { d, w } from "../alias";
-import {
-  capitalize,
-  DialogManager,
-  updateCurrentTheme,
-  updateTheme,
-  updateThemeCss,
-} from "../helpers";
+import { capitalize, updateCurrentTheme, updateTheme, updateThemeCss } from "../helpers";
 import { invoke, IPC, listen } from "../invoke/invoke";
-import { addShortcut, iterateShortcuts } from "../shortcuts";
+import { iterateShortcuts } from "../shortcuts";
 import { resizeHandle } from "../sidebar/resize";
 import { bindSettingInputs } from "./inputs";
 import { createPluginCard, renderSettings } from "./template";
-
-declare const add_plugin_btn__: HTMLButtonElement;
-declare const conf_btn__: HTMLButtonElement;
-declare const conf_dial__: HTMLDialogElement;
-declare const conf_dial_body__: HTMLDivElement;
-declare const conf_reset__: HTMLButtonElement;
-declare const conf_save__: HTMLButtonElement;
-declare const dialog_close__: HTMLButtonElement;
-declare const plugin_settings_body__: HTMLDivElement;
-declare const plugin_settings_label__: HTMLParagraphElement;
-declare const plugins_settings__: HTMLDivElement;
-declare const settings_body__: HTMLDivElement;
-declare const dial_tab_shortcuts_body__: HTMLDivElement;
-declare const dial_tab_cache_body__: HTMLDivElement;
+import { DialogManager } from "../dialog";
 
 function createPatch() {
   type Patch = Partial<AppConfig>;
@@ -172,13 +153,6 @@ add_plugin_btn__.onclick = async () => {
   if (!path) return;
 };
 
-addShortcut("Close settings dialog", "Escape", 0, () => {
-  if (conf_dial__.open) {
-    updateCurrentTheme();
-    DialogManager.close();
-  }
-});
-
 listen("plugin-info", (data) => {
   const pluginsInfo: PluginInfo[] = [];
   try {
@@ -189,7 +163,7 @@ listen("plugin-info", (data) => {
   } catch {}
 
   plugins_settings__.innerHTML = pluginsInfo.map((i) => createPluginCard(i)).join("");
-  plugins_settings__.querySelectorAll(".btn").forEach((el) => {
+  (plugins_settings__.querySelectorAll(".btn") as HTMLButtonElement[]).forEach((el) => {
     const btn = el as HTMLButtonElement;
     const plugId = btn.dataset.id as string;
 

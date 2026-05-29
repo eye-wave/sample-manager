@@ -11,9 +11,6 @@ import { NodeType, type VFSChild, VFSNode } from "./vfs";
 
 initSidebarResize();
 
-declare const sidebar__: HTMLDivElement;
-declare const add_folder__: HTMLButtonElement;
-
 const popup = $el("div");
 popup.className = "tree-section item popup";
 
@@ -106,9 +103,6 @@ add_folder__.onclick = async () => {
   root.add(node);
   renderNode(sidebar__, node);
 };
-
-declare const tlib__: HTMLInputElement;
-declare const tfav__: HTMLInputElement;
 
 export const TabLibrary = 0 as const;
 export const TabFavorites = 1 as const;

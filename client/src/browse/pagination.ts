@@ -1,6 +1,3 @@
-declare const pagination__: HTMLDivElement;
-declare const pagi_template__: HTMLButtonElement;
-
 function createPagination() {
   let current = 1;
   let max = 1;

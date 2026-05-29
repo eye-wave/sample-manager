@@ -4,9 +4,6 @@ import { invoke, IPC } from "../invoke/invoke";
 const MIN_WIDTH = 160;
 const MAX_WIDTH = 480;
 
-declare const sidebar_resize__: HTMLDivElement;
-declare const sidebar_container__: HTMLDivElement;
-
 let startX = 0;
 let startWidth = 0;
 let width = 280;

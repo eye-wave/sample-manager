@@ -6,8 +6,6 @@ import { search } from "./browse";
 import { PaginationHandler } from "./pagination";
 import type { BrowseRow } from "./row";
 
-declare const list_scroll__: HTMLDivElement;
-
 export const TagInput = (
   input: HTMLInputElement,
   container: HTMLElement,

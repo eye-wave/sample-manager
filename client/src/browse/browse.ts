@@ -9,12 +9,6 @@ import { PreviewHandler } from "../preview/preview";
 import { emit } from "../bus";
 import { callSampleSearch, toggleFav } from "../api";
 
-declare const list_scroll__: HTMLDivElement;
-declare const search__: HTMLInputElement;
-declare const search_tags__: HTMLInputElement;
-declare const pagination__: HTMLDivElement;
-declare const online_plugin_btn__: HTMLButtonElement;
-
 export const POOL_SIZE = 100;
 
 let isOnlineSearch = false;

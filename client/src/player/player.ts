@@ -12,16 +12,6 @@ export const STOPPED = 2 as const;
 
 export type PlayerState = typeof PAUSED | typeof PLAYING | typeof STOPPED;
 
-declare const time_cur__: HTMLSpanElement;
-declare const time_est__: HTMLSpanElement;
-
-declare const pause_btn__: HTMLButtonElement;
-
-declare const volume_ctrl__: HTMLInputElement;
-declare const volume_txt__: HTMLSpanElement;
-
-declare const playback_mode__: HTMLSpanElement;
-
 const RESUME_ICON = `<path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/>`;
 const PAUSE_ICON = `<rect x=14 y=3 width=5 height=18 rx="1"/><rect x=5 y=3 width=5 height=18 rx="1"/>`;
 

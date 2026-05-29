@@ -6,10 +6,6 @@ import { invoke, IPC } from "./invoke/invoke";
 w.oncontextmenu = (e) => e.preventDefault();
 /// BUILD end
 
-declare const btn_minimize__: HTMLButtonElement;
-declare const btn_maximize__: HTMLButtonElement;
-declare const btn_closeWindow__: HTMLButtonElement;
-
 w.onmousedown = (e) => {
   if (e.clientY > 20) return;
   if (e.target === btn_minimize__) return;
