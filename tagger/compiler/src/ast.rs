@@ -29,7 +29,7 @@ impl Trie {
             .collect();
 
         if decl.outputs.is_empty() && inherited.is_empty() {
-            eprintln!("warning: '{word_str}' has no outputs and no enclosing group — skipped");
+            eprintln!("warning: '{word_str}' has no outputs and no enclosing group - skipped");
             return;
         }
 

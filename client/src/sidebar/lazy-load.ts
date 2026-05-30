@@ -7,7 +7,7 @@ export async function loadNode(node: VFSNode): Promise<void> {
   if (node.loaded) return;
   node.loaded = true;
 
-  const children: VFSChild[] = await invoke(IPC.READ_DIR, node.path()).then((res) =>
+  const children: VFSChild[] = await invoke(IPC.ReadDir, node.path()).then((res) =>
     res
       .split("\n")
       .filter((e) => e)
@@ -23,4 +23,13 @@ export async function loadNode(node: VFSNode): Promise<void> {
       renderNode(node.visual.childrenEl, child);
     }
   }
+}
+
+export async function prefetchCount(node: VFSNode): Promise<void> {
+  if (node.loaded) return;
+
+  try {
+    const count = +(await invoke(IPC.GetFileCountInDir, node.path()));
+    node.visual?.updateCount(count);
+  } catch {}
 }

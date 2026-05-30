@@ -65,7 +65,12 @@ export const BrowseRow = (
     const props =
       pluginId === null
         ? { type: "native" as const, path }
-        : ({ type: "plug" as const, url, id: pluginId, name: storedName } as Partial<OnSelectProps>);
+        : ({
+            type: "plug" as const,
+            url,
+            id: pluginId,
+            name: storedName,
+          } as Partial<OnSelectProps>);
 
     if (props.type === "native" && !props.path) return;
     if (props.type === "plug" && !props.url && !props.id) return;
@@ -91,7 +96,7 @@ export const BrowseRow = (
 
   return {
     set name(s: string) {
-      storedName = s
+      storedName = s;
     },
     get name() {
       return storedName;
@@ -106,7 +111,7 @@ export const BrowseRow = (
     hide,
     setPath(p: string) {
       path = p;
-      pluginId = null
+      pluginId = null;
     },
     get path() {
       return path;

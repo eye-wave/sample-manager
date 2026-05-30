@@ -12,12 +12,12 @@ w.onmousedown = (e) => {
   if (e.target === btn_maximize__) return;
   if (e.target === btn_closeWindow__) return;
 
-  invoke(IPC.DRAG_WINDOW);
+  invoke(IPC.DragWindow);
 };
 
-btn_minimize__.onclick = () => invoke(IPC.MINIMIZE_WINDOW);
-btn_maximize__.onclick = () => invoke(IPC.MAXIMIZE_WINDOW);
-btn_closeWindow__.onclick = () => invoke(IPC.CLOSE_WINDOW);
+btn_minimize__.onclick = () => invoke(IPC.MinimizeWindow);
+btn_maximize__.onclick = () => invoke(IPC.MaximizeWindow);
+btn_closeWindow__.onclick = () => invoke(IPC.CloseWindow);
 
 /// DEV start
 updateCurrentTheme();

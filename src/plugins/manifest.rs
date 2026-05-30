@@ -94,10 +94,10 @@ pub struct PluginAssets {
 
 /// How a plugin surfaces samples to the host.
 ///
-/// `Delegated`   — plugin receives the `SearchRequest` and returns matching
+/// `Delegated`   - plugin receives the `SearchRequest` and returns matching
 ///                 samples directly. Suitable for remote API plugins.
 ///
-/// `HostIndexed` — plugin exposes `get_index()` which returns the full sample
+/// `HostIndexed` - plugin exposes `get_index()` which returns the full sample
 ///                 list. The host caches it and handles searching locally with
 ///                 the fuzzy matcher. Suitable for local file-registry plugins.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, TS)]

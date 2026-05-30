@@ -76,13 +76,13 @@ export function updateThemeCss(css: string) {
 }
 
 export async function updateTheme(theme: string) {
-  const css = await invoke(IPC.UPDATE_THEME, theme);
+  const css = await invoke(IPC.UpdateTheme, theme);
   if (!css) return;
   updateThemeCss(css);
 }
 
 export async function updateCurrentTheme() {
-  updateThemeCss(await invoke(IPC.GET_THEME));
+  updateThemeCss(await invoke(IPC.GetTheme));
 }
 
 export function isFocusElement(el?: EventTarget | null) {
@@ -101,16 +101,17 @@ export function capitalize(str: string) {
 }
 
 export function startDrag(path: string) {
-  invoke(IPC.START_DRAG_FILE, path);
+  invoke(IPC.StartDragFile, path);
 }
 
+// biome-ignore lint/suspicious/noExplicitAny: this is just reject type
 export function debounce<T extends (...args: any[]) => void>(
   fn: T,
   delay: number,
 ): (...args: Parameters<T>) => void {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
-  return function (...args: Parameters<T>): void {
+  return (...args: Parameters<T>): void => {
     if (timeoutId !== undefined) {
       clearTimeout(timeoutId);
     }

@@ -3,6 +3,7 @@ import { defineConfig } from "vite";
 import injectHTML from "vite-plugin-html-inject";
 import { viteSingleFile } from "vite-plugin-singlefile";
 import htmlTemplateMinifyPlugin from "./src-build/minify-templates";
+import { betterEnums } from "vite-plugin-better-enums";
 
 export default defineConfig({
   resolve: {
@@ -18,5 +19,5 @@ export default defineConfig({
   build: {
     modulePreload: false,
   },
-  plugins: [htmlTemplateMinifyPlugin(), injectHTML(), viteSingleFile()],
+  plugins: [htmlTemplateMinifyPlugin(), injectHTML(), viteSingleFile(), betterEnums()],
 });

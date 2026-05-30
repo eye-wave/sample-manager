@@ -1,8 +1,8 @@
-import type { BusEvent } from "./bus/events";
+export enum BusEvent {
+  PlaySong,
+}
 
-export type { BusEvent } from "./bus/events";
-export * as BUS from "./bus/events";
-
+// biome-ignore lint/suspicious/noExplicitAny: needed
 type Handler<T = any> = (payload: T) => void;
 
 type Slot = {

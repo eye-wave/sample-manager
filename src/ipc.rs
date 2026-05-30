@@ -63,10 +63,10 @@ impl IPCSenderUI {
         });
     }
 
-    pub fn send_msg(&self, id: Id, payload: String) {
+    pub fn send_msg(&self, id: Id, payload: impl ToString) {
         let _ = self.0.send(IPCMessage {
             id,
-            payload: Cow::Owned(payload),
+            payload: Cow::Owned(payload.to_string()),
         });
     }
 
@@ -115,6 +115,22 @@ impl IntoIPCResponse for bool {
         Ok(Cow::Borrowed(if self { "1" } else { "0" }))
     }
 }
+
+macro_rules! impl_numeric_ipc {
+    ($($t:ty),*) => {
+        $(
+            impl IntoIPCResponse for $t {
+                fn finish(self) -> IPCResponse {
+                    Ok(Cow::Owned(self.to_string()))
+                }
+            }
+        )*
+    };
+}
+
+impl_numeric_ipc!(
+    i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize, f32, f64
+);
 
 pub trait IntoIPCJsonResponse {
     fn finish_json(&self) -> IPCResponse;

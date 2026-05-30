@@ -42,7 +42,7 @@ macro_rules! ipc_commands {
 
                 impl $crate::ipc::IPCCommand for [<$fn:camel>] {
                     fn name(&self) -> &'static str {
-                        stringify!($fn)
+                        stringify!([<$fn:camel>])
                     }
 
                     fn respond(
@@ -65,34 +65,14 @@ mod test {
 
     #[test]
     fn generate_ipc() {
-        let mut contents: String = commands_iter()
-            .enumerate()
-            .map(|(i, c)| {
-                format!(
-                    "export const {} = {};",
-                    c.name().to_uppercase(),
-                    i + IPC_ID_BASE
-                ) + "\n"
-            })
-            .collect();
+        let mut contents =
+            "// AUTO-GENERATED FILE - DO NOT EDIT\n\nexport enum IPC {\n".to_string();
 
-        let max_id = commands_iter().count() + IPC_ID_BASE - 1;
+        contents += &commands_iter()
+            .map(|c| format!("  {},\n", c.name()))
+            .collect::<String>();
 
-        contents += &format!(
-            r#"
-type Enumerate<
-    N extends number,
-    Acc extends number[] = []
-> = Acc['length'] extends N
-    ? Acc[number]
-    : Enumerate<N, [...Acc, Acc['length']]>;
-
-export type Range<F extends number, T extends number> =
-    Exclude<Enumerate<T>, Enumerate<F>> | T;
-
-export type IPC_ID = Range<{}, {}>;"#,
-            IPC_ID_BASE, max_id
-        );
+        contents += "}";
 
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("client/src/gen");
 

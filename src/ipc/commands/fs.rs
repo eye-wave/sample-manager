@@ -3,7 +3,7 @@ use std::path::Path;
 use serde::Deserialize;
 use ts_rs::TS;
 
-use crate::ipc::{IPCBody, IPCResponse, IntoIPCJsonResponse, IntoIPCResponse, ok};
+use crate::ipc::{IPCBody, IPCError, IPCResponse, IntoIPCJsonResponse, IntoIPCResponse, ok};
 use crate::{LogErrorExt, ipc_commands};
 
 fn open_folder(_body: IPCBody) -> IPCResponse {
@@ -64,6 +64,28 @@ fn get_path_type(path: &Path) -> u8 {
     90
 }
 
+fn get_file_count_in_dir(body: IPCBody) -> IPCResponse {
+    let read_dir = match std::fs::read_dir(body.req.as_ref()) {
+        Ok(iterator) => iterator,
+        Err(err) => {
+            return Err(IPCError::from(format!("Failed to read directory: {}", err)))?;
+        }
+    };
+
+    let mut file_count = 0i64;
+
+    for entry in read_dir {
+        if let Ok(entry) = entry
+            && let Ok(file_type) = entry.file_type()
+            && file_type.is_file()
+        {
+            file_count += 1;
+        }
+    }
+
+    file_count.finish()
+}
+
 fn read_dir(body: IPCBody) -> IPCResponse {
     const BYTE_OFFSET: u8 = 32;
 
@@ -90,6 +112,7 @@ fn read_dir(body: IPCBody) -> IPCResponse {
 
 ipc_commands! {
     IPC_FS = [
+        get_file_count_in_dir,
         read_dir,
         open_folder,
         pick_file

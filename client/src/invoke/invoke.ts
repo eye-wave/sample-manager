@@ -1,7 +1,7 @@
-import * as IPC from "../gen/ipc-gen";
 import { w } from "../alias";
 
-export * as IPC from "../gen/ipc-gen";
+import { IPC } from "../gen/ipc-gen";
+export { IPC } from "../gen/ipc-gen";
 
 type PromiseReturn = {
   resolve: (value: string | PromiseLike<string>) => void;
@@ -16,13 +16,6 @@ export const invoke = <T>(id: number, payload?: T) => {
   return new Promise<string>((resolve, reject) => {
     const callId = nextId++;
     pending.set(callId, { resolve, reject });
-    /// DEV start
-
-    if (typeof ipc === "undefined") {
-      const key = Object.entries(IPC).find((e) => e[1] === id)?.[0];
-      return console.warn(`Trying to call IPC command: "${key}" in the browser window.`);
-    }
-    /// DEV end
 
     let data = "";
     if (typeof payload === "object") data = JSON.stringify(payload);
@@ -129,8 +122,8 @@ if (typeof ipc !== "undefined") {
 
   const toLog = (args: unknown[]) => args.map((a) => inspect(a)).join(" ");
 
-  console.log = (...args) => invoke(IPC.LOG, "L" + toLog(args));
-  console.warn = (...args) => invoke(IPC.LOG, "W" + toLog(args));
-  console.error = (...args) => invoke(IPC.LOG, "E" + toLog(args));
+  console.log = (...args) => invoke(IPC.Log, "L" + toLog(args));
+  console.warn = (...args) => invoke(IPC.Log, "W" + toLog(args));
+  console.error = (...args) => invoke(IPC.Log, "E" + toLog(args));
 }
 /// DEV end

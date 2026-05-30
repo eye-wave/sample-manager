@@ -49,7 +49,7 @@ impl Drop for HostState {
 impl HostState {
     pub(super) fn new() -> Self {
         let mut state = Self::default();
-        // Best-effort load — if it fails we start fresh
+        // Best-effort load - if it fails we start fresh
         let _ = state.load_from_disk();
         state
     }

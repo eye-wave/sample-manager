@@ -22,6 +22,7 @@
     "terser": "^5.46.2",
     "typescript": "~6.0.2",
     "vite": "^8.0.8",
+    "vite-plugin-better-enums": "git+https://github.com/eye-wave/better-enums.git",
     "vite-plugin-html-inject": "^1.1.2",
     "vite-plugin-singlefile": "^2.3.2"
   }

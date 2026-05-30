@@ -1,7 +1,7 @@
 use crate::host;
 
 /// Maximum file size the plugin will read in one call (4 MB).
-/// If the file is larger the returned bytes are silently truncated —
+/// If the file is larger the returned bytes are silently truncated -
 /// for registry files this is more than enough.
 const MAX_FILE_SIZE: usize = 4 * 1024 * 1024;
 

@@ -1,7 +1,6 @@
 import type { AppConfig } from "@typegen/AppConfig";
 import type { PickFileOptions } from "@typegen/PickFileOptions";
 import type { PluginInfo } from "@typegen/PluginInfo";
-import type { SchemaFieldWithValue } from "@typegen/SchemaFieldWithValue";
 import { d, w } from "../alias";
 import { capitalize, updateCurrentTheme, updateTheme, updateThemeCss } from "../helpers";
 import { invoke, IPC, listen } from "../invoke/invoke";
@@ -68,7 +67,7 @@ function showPane(target: string) {
 }
 
 async function refreshPluginList() {
-  invoke(IPC.GET_ALL_PLUGINS_INFO);
+  invoke(IPC.GetAllPluginsInfo);
 }
 
 let previewedTheme = "";
@@ -95,7 +94,7 @@ conf_btn__.onclick = async () => {
       else if (field === "color_theme") {
         previewedTheme = data as string;
 
-        invoke(IPC.PREVIEW_THEME, data).then(updateThemeCss);
+        invoke(IPC.PreviewTheme, data).then(updateThemeCss);
       }
     });
   } catch (_) {}
@@ -117,7 +116,7 @@ conf_btn__.onclick = async () => {
     </div>`;
   }
 
-  dial_tab_cache_body__.innerHTML = await invoke(IPC.GET_APP_CACHE_SIZE);
+  dial_tab_cache_body__.innerHTML = await invoke(IPC.GetAppCacheSize);
 };
 
 const revertAndClose = () => {
@@ -147,17 +146,17 @@ dialog_close__.onclick = () => {
 conf_reset__.onclick = () => DialogManager.close();
 conf_save__.onclick = () => {
   if (previewedTheme) updateTheme(previewedTheme);
-  invoke(IPC.PATCH_CONFIG, patch.send());
+  invoke(IPC.PatchConfig, patch.send());
   DialogManager.close();
 };
 
 add_plugin_btn__.onclick = async () => {
   const opt: PickFileOptions = { filters: ["*.zip"], label: "*.zip zipped plugin files" };
 
-  const path = await invoke(IPC.PICK_FILE, opt);
+  const path = await invoke(IPC.PickFile, opt);
   if (!path) return;
 
-  invoke(IPC.ADD_PLUGIN, path);
+  invoke(IPC.AddPlugin, path);
 };
 
 function bindPluginCards(pluginsInfo: PluginInfo[]) {
@@ -190,7 +189,9 @@ listen("plugin-info", (data) => {
   const pluginsInfo: PluginInfo[] = [];
   try {
     const items: PluginInfo[] = JSON.parse(data);
-    items.forEach((i) => pluginsInfo.push(i));
+    items.forEach((i) => {
+      pluginsInfo.push(i);
+    });
   } catch {}
 
   bindPluginCards(pluginsInfo);
@@ -202,7 +203,7 @@ plugin_uninstall_btn__.onclick = () => {
   const id = plugin_uninstall_btn__.dataset.plugin;
   if (!id) return;
 
-  invoke(IPC.UNINSTALL_PLUGIN, id).then(() => {
+  invoke(IPC.UninstallPlugin, id).then(() => {
     showPane("dial_tab_plug__");
     refreshPluginList();
   });

@@ -1,24 +1,20 @@
 import { basename, startDrag } from "../helpers";
 import { loadNode } from "./lazy-load";
+import { NodeType } from "./sidebar";
 import { SIDEBAR_FOLDER, SIDEBAR_ITEM } from "./template";
-import { FileType, type VFSChild } from "./vfs";
+import type { VFSChild } from "./vfs";
 
 export function renderNode(parent: HTMLElement, node: VFSChild, icon?: string): void {
-  if (node.nodeType === FileType) {
+  if (node.nodeType === NodeType.File) {
     parent.insertAdjacentHTML(
       "beforeend",
       SIDEBAR_ITEM(basename(node.path), node.ftype, node.path),
     );
 
-    parent.querySelectorAll("[data-path]").forEach((i) => {
-      const item = i as HTMLDivElement;
-      const path = decodeURI(item.dataset.path ?? "");
-
-      if (path) {
-        item.draggable = true;
-        item.ondragstart = () => startDrag(path);
-      }
-    });
+    // Bind drag only to the newly inserted element, not all [data-path] in parent.
+    const encoded = encodeURI(node.path);
+    const el = parent.querySelector<HTMLDivElement>(`[data-path="${encoded}"]`);
+    if (el) bindDrag(el, node.path);
 
     return;
   }
@@ -36,7 +32,6 @@ export function renderNode(parent: HTMLElement, node: VFSChild, icon?: string): 
   node.updateCount();
 
   node.visual?.labelEl?.addEventListener("click", () => {
-    // Fetch on first open if empty.
     if (!node.loaded && node.children.length === 0) {
       loadNode(node).then(() => node.toggle());
     } else {
@@ -44,7 +39,6 @@ export function renderNode(parent: HTMLElement, node: VFSChild, icon?: string): 
     }
   });
 
-  // Render nodes known at construction time
   if (node.children.length > 0) {
     node.loaded = true;
     for (const child of node.children) {
@@ -53,4 +47,9 @@ export function renderNode(parent: HTMLElement, node: VFSChild, icon?: string): 
       }
     }
   }
+}
+
+function bindDrag(el: HTMLDivElement, path: string): void {
+  el.draggable = true;
+  el.ondragstart = () => startDrag(path);
 }

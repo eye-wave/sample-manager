@@ -139,10 +139,17 @@ fn plugin_download_file(body: IPCBody) -> IPCResponse {
 
     let paths = state.get_config().ffpaths.clone();
 
-    state
-        .plugin_handle
-        .download(id, url, name, paths, body.webview_sender.clone())?
-        .finish()
+    let path =
+        state
+            .plugin_handle
+            .download(id.clone(), url, name, paths, body.webview_sender.clone())?;
+
+    if let Some(parent) = path.parent() {
+        body.webview_sender
+            .send_msg("plug-download", parent.to_string_lossy());
+    }
+
+    path.finish()
 }
 
 #[derive(Serialize, TS)]

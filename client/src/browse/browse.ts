@@ -1,5 +1,5 @@
 import type { SampleEntry } from "@typegen/SampleEntry";
-import { BUS } from "../bus";
+import { BusEvent } from "../bus";
 import { basename, debounce, setLikedView } from "../helpers";
 import { invoke, IPC, listen } from "../invoke/invoke";
 import { TagInput } from "./input";
@@ -13,7 +13,7 @@ export const POOL_SIZE = 100;
 
 let isOnlineSearch = false;
 
-invoke(IPC.ANY_ONLINE_PLUGIN_LOADED).then((loaded) => {
+invoke(IPC.AnyOnlinePluginLoaded).then((loaded) => {
   if (!+loaded) return;
 
   online_plugin_btn__.style.display = "";
@@ -32,12 +32,11 @@ online_plugin_btn__.onclick = () => {
 
 let lastSelected = 0;
 async function onSelect(i: number, props: OnSelectProps) {
-  let path ="";
+  let path = "";
 
   if (props.type === "plug") {
     path = await downloadFile(props);
-  }
-  else path = props.path
+  } else path = props.path;
 
   pool[lastSelected]?.highlight(false);
 
@@ -45,7 +44,7 @@ async function onSelect(i: number, props: OnSelectProps) {
   if (!current) return;
 
   current.highlight(true);
-  emit(BUS.PLAY_SONG, path);
+  emit(BusEvent.PlaySong, path);
 
   lastSelected = i;
 }
@@ -120,14 +119,13 @@ listen("search", (payload) => {
 
     if (i < files.length) {
       const item = files[i];
-      item.source==="plugin" && console.log(item)
 
       row.update(basename(item.name), null, item.isFav, item.tags);
-      if (item.source === "native" ) row.setPath(item.path)
+      if (item.source === "native") row.setPath(item.path);
       else {
-        row.setUrl(item.url, item.id)
-        row.name = item.name
-      };
+        row.setUrl(item.url, item.id);
+        row.name = item.name;
+      }
     } else {
       row.hide();
     }

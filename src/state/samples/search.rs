@@ -2,7 +2,7 @@ use std::cmp::Reverse;
 use std::path::Path;
 
 use fuzzy_matcher::skim::SkimMatcherV2;
-use rayon::{iter::Either, prelude::*};
+use rayon::prelude::*;
 use serde::Deserialize;
 use ts_rs::TS;
 
@@ -25,69 +25,71 @@ pub struct SearchRequest {
     pub is_fav: bool,
 }
 
-impl SearchRequest {
-    fn without_pagination(&self) -> Self {
-        Self {
-            offset: 0,
-            limit: 0,
-            ..self.clone()
-        }
-    }
-}
-
 pub fn search_local(req: &SearchRequest, state: &AppState) -> Result<String, PluginSendError> {
-    let unpaged = req.without_pagination();
-
-    let native_iter = if req.is_fav {
-        Either::Left(
-            state
-                .favorite_samples
-                .iter()
-                .filter_map(|f| state.sample_registry.get(Path::new(f))),
-        )
-    } else {
-        Either::Right(state.sample_registry.values())
-    };
-
-    let (native_count, native_hits) = score_and_sort(native_iter.par_bridge(), &unpaged);
-
-    let plugin_registry = state.plugin_handle.search_local_registry(&unpaged)?;
-    let plugin_iter = plugin_registry
-        .par_iter()
-        .flat_map(|a| a.par_iter())
-        .filter(|e| !req.is_fav || e.is_fav(state).unwrap_or(false))
-        .map(|e| e as &dyn SampleEntry);
-
-    let (plugin_count, plugin_hits) = score_and_sort(plugin_iter, &unpaged);
-
-    let total = native_count + plugin_count;
-
-    let mut merged: Vec<SampleSerialize> = native_hits
-        .into_iter()
-        .filter_map(|e| e.to_serialize().ok())
-        .chain(
-            plugin_hits
-                .into_iter()
-                .filter_map(|e| e.to_serialize().ok()),
-        )
-        .collect();
-
     let query = clean_up_string(&req.query);
     let matcher = SkimMatcherV2::default().smart_case();
     let tag_refs: Vec<&str> = req.tags.iter().map(|s| s.as_ref()).collect();
-    merged.sort_by_key(|s| {
-        Reverse(if req.is_fav && query.is_empty() {
+
+    let score_fn = |item: &dyn SampleEntry| -> i64 {
+        if req.is_fav && query.is_empty() {
             i64::MAX
         } else {
-            s.score(&query, &tag_refs, &matcher)
+            item.score(&query, &tag_refs, &matcher)
+        }
+    };
+
+    let native_vec: Vec<_> = if req.is_fav {
+        state
+            .favorite_samples
+            .iter()
+            .filter_map(|f| state.sample_registry.get(Path::new(f)))
+            .collect()
+    } else {
+        state.sample_registry.values().collect()
+    };
+
+    let mut native_scored: Vec<(SampleSerialize, i64)> = native_vec
+        .par_iter()
+        .filter_map(|item| {
+            let score = score_fn(*item as &dyn SampleEntry);
+            if score > i64::MIN {
+                item.to_serialize().ok().map(|s| (s, score))
+            } else {
+                None
+            }
         })
-    });
+        .collect();
 
-    let page = paginate(&merged, req);
+    let plugin_registry = state.plugin_handle.search_local_registry(req)?;
+    let mut plugin_scored: Vec<(SampleSerialize, i64)> = plugin_registry
+        .par_iter()
+        .flat_map(|a| a.par_iter())
+        .filter(|e| !req.is_fav || e.is_fav(state).unwrap_or(false))
+        .filter_map(|item| {
+            let score = score_fn(item as &dyn SampleEntry);
+            if score > i64::MIN {
+                item.to_serialize().ok().map(|s| (s, score))
+            } else {
+                None
+            }
+        })
+        .collect();
 
-    let body = page
+    let total = native_scored.len() + plugin_scored.len();
+
+    native_scored.append(&mut plugin_scored);
+    native_scored.sort_unstable_by_key(|&(_, s)| Reverse(s));
+
+    let start = req.offset.min(total);
+    let end = if req.limit == 0 {
+        total
+    } else {
+        (start + req.limit).min(total)
+    };
+
+    let body = native_scored[start..end]
         .iter()
-        .filter_map(|e| e.to_json(state).sure("Failed to serialize"))
+        .filter_map(|(s, _)| s.to_json(state).sure("Failed to serialize"))
         .intersperse(",\n".into())
         .collect::<String>();
 
@@ -129,13 +131,4 @@ pub fn filter_samples<'a, T: SampleEntry + Sized>(
     req: &SearchRequest,
 ) -> (usize, Vec<&'a T>) {
     score_and_sort(entries, req)
-}
-
-fn paginate<'a, T>(items: &'a [T], req: &SearchRequest) -> &'a [T] {
-    if req.limit == 0 {
-        return items;
-    }
-    let start = req.offset.min(items.len());
-    let end = (start + req.limit).min(items.len());
-    &items[start..end]
 }

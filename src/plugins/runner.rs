@@ -490,7 +490,7 @@ fn wasm_alloc_write(
 }
 
 /// Copies the frame out of wasm memory and parses it via `plugin_wire::parse_frame`.
-/// Returns `(entries, frame_byte_size)` — caller frees `frame_ptr` with that size.
+/// Returns `(entries, frame_byte_size)` - caller frees `frame_ptr` with that size.
 fn read_frame_at(
     id: &PluginId,
     store: &mut Store<HostState>,
@@ -716,7 +716,7 @@ fn define_host_imports(
     //     -3  : file not found or read error
     //
     // The host does not restrict which absolute paths are readable beyond
-    // checking for traversal sequences — the user configured the path
+    // checking for traversal sequences - the user configured the path
     // explicitly in the plugin's config UI, so they own the choice.
     {
         let fs_caps = caps.clone();

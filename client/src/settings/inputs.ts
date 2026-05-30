@@ -135,7 +135,7 @@ export function bindSettingInputs(el: HTMLElement, cb?: InputCallback<unknown>) 
       i.oninput = () => {
         const data = i.getAttribute("type") === "checkbox" ? `${i.checked}` : i.value;
 
-        if (typeof cb === "undefined") invoke(IPC.CONFIGURE_PLUGIN_VALUE, { id, name, data });
+        if (typeof cb === "undefined") invoke(IPC.ConfigurePluginValue, { id, name, data });
         else cb(name, data);
       };
     }
@@ -156,7 +156,7 @@ function bindListInput(
 
   const onChange = () => {
     const data = getValues();
-    if (typeof cb === "undefined") invoke(IPC.CONFIGURE_PLUGIN_VALUE, { id, name, data });
+    if (typeof cb === "undefined") invoke(IPC.ConfigurePluginValue, { id, name, data });
     else cb(name, data);
   };
 
@@ -205,7 +205,7 @@ function bindNumbersInput(
       const data = subInputs.map((b) => +b.value);
 
       if (typeof cb === "undefined")
-        invoke(IPC.CONFIGURE_PLUGIN_VALUE, { id, name, data: JSON.stringify(data) });
+        invoke(IPC.ConfigurePluginValue, { id, name, data: JSON.stringify(data) });
       else cb(name, data);
     };
   });

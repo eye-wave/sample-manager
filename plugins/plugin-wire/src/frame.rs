@@ -38,7 +38,7 @@ const OFF_STYPE: usize = 27;
 const REC_FIXED: usize = 28;
 const FRAME_HEADER: usize = 4; // u32 record_count
 
-// -- WireEntry — the in-memory representation of one record --------------------
+// -- WireEntry - the in-memory representation of one record --------------------
 
 /// One sample entry in the wire format, ready to be written or just parsed.
 ///
@@ -79,7 +79,7 @@ impl PartialEq for WireEntry {
 impl Eq for WireEntry {}
 
 impl WireEntry {
-    /// Convenience constructor — builds the packed `str_content` from parts.
+    /// Convenience constructor - builds the packed `str_content` from parts.
     pub fn new(
         name: &str,
         path: &str,

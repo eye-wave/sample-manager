@@ -1,6 +1,6 @@
 import { w } from "../alias";
 import { getSampleMetedata } from "../api";
-import { BUS, on } from "../bus";
+import { BusEvent, on } from "../bus";
 import { invoke, IPC, listen } from "../invoke/invoke";
 import { PreviewHandler } from "../preview/preview";
 import { addShortcut } from "../shortcuts";
@@ -15,7 +15,7 @@ export type PlayerState = typeof PAUSED | typeof PLAYING | typeof STOPPED;
 const RESUME_ICON = `<path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/>`;
 const PAUSE_ICON = `<rect x=14 y=3 width=5 height=18 rx="1"/><rect x=5 y=3 width=5 height=18 rx="1"/>`;
 
-const getPlaybackMode = async () => !!+(await invoke(IPC.GET_LOOPING));
+const getPlaybackMode = async () => !!+(await invoke(IPC.GetLooping));
 
 async function updatePlaybackMode(looping: boolean): Promise<boolean> {
   playback_mode__.textContent = looping ? "Loop" : "Oneshot";
@@ -26,7 +26,7 @@ getPlaybackMode().then(updatePlaybackMode);
 playback_mode__.onclick = () => {
   getPlaybackMode().then((m) => {
     updatePlaybackMode(!m);
-    invoke(IPC.SET_LOOPING, !m ? "1" : "0");
+    invoke(IPC.SetLooping, !m ? "1" : "0");
   });
 };
 
@@ -61,8 +61,8 @@ function createPlayerHandle() {
     norm: (value: number) => (3 * Math.atan(value)) / Math.PI,
     denorm: (value: number) => Math.tan((Math.PI * value) / 3),
 
-    get: () => invoke(IPC.GET_VOLUME),
-    set: (v) => invoke(IPC.SET_VOLUME, v),
+    get: () => invoke(IPC.GetVolume),
+    set: (v) => invoke(IPC.SetVolume, v),
 
     format: (v) => ((+v * 100) | 0) + "%",
     color: (v) => (v > 1 ? "var(--accent)" : "var(--text-primary)"),
@@ -77,8 +77,8 @@ function createPlayerHandle() {
     let lastPos = 0;
 
     intervalId = w.setInterval(async () => {
-      const pos = +(await invoke(IPC.GET_AUDIO_POSITION));
-      const [fmtCur, fmtEst] = (await invoke(IPC.GET_AUDIO_POSITION_PRETTY)).split("/");
+      const pos = +(await invoke(IPC.GetAudioPosition));
+      const [fmtCur, fmtEst] = (await invoke(IPC.GetAudioPositionPretty)).split("/");
 
       time_cur__.textContent = fmtCur;
       time_est__.textContent = fmtEst;
@@ -110,12 +110,12 @@ function createPlayerHandle() {
       PreviewHandler.img = "";
       PreviewHandler.position = 0;
 
-      invoke(IPC.DRAW_AUDIO_FILE, path);
+      invoke(IPC.DrawAudioFile, path);
 
       PreviewHandler.tags = meta.tags;
     }
 
-    await invoke(IPC.PLAY_AUDIO_FILE, path).then(() => {
+    await invoke(IPC.PlayAudioFile, path).then(() => {
       playerState.set(PLAYING);
 
       startTicker();
@@ -123,7 +123,7 @@ function createPlayerHandle() {
   }
 
   function pause() {
-    invoke(IPC.PLAYER_PAUSE).then(() => {
+    invoke(IPC.PlayerPause).then(() => {
       playerState.set(PAUSED);
       svg.innerHTML = RESUME_ICON;
       stopTicker();
@@ -131,7 +131,7 @@ function createPlayerHandle() {
   }
 
   async function resume() {
-    await invoke(IPC.PLAYER_RESUME).then(() => {
+    await invoke(IPC.PlayerResume).then(() => {
       playerState.set(PLAYING);
       svg.innerHTML = PAUSE_ICON;
       startTicker();
@@ -155,7 +155,7 @@ function createPlayerHandle() {
     if (state === PAUSED) await resume();
     else if (state === STOPPED) await startPlaying();
 
-    invoke(IPC.PLAYER_SEEK, pos);
+    invoke(IPC.PlayerSeek, pos);
   }
 
   pause_btn__.onclick = onClick;
@@ -167,7 +167,7 @@ function createPlayerHandle() {
     onClick();
   });
 
-  on(BUS.PLAY_SONG, (path: string) => startPlaying(path));
+  on(BusEvent.PlaySong, (path: string) => startPlaying(path));
 
   return {
     get state() {

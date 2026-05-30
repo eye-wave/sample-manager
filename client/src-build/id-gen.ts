@@ -30,7 +30,7 @@ $("[id]").each((_, _el) => {
 
 const sortedTags = [...groups.keys()].sort();
 
-let out: string = `// AUTO-GENERATED FILE — DO NOT EDIT\n\n`;
+let out: string = `// AUTO-GENERATED FILE - DO NOT EDIT\n\n`;
 
 for (const tag of sortedTags) {
   const items = groups.get(tag);

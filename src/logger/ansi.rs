@@ -132,7 +132,7 @@ pub fn ansi_to_html(input: &str) -> String {
                                 p += 4;
                             }
                         }
-                        _ => {} // Unknown / unsupported code — ignore.
+                        _ => {} // Unknown / unsupported code - ignore.
                     }
                     p += 1;
                 }
@@ -141,7 +141,7 @@ pub fn ansi_to_html(input: &str) -> String {
                 i = seq_end + 1;
                 continue;
             } else {
-                // Non-SGR CSI sequence — skip it entirely.
+                // Non-SGR CSI sequence - skip it entirely.
                 i = seq_end + 1;
                 continue;
             }
@@ -264,7 +264,7 @@ fn standard_color(raw_code: u32, bright: bool) -> &'static str {
 
 fn color_256(index: u32) -> String {
     match index {
-        // Standard colors — reuse the 16-color mapping.
+        // Standard colors - reuse the 16-color mapping.
         0..=7 => standard_color(index + 30, false).to_string(),
         8..=15 => standard_color(index - 8 + 90, true).to_string(),
         // 6×6×6 color cube.
