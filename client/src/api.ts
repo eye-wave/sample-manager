@@ -25,7 +25,7 @@ export const getSampleFolders = () =>
   invoke(IPC.GetSampleFolders).then((res) => res.split("\n").filter((e) => e));
 
 export const getConfigFields = (): Promise<Record<string, SchemaFieldWithValue>> =>
-  invoke(IPC.GetConfigField).then(parse);
+  invoke(IPC.GetConfigFields).then(parse);
 
 export const downloadFile = (params: DownloadRequest) =>
   invoke(IPC.PluginDownloadFile, params);

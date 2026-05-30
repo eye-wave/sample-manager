@@ -8,7 +8,7 @@ use crate::LogErrorExt;
 mod commands;
 mod state;
 
-pub use commands::{IPC_ID_BASE, commands_iter};
+pub use commands::commands_iter;
 pub(super) use state::IPCBody;
 
 #[derive(Debug, thiserror::Error)]

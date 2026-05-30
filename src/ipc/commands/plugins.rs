@@ -50,8 +50,7 @@ fn disable_plugin(body: IPCBody) -> IPCResponse {
     let id = PluginId::new(&body.req)?;
 
     state.plugin_handle.unload(id);
-
-    todo!()
+    ok()
 }
 
 fn uninstall_plugin(body: IPCBody) -> IPCResponse {

@@ -8,9 +8,7 @@ use tao::{event_loop::EventLoopBuilder, window::Window};
 use wry::WebView;
 
 use crate::LogErrorExt;
-use crate::ipc::{
-    IPC_ID_BASE, IPCBody, IPCCommand, IPCMessage, IPCSenderUI, commands_iter, ipc_strip_cmd_id,
-};
+use crate::ipc::{IPCBody, IPCCommand, IPCMessage, IPCSenderUI, commands_iter, ipc_strip_cmd_id};
 use crate::state::AppState;
 
 pub struct EventSystem {
@@ -80,8 +78,10 @@ impl EventSystem {
             return;
         }
 
+        // 0th item is reserved for resize event and js enums
+        // start counting from 1, thats why we subtract 1
         if let Some((cmd_id, call_id, payload)) = ipc_strip_cmd_id(body)
-            && let Some(cmd) = self.ipc_commands.get(cmd_id - IPC_ID_BASE)
+            && let Some(cmd) = self.ipc_commands.get(cmd_id - 1)
         {
             let body = IPCBody::new(
                 self.app_state.clone(),

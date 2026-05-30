@@ -9,8 +9,6 @@ mod samples;
 mod theme;
 mod window;
 
-pub const IPC_ID_BASE: usize = 10;
-
 pub fn commands_iter<'a>() -> impl Iterator<Item = &'a dyn IPCCommand> {
     [
         audio::IPC_AUDIO,
