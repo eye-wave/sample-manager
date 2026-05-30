@@ -7,8 +7,6 @@
     <theme></theme>
     <link rel='stylesheet' href="/styles/__app__.scss" />
     <link rel='stylesheet' href="/styles/styles.scss" />
-
-    <title>SampleVault - Audio Sample Manager</title>
   </head>
   <body>
     <div class="titlebar">
@@ -23,38 +21,38 @@
     <div class="app">
       <!-- Top bar -->
       <div class="topbar">
-        <div class="topbar-logo"><span>S</span>ampleVault</div>
+        <div class="topbar-logo"><span>A</span>tlas ♪</div>
 
         <button class="btn btn-surface" id="online_plugin_btn__" style="display:none">
-          <load src="assets/icons/online.svg" />
+          <load src="../assets/icons/online.svg" />
         </button>
 
         <div class="search-wrap">
-          <load src="assets/icons/search.svg" />
+          <load src="../assets/icons/search.svg" />
 
           <div id="search_tags__"></div>
           <input id="search__" placeholder="Search samples, tags, packs…" autocomplete="off" />
 
           <button class="" id="search_filter_btn__">
-            <load src="assets/icons/search-filter.svg" />
+            <load src="../assets/icons/search-filter.svg" />
           </button>
         </div>
 
-        <button id="conf_btn__" class="topbar-btn"><load src="assets/icons/settings.svg" />Settings</button>
+        <button id="conf_btn__" class="topbar-btn"><load src="../assets/icons/settings.svg" />Settings</button>
 
         <!-- Settings -->
-        <dialog id="conf_dial__">
+        <dialog id="conf_dial__" tabindex="-1">
           <div class="dialog-shell">
             <div class="dialog" id="conf_dial_body__" role="dialog" aria-labelledby="settings-title">
               <div class="dialog-header">
                 <p class="dialog-title">
                   <span class="dialog-title-icon">
-                    <load src="assets/icons/settings.svg" />
+                    <load src="../assets/icons/settings.svg" />
                   </span>
                   Settings
                 </p>
                 <button id="dialog_close__" class="dialog-close-btn" aria-label="Close">
-                  <load src="assets/icons/close.svg" />
+                  <load src="../assets/icons/close.svg" />
                 </button>
               </div>
 
@@ -114,11 +112,11 @@
             <input type="radio" name="tab" value="lib" id="tlib__" checked>
             <input type="radio" name="tab" value="fav" id="tfav__">
             <label class="nav-item" for="tlib__">
-              <load src="assets/icons/library.svg" />
+              <load src="../assets/icons/library.svg" />
               Library
             </label>
             <label class="nav-item" for="tfav__">
-              <load src="assets/icons/heart-hollow.svg" />
+              <load src="../assets/icons/heart-hollow.svg" />
               Favorites
             </label>
           </div>
@@ -199,7 +197,7 @@
       </div>
 
       <!-- Terminal -->
-      <dialog id="terminal_window__">
+      <dialog id="terminal_window__" tabindex="-1">
         <div class="dialog-shell">
           <div class="dialog">
             <div class="titlebar">

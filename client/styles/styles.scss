@@ -516,7 +516,6 @@ input::-webkit-inner-spin-button {
     height: 36px;
     align-items: center;
     border-bottom: 1px solid var(--border);
-    background: var(--bg-panel);
     flex-shrink: 0;
   }
 
@@ -539,6 +538,20 @@ input::-webkit-inner-spin-button {
   &-scroll {
     flex: 1;
     overflow-y: auto;
+    position: relative;
+
+    &::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-color: var(--bg-panel);
+      mask-image: url("/logo.svg");
+      mask-size: 400px;
+      mask-repeat: no-repeat;
+      mask-position: center;
+      pointer-events: none;
+      z-index: -1;
+    }
   }
 
   &-item {
@@ -546,7 +559,7 @@ input::-webkit-inner-spin-button {
     height: 36px;
     align-items: center;
     border-bottom: 1px solid var(--border);
-    @extend %interactive-element;
+    /* @extend %interactive-element; */
 
     &:hover,
     &.highlight {
@@ -554,7 +567,7 @@ input::-webkit-inner-spin-button {
     }
 
     &.active {
-      background: var(--bg-active);
+      /* background: var(--bg-active); */
       border-left: 2px solid var(--accent);
       padding-left: 12px;
 
@@ -807,6 +820,7 @@ input::-webkit-inner-spin-button {
 // --- Dialog / Modal -----------------------------------------------------------
 
 dialog {
+  outline: none;
   padding: 0;
   border: none;
   background: transparent;
@@ -1185,7 +1199,9 @@ dialog {
   overflow-y: scroll;
 
   &,
-  & span {
+  & * {
+    -webkit-user-select: text;
+    -ms-user-select: text;
     user-select: text;
   }
 }

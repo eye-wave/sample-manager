@@ -6,11 +6,7 @@ import htmlTemplateMinifyPlugin from "./src-build/minify-templates";
 import { betterEnums } from "vite-plugin-better-enums";
 
 export default defineConfig({
-  resolve: {
-    alias: {
-      "@assets": "/assets",
-    },
-  },
+  publicDir: "../assets",
   css: {
     postcss: {
       plugins: [cssNano({ preset: "advanced" })],

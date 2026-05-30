@@ -1,7 +1,7 @@
 use std::rc::Rc;
 use std::sync::Arc;
 
-use tao::window::Window;
+use tao::window::{Icon, Window};
 #[cfg(target_os = "windows")]
 use wry::WebViewBuilderExtWindows;
 use wry::{WebView, WebViewBuilder};
@@ -37,7 +37,8 @@ impl App {
         };
 
         let window = tao::window::WindowBuilder::new()
-            .with_title("My app")
+            .with_title("Atlas - sample manager")
+            .with_window_icon(window_icon())
             .with_decorations(false)
             .with_inner_size(tao::dpi::LogicalSize::new(920.0, 720.0))
             .with_transparent(true)
@@ -91,4 +92,17 @@ fn finish_webview(window: Arc<Window>, webview: WebViewBuilder<'_>) -> wry::WebV
 #[cfg(not(target_os = "linux"))]
 fn finish_webview(window: Arc<Window>, webview: WebViewBuilder<'_>) -> wry::WebView {
     webview.build(&window).expect("Failed to build WebView")
+}
+
+#[cfg(target_os = "linux")]
+const fn window_icon() -> Option<Icon> {
+    None
+}
+
+#[cfg(not(target_os = "linux"))]
+fn window_icon() -> Option<Icon> {
+    let bytes = include_bytes!("../assets/icon.webp");
+    let rgba = image::load_from_memory(bytes).unwrap().to_rgba8().to_vec();
+
+    Some(Icon::from_rgba(rgba, 128, 128).unwrap())
 }
