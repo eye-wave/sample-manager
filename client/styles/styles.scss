@@ -63,7 +63,7 @@
 
 %list-grid {
   display: grid;
-  grid-template-columns: 2fr 60px 60px 120px;
+  grid-template-columns: minmax(0, 400px) 60px 60px 1fr;
   padding: 0 14px;
 }
 

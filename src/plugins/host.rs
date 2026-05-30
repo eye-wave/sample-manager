@@ -49,8 +49,8 @@ impl Drop for HostState {
 impl HostState {
     pub(super) fn new() -> Self {
         let mut state = Self::default();
-        // Best-effort load - if it fails we start fresh
         let _ = state.load_from_disk();
+
         state
     }
 
@@ -61,16 +61,19 @@ impl HostState {
         Ok(())
     }
 
-    fn load_from_disk(&mut self) -> Result<(), HostError> {
-        Self::load(&mut self.storage, app_paths::plugin_storage_file())?;
-        Self::load(&mut self.secrets, app_paths::plugin_secret_storage_file())?;
-        Self::load(&mut self.entry_cache, app_paths::plugin_entry_cache_file())?;
-
-        Ok(())
+    fn load_from_disk(&mut self) {
+        Self::load(&mut self.storage, app_paths::plugin_storage_file())
+            .sure("Failed to load plugin storage");
+        Self::load(&mut self.secrets, app_paths::plugin_secret_storage_file())
+            .sure("Failed to load plugin secret storage");
+        Self::load(&mut self.entry_cache, app_paths::plugin_entry_cache_file())
+            .sure("Failed to load plugin entry cache");
     }
 
     fn flush<T: Serialize>(&self, target: &T, path: &Path) -> Result<(), HostError> {
         let bytes = postcard::to_allocvec(target)?;
+        println!("flushing... {}", bytes.len());
+
         let tmp = path.with_extension("tmp");
         fs::write(&tmp, &bytes)?;
         fs::rename(&tmp, path)?;
@@ -115,6 +118,8 @@ impl HostState {
     }
 
     pub fn insert_cached_sample(&mut self, url: AStr) {
+        println!("{url}");
+
         let Some(sample) = self.local_cache.get(&url) else {
             return;
         };
