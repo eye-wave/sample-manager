@@ -32,9 +32,14 @@ export function renderNode(parent: HTMLElement, node: VFSChild, icon?: string): 
   node.updateCount();
 
   node.visual?.labelEl?.addEventListener("click", () => {
-    if (!node.loaded && node.children.length === 0) {
+    if (!node.loaded) {
       loadNode(node).then(() => node.toggle());
     } else {
+      if (node.visual?.childrenEl && node.visual.childrenEl.children.length === 0) {
+        for (const child of node.children) {
+          renderNode(node.visual.childrenEl, child);
+        }
+      }
       node.toggle();
     }
   });

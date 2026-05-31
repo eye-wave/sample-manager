@@ -49,7 +49,7 @@ impl Drop for HostState {
 impl HostState {
     pub(super) fn new() -> Self {
         let mut state = Self::default();
-        let _ = state.load_from_disk();
+        state.load_from_disk();
 
         state
     }
@@ -72,7 +72,6 @@ impl HostState {
 
     fn flush<T: Serialize>(&self, target: &T, path: &Path) -> Result<(), HostError> {
         let bytes = postcard::to_allocvec(target)?;
-        println!("flushing... {}", bytes.len());
 
         let tmp = path.with_extension("tmp");
         fs::write(&tmp, &bytes)?;
@@ -118,8 +117,6 @@ impl HostState {
     }
 
     pub fn insert_cached_sample(&mut self, url: AStr) {
-        println!("{url}");
-
         let Some(sample) = self.local_cache.get(&url) else {
             return;
         };

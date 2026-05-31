@@ -13,11 +13,16 @@ export const POOL_SIZE = 100;
 
 let isOnlineSearch = false;
 
-invoke(IPC.AnyOnlinePluginLoaded).then((loaded) => {
-  if (!+loaded) return;
+const showOnlineBtn = () => {
+  invoke(IPC.AnyOnlinePluginLoaded).then((loaded) => {
+    if (!+loaded) return;
 
-  online_plugin_btn__.style.display = "";
-});
+    online_plugin_btn__.style.display = "";
+  });
+};
+
+showOnlineBtn();
+listen("plug-add", showOnlineBtn);
 
 online_plugin_btn__.onclick = () => {
   isOnlineSearch = !isOnlineSearch;

@@ -1,20 +1,29 @@
 import { invoke, IPC } from "../invoke/invoke";
 import { parseVFS } from "./parse";
 import { renderNode } from "./render";
+import { NodeType } from "./sidebar";
 import type { VFSChild, VFSNode } from "./vfs";
 
 export async function loadNode(node: VFSNode): Promise<void> {
   if (node.loaded) return;
   node.loaded = true;
 
-  const children: VFSChild[] = await invoke(IPC.ReadDir, node.path()).then((res) =>
+  const fresh: VFSChild[] = await invoke(IPC.ReadDir, node.path()).then((res) =>
     res
       .split("\n")
       .filter((e) => e)
       .map((p) => parseVFS(node.path(), p)),
   );
 
-  node.extend(children);
+  const existingPaths = new Set(
+    node.children.map((c) => (c.nodeType === NodeType.Dir ? c.absolutePath : c.path)),
+  );
+  const newChildren = fresh.filter((c) => {
+    const p = c.nodeType === NodeType.Dir ? c.absolutePath : c.path;
+    return !existingPaths.has(p);
+  });
+
+  node.extend(newChildren);
   node.updateCount();
   node.propagateCount();
 

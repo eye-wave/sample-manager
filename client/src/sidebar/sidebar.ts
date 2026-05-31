@@ -6,6 +6,7 @@ import { emit, BusEvent } from "../bus";
 import { invoke, IPC, listen } from "../invoke/invoke";
 import { FileTree } from "./tree";
 import { initSidebarResize } from "./resize";
+import { SEPARATOR } from "../helpers";
 
 export enum NodeType {
   File,
@@ -109,13 +110,12 @@ listen("plug-add", async () => {
 
 listen("plug-download", (changedPath: string) => {
   for (const [pluginPath] of tree.pluginEntries) {
-    if (changedPath.startsWith(pluginPath)) {
+    if (changedPath.startsWith(pluginPath + SEPARATOR) || changedPath === pluginPath) {
       tree.refreshPluginFolder(pluginPath, changedPath).then(() => {});
       return;
     }
   }
 });
-
 // Tab switching
 
 export const TabLibrary = 0 as const;

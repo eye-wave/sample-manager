@@ -33,10 +33,12 @@ build-c:
 test: build-c
     cargo test -- --no-capture
 
+biome := if os_family() == "windows" { ".\\node_modules\\.bin\\biome.exe" } else { "./node_modules/.bin/biome" }
+
 format:
-    biome format --write
+    {{ biome }} format --write
     cargo fmt
 
 lint:
     cargo clippy
-    biome lint --write
+    {{ biome }} lint --write

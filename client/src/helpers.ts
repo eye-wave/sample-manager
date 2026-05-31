@@ -17,7 +17,7 @@ export function renderTags<E extends HTMLElement>(tagsEl: E, tags: string[]) {
     .join("");
 }
 
-const SEPARATOR =
+const REGEX_SEPARATOR =
   /// UNIX start
   "/";
 /// UNIX end
@@ -25,7 +25,15 @@ const SEPARATOR =
 ("\\\\");
 /// WIN end
 
-const basenameRegex = new RegExp(`[${SEPARATOR}]`);
+export const SEPARATOR =
+  /// UNIX start
+  "/";
+/// UNIX end
+/// WIN start
+("\\");
+/// WIN end
+
+const basenameRegex = new RegExp(`[${REGEX_SEPARATOR}]`);
 
 export function basename(name: string) {
   return name.split(basenameRegex).pop() ?? name;
@@ -34,6 +42,8 @@ export function basename(name: string) {
 export function joinPath(...parts: string[]) {
   const len = parts.length;
   if (len === 0) return "";
+
+  const SEP_CODE = SEPARATOR.charCodeAt(0);
 
   let out = "";
 
@@ -45,12 +55,11 @@ export function joinPath(...parts: string[]) {
 
     let start = 0;
     if (!isFirst) {
-      while (start < part.length && part[start] === SEPARATOR) start++;
+      while (start < part.length && part.charCodeAt(start) === SEP_CODE) start++;
     }
 
     let end = part.length;
-    while (end > start && part[end - 1] === SEPARATOR) end--;
-
+    while (end > start && part.charCodeAt(end - 1) === SEP_CODE) end--;
     if (end <= start) continue;
     if (!isFirst) out += SEPARATOR;
 

@@ -1,11 +1,11 @@
 import { $el } from "../alias";
 import { invoke, IPC } from "../invoke/invoke";
 import { parseVFS } from "./parse";
-import { loadNode, prefetchCount } from "./lazy-load";
+import { prefetchCount } from "./lazy-load";
 import { renderNode } from "./render";
 import { VFSNode, type VFSChild, type VFSNode as VFSNodeType } from "./vfs";
 import { NodeType } from "./sidebar";
-import { basename } from "../helpers";
+import { SEPARATOR } from "../helpers";
 
 export type PluginFolderDef = {
   name: string;
@@ -89,22 +89,23 @@ export class FileTree {
     if (!entry) return;
 
     const { node } = entry;
-
     const targetNode = changedSubpath ? await findOrLoadNode(node, changedSubpath) : node;
 
     if (!targetNode) return;
+    if (!targetNode) return;
 
-    const freshChildren = await this.readDir(targetNode.absolutePath);
+    const freshChildren = await readDir(targetNode.absolutePath);
 
-    const existingNames = new Set(
-      targetNode.children.map((c) =>
-        c.nodeType === NodeType.Dir ? c.name : basename(c.path),
-      ),
+    // Use paths already in the VFS as the existing set — but re-check against
+    // what readDir returned previously vs now by comparing full paths.
+    const existingPaths = new Set(
+      targetNode.children.map((c) => (c.nodeType === NodeType.Dir ? c.absolutePath : c.path)),
     );
 
-    const newChildren = freshChildren.filter(
-      (c) => !existingNames.has(c.nodeType === NodeType.Dir ? c.name : basename(c.path)),
-    );
+    const newChildren = freshChildren.filter((c) => {
+      const p = c.nodeType === NodeType.Dir ? c.absolutePath : c.path;
+      return !existingPaths.has(p);
+    });
 
     if (newChildren.length === 0) return;
 
@@ -112,8 +113,6 @@ export class FileTree {
     targetNode.updateCount();
     targetNode.propagateCount();
 
-    // Only render into the DOM if this node has already been expanded (has a
-    // bound visual with a childrenEl).
     if (targetNode.visual?.childrenEl) {
       for (const child of newChildren) {
         renderNode(targetNode.visual.childrenEl, child);
@@ -161,28 +160,28 @@ async function findOrLoadNode(
 ): Promise<VFSNodeType | null> {
   if (root.absolutePath === absolutePath) return root;
 
-  // try to find a child whose path is a prefix of the target.
   let match = root.children.find(
     (c) =>
       c.nodeType === NodeType.Dir &&
-      (absolutePath.startsWith(c.absolutePath + "/") || c.absolutePath === absolutePath),
+      (absolutePath.startsWith(c.absolutePath + SEPARATOR) || c.absolutePath === absolutePath),
   ) as VFSNodeType | undefined;
-
-  // no match — this directory may have new folders created since last read.
-  // re-read it and merge any new children in.
 
   if (!match) {
     const fresh = await readDir(root.absolutePath);
-    const existingNames = new Set(
-      root.children.map((c) => (c.nodeType === NodeType.Dir ? c.name : basename(c.path))),
+
+    const existingPaths = new Set(
+      root.children
+        .filter((c) => c.nodeType === NodeType.Dir)
+        .map((c) => (c as VFSNodeType).absolutePath),
     );
-    const newChildren = fresh.filter(
-      (c) => !existingNames.has(c.nodeType === NodeType.Dir ? c.name : basename(c.path)),
+    const newDirs = fresh.filter(
+      (c) =>
+        c.nodeType === NodeType.Dir && !existingPaths.has((c as VFSNodeType).absolutePath),
     );
-    root.extend(newChildren);
+    root.extend(newDirs);
 
     if (root.visual?.childrenEl) {
-      for (const child of newChildren) {
+      for (const child of newDirs) {
         renderNode(root.visual.childrenEl, child);
       }
     }
@@ -190,13 +189,31 @@ async function findOrLoadNode(
     match = root.children.find(
       (c) =>
         c.nodeType === NodeType.Dir &&
-        (absolutePath.startsWith(c.absolutePath + "/") || c.absolutePath === absolutePath),
+        (absolutePath.startsWith(c.absolutePath + SEPARATOR) ||
+          c.absolutePath === absolutePath),
     ) as VFSNodeType | undefined;
   }
 
   if (!match) return null;
 
-  if (!match.loaded) await loadNode(match);
+  // Don't call loadNode here — we only need to read one level for traversal,
+  // not populate the full subtree into the VFS. Read directly instead.
+  if (!match.loaded) {
+    const children = await readDir(match.absolutePath);
+    // Only add dirs needed for further traversal, not all files.
+    // This avoids polluting node.children and breaking refreshPluginFolder's diff.
+    const existingPaths = new Set(
+      match.children
+        .filter((c) => c.nodeType === NodeType.Dir)
+        .map((c) => (c as VFSNodeType).absolutePath),
+    );
+    const newDirs = children.filter(
+      (c) =>
+        c.nodeType === NodeType.Dir && !existingPaths.has((c as VFSNodeType).absolutePath),
+    );
+    match.extend(newDirs);
+  }
+
   return await findOrLoadNode(match, absolutePath);
 }
 
