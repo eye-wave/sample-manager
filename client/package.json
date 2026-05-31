@@ -5,15 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "bun run prepare && vite build && bun run pack",
-    "prepare": "./src-build/id-gen.ts",
-    "pack": "./src-build/final-minify.ts",
+    "build": "cross-env NODE_ENV=production bun run prepare && vite build && bun run pack",
+    "prepare": "bun run ./src-build/id-gen.ts",
+    "pack": "bun run ./src-build/final-minify.ts",
     "preview": "vite preview"
   },
   "devDependencies": {
     "@types/html-minifier-terser": "^7.0.2",
     "@types/node": "^25.6.0",
     "cheerio": "^1.2.0",
+    "cross-env": "^10.1.0",
     "cssnano": "^7.1.5",
     "cssnano-preset-advanced": "^7.0.13",
     "html-minifier-terser": "^7.2.0",

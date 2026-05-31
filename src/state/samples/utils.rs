@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-#[cfg(not(target_os = "windows"))]
 use crate::plugins::PluginId;
 use crate::state::app_paths;
 use crate::window::PROTOCOL;

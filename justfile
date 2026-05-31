@@ -27,8 +27,8 @@ build-rust:
 build-c:
     cargo run -p compiler
 
-    cmake -S tagger -B tagger/build -DCMAKE_BUILD_TYPE=Release
-    cmake --build tagger/build
+    cmake -S tagger -B tagger/build
+    cmake --build tagger/build --config Release
 
 test: build-c
     cargo test -- --no-capture
