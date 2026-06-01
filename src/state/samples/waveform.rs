@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::io::Write;
 use std::process::{Command, Stdio};
 
@@ -23,7 +24,7 @@ fn command(cmd: &str) -> Command {
 
 pub enum WaveformData<'a> {
     Path(&'a str),
-    Bytes(&'a str, &'a [u8]),
+    Bytes(&'a OsStr, &'a [u8]),
 }
 
 impl<'p> WaveformData<'p> {
@@ -116,11 +117,7 @@ fn get_duration(input: &WaveformData, ffprobe: &str) -> std::io::Result<f32> {
         }
 
         WaveformData::Bytes(format, _) => {
-            cmd.args([
-                "-v",
-                "error",
-                "-f",
-                format,
+            cmd.args(["-v", "error", "-f"]).arg(format).args([
                 "-show_entries",
                 "format=duration",
                 "-of",

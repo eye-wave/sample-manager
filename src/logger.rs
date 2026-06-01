@@ -42,7 +42,7 @@ pub(super) fn init_logging(tx: IPCSenderUI) {
     let writer = std::io::stdout.and(ChannelWriter { tx });
 
     tracing_subscriber::registry()
-        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()))
         .with(
             fmt::layer()
                 .with_file(true)

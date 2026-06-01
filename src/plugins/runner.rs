@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::fs;
 use std::io::Read;
 use std::sync::{Arc, mpsc};
@@ -204,10 +205,12 @@ impl PluginRunner {
                         let mut save_path = sync_path(&plugin_id);
                         save_path.extend(name.components());
 
+                        let ext = save_path.extension().unwrap_or(OsStr::new("wav"));
+
                         let _ = draw_audio_and_save(
                             Some(&plugin_id),
                             &url,
-                            WaveformData::Bytes("wav", &bytes),
+                            WaveformData::Bytes(ext, &bytes),
                             ffpaths.flatten(),
                         )
                         .map(|e| e.send_to_webview(web_sender));
