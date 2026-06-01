@@ -510,10 +510,26 @@ input::-webkit-inner-spin-button {
 
 // --- List / Table -------------------------------------------------------------
 
+$header-height: 36px;
+
+.app-logo {
+  inset: 0;
+  background: #ff000040;
+  position: absolute;
+  top: $header-height;
+
+  background-color: var(--bg-panel);
+  mask-image: url("/logo.svg");
+  mask-size: 339px;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  pointer-events: none;
+}
+
 .list {
   &-header {
     @extend %list-grid;
-    height: 36px;
+    height: $header-height;
     align-items: center;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
@@ -539,19 +555,6 @@ input::-webkit-inner-spin-button {
     flex: 1;
     overflow-y: auto;
     position: relative;
-
-    &::after {
-      content: "";
-      position: fixed;
-      inset: 0;
-      background-color: var(--bg-panel);
-      mask-image: url("/logo.svg");
-      mask-size: 400px;
-      mask-repeat: no-repeat;
-      mask-position: center;
-      pointer-events: none;
-      z-index: -1;
-    }
   }
 
   &-item {
