@@ -16,8 +16,7 @@ icons = ["assets/icon.icns"]
 
 [workspace]
 resolver = "3"
-members = ["plugins/*", "tagger/compiler"]
-
+members = ["crates/*", "plugins/*"]
 
 [dependencies]
 assert_no_alloc = "1.1.2"
@@ -44,6 +43,7 @@ serde = { version = "1.0.228", default-features = false, features = [
 serde_json = "1.0.149"
 struct-patch = "0.11.0"
 symphonia = { version = "0.5.5", features = ["mp3", "wav", "vorbis"] }
+tagger_runner = { path = "./crates/tagger-runner" }
 tao = "0.35.0"
 thiserror = "2.0.18"
 tinyfiledialogs = "3.9.1"

@@ -4,8 +4,10 @@ set shell := ["sh", "-c"]
 default:
     just dev
 
+dev: build-tagger dev-run
+
 [parallel]
-dev: dev-client dev-rust
+dev-run: dev-client dev-rust
 
 dev-client:
     bun --cwd client dev
@@ -15,22 +17,19 @@ dev-rust:
 
 build:
     just build-client
-    just build-c
     just build-rust
 
 build-client:
     bun --cwd client build
 
-build-rust:
-    cargo build --release
+build-rust: build-tagger
+    cargo bundle --release
 
-build-c:
-    cargo run -p compiler
+[working-directory('crates/tagger-compiler')]
+build-tagger:
+    cargo run -- tags.tree -o ../../target/output/tagger.bin
 
-    cmake -S tagger -B tagger/build
-    cmake --build tagger/build --config Release
-
-test: build-c
+test:
     cargo test -- --no-capture
 
 biome := if os_family() == "windows" { ".\\node_modules\\.bin\\biome.exe" } else { "./node_modules/.bin/biome" }

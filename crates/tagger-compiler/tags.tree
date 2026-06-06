@@ -694,7 +694,7 @@ sounddesign {
     co+mpres+ion
     co+mpres+ed
     multiband
-    ott
+    !ott
     side#chain
   }
 

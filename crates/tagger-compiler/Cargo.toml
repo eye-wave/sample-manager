@@ -1,0 +1,11 @@
+
+[package]
+name = "tagger_compiler"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chumsky = "0.13.0"
+logos = "0.16.1"
+clap = { version = "4", features = ["derive"] }
+tagger_charset = { path = "../tagger-charset" }

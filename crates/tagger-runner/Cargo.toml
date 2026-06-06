@@ -1,0 +1,11 @@
+
+[package]
+name = "tagger_runner"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tagger_charset = { path = "../tagger-charset" }
+
+[dev-dependencies]
+tagger_compiler = { path = "../tagger-compiler" }
