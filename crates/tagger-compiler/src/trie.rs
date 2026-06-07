@@ -149,7 +149,8 @@ pub struct DfaTrie {
 pub fn build_dfa(items: &[Item], st: &mut StringTable) -> DfaTrie {
     let mut nfa = NfaTrie::new();
     insert_items(items, &mut nfa, st, &[]);
-    nfa_to_dfa(&nfa)
+    let dfa = nfa_to_dfa(&nfa);
+    minimise(&dfa)
 }
 
 fn insert_items(items: &[Item], nfa: &mut NfaTrie, st: &mut StringTable, chain: &[String]) {
@@ -233,6 +234,12 @@ pub struct StringTable {
     entries: Vec<String>,
 }
 
+impl Default for StringTable {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StringTable {
     pub fn new() -> Self {
         Self {
@@ -251,6 +258,9 @@ impl StringTable {
         id
     }
 
+    /// Returns `(index_blob, dict_blob)`.
+    /// index_blob: N × 3 bytes (u16 offset LE, u8 len), one entry per interned string.
+    /// dict_blob:  raw concatenated UTF-8 string data.
     pub fn build_dict(&self) -> (Vec<u8>, Vec<(u16, u8)>) {
         let mut blob = Vec::new();
         let mut ranges = Vec::new();
@@ -271,7 +281,8 @@ impl StringTable {
 const MAX_U16: usize = 0xFFFF;
 
 fn char_to_key(ch: char) -> u8 {
-    tagger_charset::encode(ch).unwrap_or_else(|| panic!("unsupported char in trie: {ch:?}"))
+    tagger_charset::encode_normalised(ch)
+        .unwrap_or_else(|| panic!("unsupported char in trie: {ch:?}"))
 }
 
 impl DfaTrie {
@@ -299,13 +310,13 @@ impl DfaTrie {
                 let dst_off = offsets[target_idx] as i64;
                 let delta = dst_off - src_off;
                 total += 1;
-                if delta >= -128 && delta <= 127 {
+                if (-128..=127).contains(&delta) {
                     fits_i8 += 1;
                 }
-                if delta >= 0 && delta <= 255 {
+                if (0..=255).contains(&delta) {
                     fits_u8 += 1;
                 }
-                if delta >= -32768 && delta <= 32767 {
+                if (-32768..=32767).contains(&delta) {
                     fits_i16 += 1;
                 }
                 if delta > max_delta {
@@ -348,7 +359,7 @@ impl DfaTrie {
             let src_off = offsets[node_idx] as i64;
             let all_fit = node.children.values().all(|&t| {
                 let d = offsets[t] as i64 - src_off;
-                d >= -128 && d <= 127
+                (-128..=127).contains(&d)
             });
             if all_fit {
                 nodes_all_i8 += 1;
@@ -436,83 +447,206 @@ impl DfaTrie {
     }
 }
 
-pub fn emit_binary(dfa: &DfaTrie, st: &StringTable) -> Vec<u8> {
-    let (dict_blob, str_ranges) = st.build_dict();
+// DFA minimisation (Hopcroft's algorithm) + BFS reordering
 
-    // Fixpoint: node connection strides depend on whether deltas fit i8,
-    // which depends on target offsets, which depend on strides.
-    // Start assuming all nodes use delta (2 bytes/conn), iterate until stable.
+pub fn minimise(dfa: &DfaTrie) -> DfaTrie {
     let n = dfa.nodes.len();
-    let mut use_delta: Vec<bool> = vec![true; n];
+    if n == 0 {
+        return DfaTrie { nodes: Vec::new() };
+    }
 
-    let compute_offsets = |use_delta: &Vec<bool>| -> Vec<usize> {
-        let mut offsets = Vec::with_capacity(n);
-        let mut cursor = 0usize;
+    // --- Step 1: initial partition by (strict, sorted output_ids) ---
+    // Nodes with different observable behaviour can never be merged.
+    let mut group_of: Vec<usize> = vec![0; n];
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+
+    {
+        let mut sig_map: std::collections::HashMap<(bool, Vec<usize>), usize> =
+            std::collections::HashMap::new();
+
         for (i, node) in dfa.nodes.iter().enumerate() {
-            offsets.push(cursor);
-            let conn_bytes = if use_delta[i] { 2 } else { 3 };
-            cursor += 2 + node.children.len() * conn_bytes + node.output_ids.len() * 3;
+            let mut outs = node.output_ids.clone();
+            outs.sort();
+            let sig = (node.strict, outs);
+            let next_id = sig_map.len();
+            let gid = *sig_map.entry(sig).or_insert(next_id);
+            if gid == groups.len() {
+                groups.push(Vec::new());
+            }
+            groups[gid].push(i);
+            group_of[i] = gid;
         }
-        offsets
-    };
+    }
 
-    // Iterate until the delta assignment stabilises
+    // --- Step 2: iterative refinement ---
     loop {
-        let offsets = compute_offsets(&use_delta);
         let mut changed = false;
-        for (i, node) in dfa.nodes.iter().enumerate() {
-            if node.children.is_empty() {
+        let mut next_groups: Vec<Vec<usize>> = Vec::new();
+        let mut next_group_of = group_of.clone();
+
+        for group in &groups {
+            if group.len() <= 1 {
+                let gid = next_groups.len();
+                for &node in group {
+                    next_group_of[node] = gid;
+                }
+                next_groups.push(group.clone());
                 continue;
             }
-            let src_off = offsets[i] as i64;
-            let all_fit = node.children.values().all(|&t| {
-                let d = offsets[t] as i64 - src_off;
-                d >= -128 && d <= 127
-            });
-            if use_delta[i] != all_fit {
-                use_delta[i] = all_fit;
+
+            // Collect all chars used by any member of this group
+            let mut chars: std::collections::BTreeSet<char> = std::collections::BTreeSet::new();
+            for &node in group {
+                chars.extend(dfa.nodes[node].children.keys().copied());
+            }
+
+            // Signature: for each char, which group does this node go to?
+            // None means no transition.
+            type TransSig = std::collections::BTreeMap<char, Option<usize>>;
+            let mut sig_map: std::collections::HashMap<TransSig, Vec<usize>> =
+                std::collections::HashMap::new();
+
+            for &node in group {
+                let mut sig: TransSig = std::collections::BTreeMap::new();
+                for &ch in &chars {
+                    let target_group = dfa.nodes[node].children.get(&ch).map(|&t| group_of[t]);
+                    sig.insert(ch, target_group);
+                }
+                sig_map.entry(sig).or_default().push(node);
+            }
+
+            if sig_map.len() == 1 {
+                // No split needed
+                let gid = next_groups.len();
+                for &node in group {
+                    next_group_of[node] = gid;
+                }
+                next_groups.push(group.clone());
+            } else {
+                // Split into sub-groups
                 changed = true;
+                for (_, sub) in sig_map {
+                    let gid = next_groups.len();
+                    for &node in &sub {
+                        next_group_of[node] = gid;
+                    }
+                    next_groups.push(sub);
+                }
             }
         }
+
+        group_of = next_group_of;
+        groups = next_groups;
         if !changed {
             break;
         }
     }
 
-    let node_offsets = compute_offsets(&use_delta);
+    // --- Step 3: build minimised DFA ---
+    // Representative of each group = first member (arbitrary but stable).
+    let num_groups = groups.len();
+    let mut min_nodes: Vec<DfaNode> = Vec::with_capacity(num_groups);
 
-    // Serialise
+    // Find which group contains the original root (node 0)
+    let root_group = group_of[0];
+
+    for group in &groups {
+        let rep = group[0];
+        let rep_node = &dfa.nodes[rep];
+        let mut new_children = std::collections::BTreeMap::new();
+        for (&ch, &target) in &rep_node.children {
+            new_children.insert(ch, group_of[target]);
+        }
+        min_nodes.push(DfaNode {
+            children: new_children,
+            output_ids: rep_node.output_ids.clone(),
+            strict: rep_node.strict,
+        });
+    }
+
+    // --- Step 4: BFS reorder so root=0 and children follow parents ---
+    let mut bfs_order: Vec<usize> = Vec::with_capacity(num_groups);
+    let mut visited = vec![false; num_groups];
+    let mut queue = std::collections::VecDeque::new();
+    queue.push_back(root_group);
+    visited[root_group] = true;
+    while let Some(g) = queue.pop_front() {
+        bfs_order.push(g);
+        for &child in min_nodes[g].children.values() {
+            if !visited[child] {
+                visited[child] = true;
+                queue.push_back(child);
+            }
+        }
+    }
+
+    for (g, vis) in visited.iter().enumerate().take(num_groups) {
+        if !vis {
+            bfs_order.push(g);
+        }
+    }
+
+    // Build remap: old group index -> new BFS position
+    let mut remap = vec![0usize; num_groups];
+    for (new_idx, &old_g) in bfs_order.iter().enumerate() {
+        remap[old_g] = new_idx;
+    }
+
+    let final_nodes: Vec<DfaNode> = bfs_order
+        .iter()
+        .map(|&old_g| {
+            let node = &min_nodes[old_g];
+            DfaNode {
+                children: node
+                    .children
+                    .iter()
+                    .map(|(&ch, &tgt)| (ch, remap[tgt]))
+                    .collect(),
+                output_ids: node.output_ids.clone(),
+                strict: node.strict,
+            }
+        })
+        .collect();
+
+    DfaTrie { nodes: final_nodes }
+}
+
+pub fn emit_binary(dfa: &DfaTrie, st: &StringTable) -> Vec<u8> {
+    let (dict_blob, str_ranges) = st.build_dict();
+
+    // Pass 1: compute byte offset of each node
+    let node_offsets: Vec<usize> = {
+        let mut offsets = Vec::with_capacity(dfa.nodes.len());
+        let mut cursor = 0usize;
+        for node in &dfa.nodes {
+            offsets.push(cursor);
+            // 2 (header) + N*3 (connections) + M*3 (outputs)
+            cursor += 2 + node.children.len() * 3 + node.output_ids.len() * 3;
+        }
+        offsets
+    };
+
+    // Pass 2: serialise
     let mut tree: Vec<u8> = Vec::new();
-    for (i, node) in dfa.nodes.iter().enumerate() {
-        let is_delta = use_delta[i];
-
-        // header: bit15=strict | bits14..10=num_outputs | bit9=delta_flag | bits8..0=num_connections
-        assert!(node.children.len() <= 511, "node has >511 children");
+    for node in dfa.nodes.iter() {
+        // header: bit15=strict | bits14..10=num_outputs | bits9..0=num_connections
+        assert!(node.children.len() <= 1023, "node has >1023 children");
         assert!(node.output_ids.len() <= 31, "node has >31 outputs");
         let header: u16 = ((node.strict as u16) << 15)
             | ((node.output_ids.len() as u16) << 10)
-            | ((is_delta as u16) << 9)
             | (node.children.len() as u16);
         tree.extend_from_slice(&header.to_le_bytes());
 
-        // connections
-        let src_off = node_offsets[i] as i64;
-        for (&ch, &target_node_idx) in &node.children {
+        // connections: u8 slot + u16 absolute offset
+        for (&ch, &target) in &node.children {
             let key = char_to_key(ch);
-            let dst_off = node_offsets[target_node_idx];
-            if is_delta {
-                let delta = dst_off as i64 - src_off;
-                debug_assert!(delta >= -128 && delta <= 127);
-                tree.push(key);
-                tree.push(delta as i8 as u8);
-            } else {
-                assert!(
-                    dst_off <= MAX_U16,
-                    "tree chunk exceeds u16 address space ({dst_off})"
-                );
-                tree.push(key);
-                tree.extend_from_slice(&(dst_off as u16).to_le_bytes());
-            }
+            let offset = node_offsets[target];
+            assert!(
+                offset <= MAX_U16,
+                "tree chunk exceeds u16 address space ({offset})"
+            );
+            tree.push(key);
+            tree.extend_from_slice(&(offset as u16).to_le_bytes());
         }
 
         // outputs

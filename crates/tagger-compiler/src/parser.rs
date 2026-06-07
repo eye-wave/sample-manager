@@ -70,13 +70,12 @@ pub fn make_parser<'src>() -> impl Parser<'src, Inp<'src>, Vec<Item>, Extra<'src
         .collect::<Vec<Vec<PatChar>>>()
         .map(|vv| vv.into_iter().flatten().collect::<Vec<PatChar>>());
 
-    let output_clause =
-        just(Token::Star)
-            .ignore_then(ident.clone().or_not())
-            .map(|opt| match opt {
-                Some(name) => Output::Named(name),
-                None => Output::Itself,
-            });
+    let output_clause = just(Token::Star)
+        .ignore_then(ident.or_not())
+        .map(|opt| match opt {
+            Some(name) => Output::Named(name),
+            None => Output::Itself,
+        });
 
     let word_decl = just(Token::Bang)
         .or_not()
@@ -92,7 +91,6 @@ pub fn make_parser<'src>() -> impl Parser<'src, Inp<'src>, Vec<Item>, Extra<'src
         Recursive::declare();
 
     let group = ident
-        .clone()
         .then_ignore(nls.clone())
         .then(item.clone().repeated().collect::<Vec<_>>().delimited_by(
             just(Token::LBrace).then(nls.clone()),
