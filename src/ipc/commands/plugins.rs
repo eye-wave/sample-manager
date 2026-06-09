@@ -1,14 +1,14 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use sample_model::{PluginId, SampleSerialize, SearchRequest};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::ipc::{IPCBody, IPCError, IPCResponse, IntoIPCResponse, ok};
-use crate::plugins::PluginId;
 use crate::state::app_paths::extract_plugin_path;
+
 use crate::state::samples::utils::sync_path;
-use crate::state::samples::{SampleSerialize, SearchRequest};
 use crate::{AStr, LogErrorExt};
 
 fn any_online_plugin_loaded(body: IPCBody) -> IPCResponse {

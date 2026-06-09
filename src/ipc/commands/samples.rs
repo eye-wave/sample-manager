@@ -1,9 +1,12 @@
 use std::fs;
 
+use sample_model::SearchRequest;
+
 use crate::ipc::{IPCBody, IPCError, IPCResponse, IntoIPCResponse, ok};
 use crate::state::FsSample;
+
 use crate::state::samples::{
-    SampleEntry, ScanMerge, SearchRequest, WaveformData, draw_audio_and_save, process_directories,
+    SampleEntryFav, ScanMerge, WaveformData, draw_audio_and_save, process_directories,
     search_local, tag_string,
 };
 use crate::{LogErrorExt, ipc_commands};

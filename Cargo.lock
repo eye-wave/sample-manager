@@ -1494,6 +1494,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hash32"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "47d60b12902ba28e2730cd37e95b8c9223af2808df9e902d4df49588d1470606"
+dependencies = [
+ "byteorder",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1531,10 +1540,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdc6457c0eb62c71aac4bc17216026d8410337c4126773b9c5daba343f17964f"
 dependencies = [
  "atomic-polyfill",
- "hash32",
+ "hash32 0.2.1",
  "rustc_version",
  "serde",
  "spin",
+ "stable_deref_trait",
+]
+
+[[package]]
+name = "heapless"
+version = "0.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25ba4bd83f9415b58b4ed8dc5714c76e626a105be4646c02630ad730ad3b5aa4"
+dependencies = [
+ "hash32 0.3.1",
+ "serde_core",
  "stable_deref_trait",
 ]
 
@@ -2564,7 +2584,7 @@ name = "plugin_sdk"
 version = "0.1.0"
 dependencies = [
  "paste",
- "plugin_wire",
+ "sample_model",
 ]
 
 [[package]]
@@ -2574,14 +2594,6 @@ dependencies = [
  "plugin_sdk",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "plugin_wire"
-version = "0.1.0"
-dependencies = [
- "serde",
- "ts-rs",
 ]
 
 [[package]]
@@ -2608,7 +2620,7 @@ dependencies = [
  "cobs",
  "embedded-io 0.4.0",
  "embedded-io 0.6.1",
- "heapless",
+ "heapless 0.7.17",
  "serde",
 ]
 
@@ -2952,10 +2964,10 @@ dependencies = [
  "image",
  "maplit",
  "paste",
- "plugin_wire",
  "postcard",
  "rayon",
  "ringbuf",
+ "sample_model",
  "serde",
  "serde_json",
  "struct-patch",
@@ -2975,6 +2987,19 @@ dependencies = [
  "wry",
  "xmltree",
  "zip",
+]
+
+[[package]]
+name = "sample_model"
+version = "0.1.0"
+dependencies = [
+ "fuzzy-matcher",
+ "heapless 0.9.3",
+ "postcard",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "ts-rs",
 ]
 
 [[package]]
@@ -3040,9 +3065,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.149"
+version = "1.0.150"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83fc039473c5595ace860d8c4fafa220ff474b3fc6bfdb4293327f1a37e94d86"
+checksum = "e8014e44b4736ed0538adeecded0fce2a272f22dc9578a7eb6b2d9993c74cfb9"
 dependencies = [
  "itoa",
  "memchr",

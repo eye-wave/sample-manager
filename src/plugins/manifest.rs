@@ -1,5 +1,6 @@
 use std::{collections::HashMap, io::Read, ops::Deref, str::FromStr, sync::Arc};
 
+use sample_model::{PluginId, PluginIdError};
 use serde::de::{MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -17,8 +18,8 @@ use crate::{
 
 #[derive(Debug, thiserror::Error)]
 pub enum ManifestError {
-    #[error("invalid plugin id: {0}")]
-    InvalidPluginId(String),
+    #[error("{0}")]
+    InvalidPluginId(#[from] PluginIdError),
 
     #[error("plugin '{0}' is missing a runtime entry (wasm file not declared in manifest)")]
     MissingPluginEntry(AStr),
@@ -31,47 +32,6 @@ pub enum ManifestError {
 
     #[error("TOML parse error")]
     Toml(#[from] toml::de::Error),
-}
-
-// -- PluginId -----------------------------------------------------------------
-
-#[derive(Clone, Debug, Serialize, TS, PartialEq, Eq, Hash)]
-pub struct PluginId(AStr);
-
-impl PluginId {
-    pub fn new(str: impl AsRef<str>) -> Result<Self, ManifestError> {
-        const FORBIDDEN: &[char] = &['<', '>', ':'];
-        let s = str.as_ref();
-
-        if s == "__APP_SETTINGS__"
-            || s.chars()
-                .any(|c| c.is_whitespace() || FORBIDDEN.contains(&c))
-        {
-            return Err(ManifestError::InvalidPluginId(str.as_ref().to_owned()));
-        }
-
-        Ok(Self(Arc::from(s)))
-    }
-}
-
-impl std::fmt::Display for PluginId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl Deref for PluginId {
-    type Target = AStr;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<'de> Deserialize<'de> for PluginId {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        PluginId::new(s.as_str()).map_err(serde::de::Error::custom)
-    }
 }
 
 // -- Metadata & Assets --------------------------------------------------------

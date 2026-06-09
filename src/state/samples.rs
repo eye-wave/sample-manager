@@ -1,13 +1,13 @@
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
-
-use fuzzy_matcher::FuzzyMatcher;
-use fuzzy_matcher::skim::SkimMatcherV2;
-use plugin_wire::sample::SampleMetadata;
 
 use crate::ipc::IPCSenderUI;
 use crate::state::AppState;
 use crate::{AStr, SyncError};
+
+use sample_model::wire::SampleType;
+use sample_model::*;
 
 mod data;
 mod search;
@@ -16,8 +16,9 @@ mod waveform;
 
 pub mod utils;
 
-pub use data::{PluginSample, SampleDataError, SampleEntry, SampleSerialize, SampleSource};
-pub use search::{SearchRequest, filter_samples, search_local};
+pub use data::{PluginSample, SampleEntryFav};
+
+pub use search::{filter_samples, search_local};
 pub use tagger::tag_string;
 pub use waveform::{WaveformData, draw_audio_and_save};
 
@@ -73,16 +74,20 @@ impl SampleEntry for FsSample {
             .ok_or(SampleDataError::PathConversionError)
     }
 
-    fn score(&self, query: &str, tags: &[&str], matcher: &SkimMatcherV2) -> i64 {
-        if !tags.is_empty() {
-            let has_all = tags.iter().all(|t| self.tags.contains(t));
-            if !has_all {
-                return i64::MIN;
-            }
+    fn tags(&self) -> Box<dyn Iterator<Item = &str> + '_> {
+        Box::new(self.tags.iter().copied())
+    }
+
+    fn get_score_str(&self) -> Cow<'_, str> {
+        Cow::Borrowed(self.search_str.as_ref())
+    }
+}
+
+impl SampleEntrySerialize for FsSample {
+    fn source(&self) -> SampleSource {
+        SampleSource::Native {
+            path: self.path.to_string_lossy().to_string(),
         }
-        matcher
-            .fuzzy_match(&self.search_str, query)
-            .unwrap_or(i64::MIN)
     }
 
     fn to_serialize(&self) -> Result<SampleSerialize, SampleDataError> {
@@ -99,7 +104,7 @@ impl SampleEntry for FsSample {
             meta: SampleMetadata {
                 bpm: None,
                 description: None,
-                sample_type: plugin_wire::SampleType::OneShot,
+                sample_type: SampleType::OneShot,
                 tags: self.tags.iter().map(|s| Arc::from(*s)).collect(),
             },
         })

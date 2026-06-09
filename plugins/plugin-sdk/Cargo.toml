@@ -5,5 +5,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-plugin_wire = { path = "../plugin-wire" }
+sample_model = { path = "../../crates/sample-model" }
 paste = "1.0.15"

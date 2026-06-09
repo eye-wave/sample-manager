@@ -1,12 +1,14 @@
-use plugin_wire::{WireEntry, write_frame};
+use sample_model::wire::{WireEntry, write_frame};
 
 /// Serialize `entries` into a frame buffer, leak it, and return the pointer.
 /// The host reads this pointer as the return value of `search` / `get_index`,
 /// then calls `free(ptr, frame_size)` once it has parsed the frame.
 pub fn write_frame_ptr(entries: &[WireEntry]) -> u32 {
-    let buf = write_frame(entries);
+    let buf = write_frame(entries).unwrap();
     let ptr = buf.as_ptr() as u32;
+
     std::mem::forget(buf);
+
     ptr
 }
 
@@ -25,7 +27,7 @@ macro_rules! export_allocator {
     () => {
         #[unsafe(no_mangle)]
         pub extern "C" fn alloc(len: u32) -> *mut u8 {
-            let mut buf = Vec::with_capacity(len as usize);
+            let mut buf = vec![0u8; len as usize];
             let ptr = buf.as_mut_ptr();
             std::mem::forget(buf);
             ptr

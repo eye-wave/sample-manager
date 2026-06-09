@@ -6,13 +6,14 @@ use std::path::PathBuf;
 use crate::LogErrorExt;
 use crate::audio::AudioPlayer;
 use crate::ipc::IPCSenderUI;
-use crate::plugins::{PluginId, PluginInfo, PluginRuntimeHandle};
+use crate::plugins::{PluginInfo, PluginRuntimeHandle};
 use crate::state::config::{ConfigData, ConfigDataPatch};
 
 pub mod app_paths;
 pub mod config;
 pub mod samples;
 
+use sample_model::PluginId;
 pub use samples::FsSample;
 
 use config::AppConfig;

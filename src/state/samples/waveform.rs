@@ -3,9 +3,9 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 
 use image::{ImageBuffer, Rgb};
+use sample_model::PluginId;
 
 use crate::ipc::IPCSenderUI;
-use crate::plugins::PluginId;
 use crate::state::config::FFPathsRef;
 use crate::state::samples::utils::{hash_path, thumbnail_path, thumbnail_uri};
 

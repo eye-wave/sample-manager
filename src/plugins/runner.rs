@@ -5,21 +5,20 @@ use std::io::Read;
 use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 
-use plugin_wire::{WireEntry, encode_search_request, parse_frame};
 use rayon::prelude::*;
+use sample_model::wire::*;
+use sample_model::*;
 use wasmtime::{Caller, Engine, Linker, Module, Store};
 
 use crate::ipc::IPCMessage;
 use crate::plugins::manifest::config_key;
 use crate::state::app_paths;
-use crate::state::samples::{
-    PluginSample, SampleEntry, SearchRequest, WaveformData, draw_audio_and_save, filter_samples,
-};
+use crate::state::samples::{PluginSample, WaveformData, draw_audio_and_save, filter_samples};
 use crate::{AStr, LogErrorExt};
 
 use super::host::{HostState, PendingDownload};
 use super::manifest::{ManifestError, PluginManifest, SearchMode};
-use super::{PluginId, PluginInstance, PluginRunnerCommand as Cmd, PluginSendError};
+use super::{PluginInstance, PluginRunnerCommand as Cmd, PluginSendError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum PluginRuntimeError {
@@ -71,7 +70,10 @@ pub enum PluginRuntimeError {
     FramePointerOutOfBounds { plugin: PluginId },
 
     #[error("plugin '{plugin}' produced an invalid frame payload: {err}")]
-    FrameParseError { plugin: PluginId, err: &'static str },
+    FrameParseError {
+        plugin: PluginId,
+        err: FrameParseError,
+    },
 
     #[error(
         "plugin '{plugin}' reported a completed download for '{url}' without issuing a download request"
@@ -345,7 +347,7 @@ impl PluginRunner {
     ) -> Result<Vec<WireEntry>, String> {
         let plugin = self.plugins.get(id).ok_or("plugin not loaded")?;
 
-        let req_bytes = encode_search_request(req.limit, req.offset, req.is_fav, &req.query);
+        let req_bytes = req.to_bytes().map_err(|e| e.to_string())?;
         let (req_ptr, req_len) = wasm_alloc_write(id.clone(), &mut self.store, plugin, &req_bytes)
             .map_err(|e| e.to_string())?;
 

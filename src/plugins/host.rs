@@ -3,15 +3,15 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
-use plugin_wire::WireEntry;
-
 use rayon::iter::ParallelBridge;
 use serde::{Serialize, de::DeserializeOwned};
 
+use sample_model::{PluginId, SearchRequest, wire::*};
+
 use crate::LogErrorExt;
 use crate::schema::SchemaField;
-use crate::state::samples::{PluginSample, SearchRequest, filter_samples};
-use crate::{AStr, plugins::PluginId, state::app_paths};
+use crate::state::samples::{PluginSample, filter_samples};
+use crate::{AStr, state::app_paths};
 
 pub type StorageKey = (PluginId, AStr);
 
@@ -131,9 +131,9 @@ impl HostState {
             }
         };
 
-        let mut sample = sample.entry.clone();
+        let sample = sample.entry.clone();
 
-        sample.clear_url();
+        // sample.clear_url();
         container.insert(sample);
 
         let _ = self.flush_cache();

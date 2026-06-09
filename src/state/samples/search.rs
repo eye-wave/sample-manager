@@ -3,27 +3,15 @@ use std::path::Path;
 
 use fuzzy_matcher::skim::SkimMatcherV2;
 use rayon::prelude::*;
-use serde::Deserialize;
-use ts_rs::TS;
+use sample_model::{SampleEntrySerialize, SearchRequest};
 
-use crate::AStr;
 use crate::LogErrorExt;
 use crate::plugins::PluginSendError;
+use crate::state::samples::data::SampleEntryFav;
 use crate::state::{
     AppState,
     samples::{SampleEntry, SampleSerialize, clean_up_string},
 };
-
-#[derive(Clone, Debug, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export)]
-pub struct SearchRequest {
-    pub query: AStr,
-    pub limit: usize,
-    pub offset: usize,
-    pub tags: Vec<AStr>,
-    pub is_fav: bool,
-}
 
 pub fn search_local(req: &SearchRequest, state: &AppState) -> Result<String, PluginSendError> {
     let query = clean_up_string(&req.query);
@@ -51,7 +39,7 @@ pub fn search_local(req: &SearchRequest, state: &AppState) -> Result<String, Plu
     let mut native_scored: Vec<(SampleSerialize, i64)> = native_vec
         .par_iter()
         .filter_map(|item| {
-            let score = score_fn(*item as &dyn SampleEntry);
+            let score = score_fn(*item as &dyn SampleEntrySerialize);
             if score > i64::MIN {
                 item.to_serialize().ok().map(|s| (s, score))
             } else {

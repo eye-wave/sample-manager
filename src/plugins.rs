@@ -4,10 +4,12 @@ use std::sync::mpsc::{self};
 
 use wasmtime::{Instance, TypedFunc};
 
+use sample_model::*;
+
 use crate::ipc::IPCSenderUI;
 use crate::plugins::runner::PluginSearchResult;
 use crate::state::config::FFPaths;
-use crate::state::samples::{SampleSerialize, SearchRequest};
+
 use crate::{AStr, LogErrorExt};
 
 mod host;
@@ -19,7 +21,7 @@ use icon::SVGIcon;
 use manifest::PluginManifest;
 use runner::PluginRunner;
 
-pub use manifest::{PluginId, PluginInfo};
+pub use manifest::PluginInfo;
 
 pub struct PluginInstance {
     pub instance: Instance,

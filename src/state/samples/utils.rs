@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
-use crate::plugins::PluginId;
+use sample_model::PluginId;
+
 use crate::state::app_paths;
 use crate::window::PROTOCOL;
 

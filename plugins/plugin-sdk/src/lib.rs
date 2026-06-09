@@ -7,7 +7,7 @@ pub mod mem;
 pub mod storage;
 
 pub mod plugin_wire {
-    pub use plugin_wire::*;
+    pub use sample_model::wire::*;
 }
 
 pub mod prelude {
