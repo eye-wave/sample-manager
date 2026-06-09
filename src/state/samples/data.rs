@@ -77,6 +77,11 @@ impl SampleEntrySerialize for PluginSample {
                 description: self.entry.description().map(Arc::from),
                 tags: self.entry.tags().map(Arc::from).collect(),
                 bpm: self.entry.bpm,
+                cover_art_url: self
+                    .entry
+                    .cover_art_url
+                    .as_ref()
+                    .map(|s| Arc::from(s.as_str())),
                 sample_type: self.entry.sample_type,
             },
         })

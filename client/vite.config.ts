@@ -8,7 +8,7 @@ import { viteSingleFile } from "vite-plugin-singlefile";
 const isProd = import.meta.env?.PROD ?? process.env.NODE_ENV === "production";
 
 export default defineConfig({
-  publicDir: isProd ? "public" : "../assets",
+  publicDir: isProd ? "public" : "../assets/public",
   css: {
     postcss: {
       plugins: [cssNano({ preset: "advanced" })],

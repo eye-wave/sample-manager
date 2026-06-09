@@ -105,6 +105,7 @@ impl SampleEntrySerialize for FsSample {
                 bpm: None,
                 description: None,
                 sample_type: SampleType::OneShot,
+                cover_art_url: None,
                 tags: self.tags.iter().map(|s| Arc::from(*s)).collect(),
             },
         })

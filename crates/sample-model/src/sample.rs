@@ -92,6 +92,7 @@ pub struct SampleWithFav {
 pub struct SampleMetadata {
     pub tags: Vec<AStr>,
     pub description: Option<AStr>,
+    pub cover_art_url: Option<AStr>,
     pub bpm: Option<u16>,
     pub sample_type: SampleType,
 }

@@ -16,6 +16,7 @@ pub struct WireEntry {
     path_end: u16,
     url_end: u16,
     description_end: u16,
+    pub cover_art_url: Option<String>,
     pub tags: HVec<String, WIRE_MAX_TAG_COUNT>,
     pub bpm: Option<u16>,
     pub sample_type: SampleType,
@@ -105,11 +106,13 @@ impl PartialEq for WireEntry {
 impl Eq for WireEntry {}
 
 impl WireEntry {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         name: &str,
         path: &str,
         url: &str,
         description: &str,
+        cover_art_url: Option<String>,
         tags_src: &[&str],
         bpm: Option<u16>,
         sample_type: SampleType,
@@ -141,6 +144,7 @@ impl WireEntry {
             path_end,
             url_end,
             description_end,
+            cover_art_url,
             tags,
             bpm,
             sample_type,
