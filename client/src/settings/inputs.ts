@@ -1,212 +1,191 @@
 import type { SchemaFieldWithValue as Field } from "@typegen/SchemaFieldWithValue";
-import { invoke, IPC } from "../invoke/invoke";
+import { $el } from "../alias";
+import { IPC, invoke } from "../invoke/invoke";
 
-export function renderField(key: string, field: Field) {
-  return /* HTML */ `
-    <div class="field">
-      <span class="field-label">${field.label}</span>
-      ${fields[field.type]?.(key, field) ?? ""}
-    </div>`;
+type CB<T = unknown> = (key: string, value: T) => void;
+
+/** Creates and immediately binds a single settings field. Returns the wrapper element. */
+export function renderField(key: string, field: Field, cb?: CB): HTMLElement {
+  const wrap = $el("div");
+  wrap.className = "field";
+
+  const label = $el("span");
+  label.className = "field-label";
+  label.textContent = field.label;
+  wrap.appendChild(label);
+
+  const input = buildInput(key, field, cb);
+  if (input) wrap.appendChild(input);
+
+  return wrap;
 }
 
-const fields = {
-  string: renderStringInput,
-  number: renderNumberInput,
-  bool: renderBoolInput,
-  select: renderSelectInput,
-  numberList: renderNumberListInput,
-  stringList: renderStringListInput,
-} as Record<string, (key: string, field: Field) => string>;
+// ---------------------------------------------------------------------------
+// Field builders — each creates + binds its own element(s)
+// ---------------------------------------------------------------------------
 
-function renderStringInput(key: string, field: Extract<Field, { type: "string" }>) {
-  const inputType = field.is_password ? "password" : "text";
-
-  return /* HTML */ `<input
-      type="${inputType}"
-      value="${field.value}"
-      data-field="string"
-      data-key="${key}"
-    >`;
+function buildInput(key: string, field: Field, cb?: CB): HTMLElement | null {
+  switch (field.type) {
+    case "string":
+      return buildString(key, field, cb);
+    case "number":
+      return buildNumber(key, field, cb);
+    case "bool":
+      return buildBool(key, field, cb);
+    case "select":
+      return buildSelect(key, field, cb);
+    case "numberList":
+      return buildNumberList(key, field, cb);
+    case "stringList":
+      return buildStringList(key, field, cb);
+    default:
+      return null;
+  }
 }
 
-function renderNumberInput(key: string, field: Extract<Field, { type: "number" }>) {
-  return /* HTML */ `<input
-      type="number"
-      data-field="number"
-      value="${field.value}"
-      data-key="${key}"
-    >`;
+function onChangeValue(key: string, value: unknown, cb?: CB) {
+  if (cb) cb(key, value);
+  else {
+    const [id, name] = key.split(":");
+    if (id && name) invoke(IPC.ConfigurePluginValue, { id, name, data: value });
+  }
 }
 
-function renderBoolInput(key: string, field: Extract<Field, { type: "bool" }>) {
+function buildString(key: string, field: Extract<Field, { type: "string" }>, cb?: CB) {
+  const input = $el("input") as HTMLInputElement;
+  input.type = field.is_password ? "password" : "text";
+  input.value = field.value;
+  input.oninput = () => onChangeValue(key, input.value, cb);
+  return input;
+}
+
+function buildNumber(key: string, field: Extract<Field, { type: "number" }>, cb?: CB) {
+  const input = $el("input") as HTMLInputElement;
+  input.type = "number";
+  input.value = String(field.value);
+  input.oninput = () => onChangeValue(key, input.value, cb);
+  return input;
+}
+
+function buildBool(key: string, field: Extract<Field, { type: "bool" }>, cb?: CB) {
   const id = key + performance.now().toString(36);
-  const checked = field.value ? "checked" : "";
+  const wrap = $el("div");
+  wrap.className = "switch";
 
-  return /* HTML */ `<div class="switch">
-      <input
-        id="${id}"
-        type="checkbox"
-        ${checked}
-        data-key="${key}"
-        data-field="bool"
-      >
-      <label for="${id}"></label>
-    </div>`;
+  const input = $el("input") as HTMLInputElement;
+  input.type = "checkbox";
+  input.id = id;
+  input.checked = !!field.value;
+  input.oninput = () => onChangeValue(key, String(input.checked), cb);
+
+  const lbl = $el("label") as HTMLLabelElement;
+  lbl.htmlFor = id;
+
+  wrap.appendChild(input);
+  wrap.appendChild(lbl);
+  return wrap;
 }
 
-function renderSelectInput(key: string, field: Extract<Field, { type: "select" }>) {
-  return /* HTML */ `<select data-key="${key}" data-field="select">${renderSelectOptions(field)}</select>`;
-}
+function buildSelect(key: string, field: Extract<Field, { type: "select" }>, cb?: CB) {
+  const select = $el("select") as HTMLSelectElement;
 
-function renderSelectOptions(field: Extract<Field, { type: "select" }>) {
-  const renderOption = (value: string, currentValue: string) => {
-    const selected = value === currentValue ? " selected" : "";
-
-    return `<option value="${value}"${selected}>${value}</option>`;
+  const appendOptions = (values: string[]) => {
+    for (const v of values) {
+      const opt = $el("option") as HTMLOptionElement;
+      opt.value = v;
+      opt.textContent = v;
+      opt.selected = v === field.value;
+      select.appendChild(opt);
+    }
   };
 
   if ("list" in field.options) {
-    return field.options.list.values.map((opt) => renderOption(opt, field.value)).join("");
-  }
-
-  if ("grouped" in field.options) {
-    return Object.entries(field.options.grouped.groups)
-      .map(([group, opts]) => {
-        const options = opts.map((opt) => renderOption(opt, field.value)).join("");
-
-        return `<optgroup label="${group}">${options}</optgroup>`;
-      })
-      .join("");
-  }
-
-  return "";
-}
-
-function renderNumberListInput(key: string, field: Extract<Field, { type: "numberList" }>) {
-  const inputs = Array.from({ length: field.count }, (_, i) => {
-    const val = field.value.at(i) ?? field.default.at(i) ?? 0;
-
-    return /* HTML */ `<input type="number" value="${val}">`;
-  }).join("");
-
-  return /* HTML */ `<div style="display:contents" data-key="${key}" data-field="numberList">
-      ${inputs}
-    </div>`;
-}
-
-function renderStringListInput(
-  key: string,
-  field: Extract<Field, { type: "stringList" }>,
-): string {
-  const rows = (field.value ?? [])
-    .map(
-      (item) => /* HTML */ `<div class="string-list-row" data-value="${item}">
-        <span class="string-list-row-text">${item}</span>
-      </div>`,
-    )
-    .join("");
-
-  return /* HTML */ `<div class="field" data-key="${key}" data-field="stringList">
-    <div>
-      <input
-        class="string-list-input"
-        type="text"
-        data-key="${key}"
-        data-field="stringList"
-      />
-      <div class="string-list-rows">${rows}</div>
-    </div>
-  </div>`;
-}
-
-type InputCallback<T> = (key: string, value: T) => void;
-
-export function bindSettingInputs(el: HTMLElement, cb?: InputCallback<unknown>) {
-  const inputs = el.querySelectorAll("[data-key]") as NodeListOf<HTMLInputElement>;
-
-  inputs.forEach((i) => {
-    const [id, name] = i.dataset.key?.split(":") ?? [];
-    const field = i.dataset.field;
-    if (!id || !name || !field) return;
-
-    if (field === "numberList") bindNumbersInput(i, id, name, cb);
-    else if (field === "stringList") bindListInput(i, id, name, cb);
-    else {
-      i.oninput = () => {
-        const data = i.getAttribute("type") === "checkbox" ? `${i.checked}` : i.value;
-
-        if (typeof cb === "undefined") invoke(IPC.ConfigurePluginValue, { id, name, data });
-        else cb(name, data);
-      };
+    appendOptions(field.options.list.values);
+  } else if ("grouped" in field.options) {
+    for (const [group, values] of Object.entries(field.options.grouped.groups)) {
+      const grp = $el("optgroup") as HTMLOptGroupElement;
+      grp.label = group;
+      appendOptions(values); // appends to select — refactor if nesting matters
+      select.appendChild(grp);
     }
-  });
+  }
+
+  select.oninput = () => onChangeValue(key, select.value, cb);
+  return select;
 }
 
-function bindListInput(
-  i: HTMLDivElement,
-  id: string,
-  name: string,
-  cb?: InputCallback<string[]>,
-) {
-  const listEl = i.querySelector(".string-list-rows") as HTMLDivElement;
-  const input = i.querySelector(".string-list-input") as HTMLInputElement;
+function buildNumberList(key: string, field: Extract<Field, { type: "numberList" }>, cb?: CB) {
+  const wrap = $el("div");
+  wrap.style.display = "contents";
 
-  const values = new Set<string>();
-  const getValues = () => [...values];
+  const inputs: HTMLInputElement[] = Array.from({ length: field.count }, (_, i) => {
+    const input = $el("input") as HTMLInputElement;
+    input.type = "number";
+    input.value = String(field.value.at(i) ?? field.default.at(i) ?? 0);
+    wrap.appendChild(input);
+    return input;
+  });
+
+  const onChange = () =>
+    onChangeValue(
+      key,
+      inputs.map((b) => +b.value),
+      cb,
+    );
+  for (const input of inputs) input.oninput = onChange;
+
+  return wrap;
+}
+
+function buildStringList(key: string, field: Extract<Field, { type: "stringList" }>, cb?: CB) {
+  const wrap = $el("div");
+  const listEl = $el("div");
+  const textIn = $el("input") as HTMLInputElement;
+  textIn.className = "string-list-input";
+  textIn.type = "text";
+
+  const values = new Set<string>(field.value ?? []);
 
   const onChange = () => {
-    const data = getValues();
-    if (typeof cb === "undefined") invoke(IPC.ConfigurePluginValue, { id, name, data });
-    else cb(name, data);
+    const data = [...values];
+    onChangeValue(key, data, cb);
   };
 
-  const addItem = (value: string) => {
-    const trimmed = value.trim();
+  const addItem = (v: string) => {
+    const trimmed = v.trim();
     if (!trimmed || values.has(trimmed)) return;
-
     values.add(trimmed);
 
-    const row = document.createElement("div");
+    const row = $el("div");
     row.className = "string-list-row";
-    row.setAttribute("data-value", trimmed);
-    row.innerHTML = `<span class="string-list-row-text">${trimmed}</span>`;
+    const span = $el("span");
+    span.className = "string-list-row-text";
+    span.textContent = trimmed;
+    row.appendChild(span);
     listEl.appendChild(row);
     listEl.scrollTop = listEl.scrollHeight;
-
     onChange();
   };
 
-  input.onkeydown = (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      addItem(input.value);
-      input.value = "";
-    }
+  for (const existing of values) addItem(existing);
+
+  textIn.onkeydown = (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    addItem(textIn.value);
+    textIn.value = "";
   };
 
-  listEl.onclick = (e: MouseEvent) => {
+  listEl.onclick = (e) => {
     const row = (e.target as Element).closest(".string-list-row");
-    row?.remove();
-
+    if (!row) return;
+    const text = row.querySelector(".string-list-row-text")?.textContent ?? "";
+    values.delete(text);
+    row.remove();
     onChange();
   };
-}
 
-function bindNumbersInput(
-  i: HTMLDivElement,
-  id: string,
-  name: string,
-  cb?: InputCallback<number[]>,
-) {
-  const subInputs = Array.from(i.querySelectorAll("input"));
-
-  subInputs.forEach((s) => {
-    s.oninput = () => {
-      const data = subInputs.map((b) => +b.value);
-
-      if (typeof cb === "undefined")
-        invoke(IPC.ConfigurePluginValue, { id, name, data: JSON.stringify(data) });
-      else cb(name, data);
-    };
-  });
+  wrap.appendChild(textIn);
+  wrap.appendChild(listEl);
+  return wrap;
 }

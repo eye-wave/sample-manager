@@ -1,13 +1,12 @@
 import type { SampleEntry } from "@typegen/SampleEntry";
-import { BusEvent } from "../bus";
+import { callOnlineSearch, callSampleSearch, downloadFile, toggleFav } from "../api";
 import { basename, debounce, setLikedView } from "../helpers";
-import { invoke, IPC, listen } from "../invoke/invoke";
+import { IPC, invoke, listen } from "../invoke/invoke";
+import { playerHandle } from "../player/player";
+import { PreviewHandler } from "../preview/preview";
 import { TagInput } from "./input";
 import { PaginationHandler } from "./pagination";
 import { BrowseRow, type OnSelectProps } from "./row";
-import { PreviewHandler } from "../preview/preview";
-import { emit } from "../bus";
-import { callOnlineSearch, callSampleSearch, downloadFile, toggleFav } from "../api";
 
 export const POOL_SIZE = 100;
 
@@ -16,7 +15,6 @@ let isOnlineSearch = false;
 const showOnlineBtn = () => {
   invoke(IPC.AnyOnlinePluginLoaded).then((loaded) => {
     if (!+loaded) return;
-
     online_plugin_btn__.style.display = "";
   });
 };
@@ -26,42 +24,31 @@ listen("plug-add", showOnlineBtn);
 
 online_plugin_btn__.onclick = () => {
   isOnlineSearch = !isOnlineSearch;
-  if (isOnlineSearch) {
-    online_plugin_btn__.classList.remove("btn-surface");
-    online_plugin_btn__.classList.add("btn-primary");
-  } else {
-    online_plugin_btn__.classList.remove("btn-primary");
-    online_plugin_btn__.classList.add("btn-surface");
-  }
+  online_plugin_btn__.classList.toggle("btn-surface", !isOnlineSearch);
+  online_plugin_btn__.classList.toggle("btn-primary", isOnlineSearch);
 };
 
 let lastSelected = 0;
-async function onSelect(i: number, props: OnSelectProps) {
-  let path = "";
 
-  if (props.type === "plug") {
-    path = await downloadFile(props);
-  } else path = props.path;
+async function onSelect(i: number, props: OnSelectProps) {
+  const path = props.type === "plug" ? await downloadFile(props) : props.path;
 
   pool[lastSelected]?.highlight(false);
-
   const current = pool[i];
   if (!current) return;
 
   current.highlight(true);
-  emit(BusEvent.PlaySong, path);
-
   lastSelected = i;
+
+  playerHandle.play(path);
 }
 
-export function clearHighlight() {
-  pool[lastSelected]?.highlight(false);
-  lastSelected = 0;
-}
+// playerHandle fires our onPlay callback whenever any source starts playing,
+// so we can sync the highlight state without browse.ts knowing about sidebar.
+playerHandle.onPlay(() => syncHighlight());
 
-export function syncHighlight() {
+function syncHighlight() {
   const playingPath = PreviewHandler.path;
-
   for (let i = 0; i < POOL_SIZE; i++) {
     const row = pool[i];
     const isPlaying = !!playingPath && row.path === playingPath;
@@ -83,18 +70,15 @@ for (const item of pool) {
 listen("set-fav", (payload) => {
   const fav = !!+payload.charAt(0);
   const path = payload.slice(1);
-
   for (const el of pool) {
-    if (el.path !== path) continue;
-
-    setLikedView(fav, el.favEl);
+    if (el.path === path) setLikedView(fav, el.favEl);
   }
 });
 
 const PAGE_SIZE = 50;
-
 const debouncedOnlineSearch = debounce(callOnlineSearch, 350);
-export async function search(query: string, tags: string[], fav = false) {
+
+export function search(query: string, tags: string[], fav = false) {
   const params = {
     query,
     limit: PAGE_SIZE,
@@ -102,9 +86,7 @@ export async function search(query: string, tags: string[], fav = false) {
     tags,
     isFav: fav,
   };
-
   (isOnlineSearch ? debouncedOnlineSearch : callSampleSearch)(params);
-
   PaginationHandler.display(true);
 }
 
@@ -121,10 +103,8 @@ listen("search", (payload) => {
 
   for (let i = 0; i < POOL_SIZE; i++) {
     const row = pool[i];
-
     if (i < files.length) {
       const item = files[i];
-
       row.update(basename(item.name), null, item.isFav, item.tags);
       if (item.source === "native") row.setPath(item.path);
       else {

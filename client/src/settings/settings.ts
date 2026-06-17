@@ -2,14 +2,13 @@ import type { AppConfig } from "@typegen/AppConfig";
 import type { PickFileOptions } from "@typegen/PickFileOptions";
 import type { PluginInfo } from "@typegen/PluginInfo";
 import { d, w } from "../alias";
+import { getConfigFields } from "../api";
+import { DialogManager } from "../dialog";
 import { capitalize, updateCurrentTheme, updateTheme, updateThemeCss } from "../helpers";
-import { invoke, IPC, listen } from "../invoke/invoke";
+import { IPC, invoke, listen } from "../invoke/invoke";
 import { iterateShortcuts } from "../shortcuts";
 import { resizeHandle } from "../sidebar/resize";
-import { bindSettingInputs } from "./inputs";
 import { createPluginCard, renderSettings } from "./template";
-import { DialogManager } from "../dialog";
-import { getConfigFields } from "../api";
 
 function createPatch() {
   type Patch = Partial<AppConfig>;
@@ -41,7 +40,6 @@ d.querySelectorAll(".dialog-body button").forEach((el) => {
 
   if (target) {
     btn.onclick = () => showPane(target);
-
     tabIds.push(target);
     tabBtns.push(btn);
   }
@@ -55,7 +53,6 @@ function showPane(target: string) {
   for (const id of tabIds) {
     // @ts-expect-error
     const el = w[id] as HTMLDivElement;
-
     el.style.display = id === target ? "contents" : "none";
   }
 
@@ -82,8 +79,7 @@ conf_btn__.onclick = async () => {
   try {
     const config = await getConfigFields();
 
-    settings_body__.innerHTML = renderSettings({ id: "__APP_SETTINGS__", config });
-    bindSettingInputs(settings_body__, (field, data) => {
+    renderSettings({ id: "__APP_SETTINGS__", config }, settings_body__, (field, data) => {
       if (field === "ffmpeg_path") patch.set("ffmpeg_path", data as string);
       else if (field === "ffprobe_path") patch.set("ffprobe_path", data as string);
       else if (field === "sidebar_width") {
@@ -93,7 +89,6 @@ conf_btn__.onclick = async () => {
       } else if (field === "tracked_dirs") patch.set("tracked_dirs", data as string[]);
       else if (field === "color_theme") {
         previewedTheme = data as string;
-
         invoke(IPC.PreviewTheme, data).then(updateThemeCss);
       }
     });
@@ -152,10 +147,8 @@ conf_save__.onclick = () => {
 
 add_plugin_btn__.onclick = async () => {
   const opt: PickFileOptions = { filters: ["*.zip"], label: "*.zip zipped plugin files" };
-
   const path = await invoke(IPC.PickFile, opt);
   if (!path) return;
-
   invoke(IPC.AddPlugin, path);
 };
 
@@ -164,7 +157,6 @@ function bindPluginCards(pluginsInfo: PluginInfo[]) {
   (plugins_settings__.querySelectorAll(".btn") as NodeListOf<HTMLButtonElement>).forEach(
     (btn) => {
       const plugId = btn.dataset.id as string;
-
       const info = pluginsInfo.find((p) => p.id === plugId);
       if (!info) return;
 
@@ -172,14 +164,11 @@ function bindPluginCards(pluginsInfo: PluginInfo[]) {
         showPane("dial_tab_plugin__");
 
         plugin_uninstall_btn__.dataset.plugin = info.id;
-
         dial_current_plug_btn__.style.display = "";
         dial_current_plug_btn__.textContent = info.name;
-
         plugin_settings_label__.textContent = "Plugin " + info.name;
-        plugin_settings_body__.innerHTML = renderSettings(info);
 
-        bindSettingInputs(plugin_settings_body__);
+        renderSettings(info, plugin_settings_body__);
       };
     },
   );
@@ -193,7 +182,6 @@ listen("plugin-info", (data) => {
       pluginsInfo.push(i);
     });
   } catch {}
-
   bindPluginCards(pluginsInfo);
 });
 
@@ -202,7 +190,6 @@ listen("plug-add", () => refreshPluginList());
 plugin_uninstall_btn__.onclick = () => {
   const id = plugin_uninstall_btn__.dataset.plugin;
   if (!id) return;
-
   invoke(IPC.UninstallPlugin, id).then(() => {
     showPane("dial_tab_plug__");
     refreshPluginList();

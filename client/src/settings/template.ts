@@ -1,6 +1,5 @@
 import type { PluginInfo } from "@typegen/PluginInfo";
 import type { SchemaFieldWithValue } from "@typegen/SchemaFieldWithValue";
-
 import { renderField } from "./inputs";
 
 export function createPluginCard(info: PluginInfo) {
@@ -30,27 +29,20 @@ const cardIcon = (icon: string) => /* HTML */ `<div class="card-icon">${icon}</d
 const capability = (name: string | false) =>
   name ? /* HTML */ `<span class="card-tag">${name}</span>` : "";
 
-const hosts = (hosts: string[]) => {
-  return /* HTML */ `<details class="card-hosts">
-    <summary>Allowed Hosts (${hosts.length})</summary>
-    <ul>${hosts.map(host).join("")}</ul>
-  </details>`;
-};
+const hosts = (hosts: string[]) => /* HTML */ `<details class="card-hosts">
+  <summary>Allowed Hosts (${hosts.length})</summary>
+  <ul>${hosts.map(host).join("")}</ul>
+</details>`;
 
 const host = (label: string) => `<li>https://${label}/*</li>`;
 
-export function renderSettings({
-  id,
-  config,
-}: {
-  id: string;
-  config: Record<string, SchemaFieldWithValue>;
-}) {
-  const fields = Object.entries(config)
-    .toSorted((a, b) => a[0].localeCompare(b[0]))
-    .map(([key, data]) => {
-      return renderField(`${id}:${key}`, data);
-    });
-
-  return fields.join("");
+export function renderSettings(
+  { id, config }: { id: string; config: Record<string, SchemaFieldWithValue> },
+  container: HTMLElement,
+  cb?: (key: string, value: unknown) => void,
+): void {
+  container.innerHTML = "";
+  for (const [key, data] of Object.entries(config).sort(([a], [b]) => a.localeCompare(b))) {
+    container.appendChild(renderField(`${id}:${key}`, data, cb));
+  }
 }
