@@ -1,58 +1,57 @@
 import { w } from "./alias";
 import { updateCurrentTheme } from "./helpers";
 import { addShortcut } from "./shortcuts";
+import type { Writable } from "./store";
 
-export const DialogManager = (() => {
+export type DialogManager = {
+  open(id: string): void;
+  close(): void;
+};
+
+export const createDialogManager = (activeDialog: Writable<string | null>) => {
   const ids: string[] = [];
 
-  let current: null | string = null;
-
   addShortcut("Close settings dialog", "Escape", 0, () => {
-    if (conf_dial__.open) {
-      updateCurrentTheme();
-    }
-
-    DialogManager.close();
+    if (conf_dial__.open) updateCurrentTheme();
+    close();
   });
 
-  // @ts-expect-error
-  const dial = (id = current): HTMLDialogElement | null => w?.[id] as HTMLDialogElement;
+  const dial = (id: string | null = activeDialog.get()): HTMLDialogElement | null =>
+    // @ts-expect-error
+    id ? (w?.[id] as HTMLDialogElement) : null;
 
   function addId(id: string) {
     if (ids.includes(id)) return;
     ids.push(id);
-
     const d = dial(id);
     if (!d) return;
-
-    d.onclose = DialogManager.close;
+    d.onclose = close;
   }
 
-  return {
-    close() {
-      ids.forEach((id) => {
-        const d = dial(id);
-        if (!d) return;
-
-        d.close();
-        d.blur();
-      });
-
-      current = null;
-    },
-    open(id: string) {
-      if (current !== null) return false;
-      // @ts-expect-error
-      document.activeElement?.blur();
-
+  function close() {
+    for (const id of ids) {
       const d = dial(id);
-      if (!d) return;
+      if (!d) continue;
+      d.close();
+      d.blur();
+    }
+    activeDialog.set(null);
+  }
 
-      current = id;
-      addId(id);
+  function open(id: string) {
+    if (activeDialog.get() !== null) return false;
+    // @ts-expect-error
+    document.activeElement?.blur();
 
-      !d.open && d.showModal();
-      return d.open;
-    },
-  };
-})();
+    const d = dial(id);
+    if (!d) return false;
+
+    activeDialog.set(id);
+    addId(id);
+
+    !d.open && d.showModal();
+    return d.open;
+  }
+
+  return { open, close };
+};

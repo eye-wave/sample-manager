@@ -1,8 +1,6 @@
 import { $el } from "../alias";
-
 import { addShortcut } from "../shortcuts";
 import { TabFavorites, TabHandle } from "../sidebar/sidebar";
-import { search } from "./browse";
 import { PaginationHandler } from "./pagination";
 import type { BrowseRow } from "./row";
 
@@ -10,31 +8,25 @@ export const TagInput = (
   input: HTMLInputElement,
   container: HTMLElement,
   pool: BrowseRow[],
+  search: (query: string, tags: string[], fav?: boolean) => void,
 ) => {
   const tags: string[] = [];
-
   let recentQuery = "";
 
-  const callback = (e: KeyboardEvent) => {
+  const focus = (e: KeyboardEvent) => {
     e.preventDefault();
     input.focus();
   };
-
-  const description = "Jump to search";
-  addShortcut(description, "k", 0b100, callback);
-  addShortcut(description, "/", 0, callback);
+  addShortcut("Jump to search", "k", 0b100, focus);
+  addShortcut("Jump to search", "/", 0, focus);
 
   const addTag = (tag: string) => {
     if (!tag) return;
     tags.push(tag);
-
     const item = $el("span");
-
     item.className = "tag x";
     item.textContent = tag + " x";
-
     item.onclick = () => removeTag(+(item.dataset.i ?? 0));
-
     container.firstChild
       ? container.insertBefore(item as Node, container.firstChild)
       : container.appendChild(item as Node);
@@ -43,7 +35,6 @@ export const TagInput = (
   const removeTag = (i: number) => {
     tags.splice(i, 1);
     container.children.item(i)?.remove();
-
     for (let j = tags.length - 1; j >= 0; j--) {
       const el = container.children.item(j) as HTMLElement;
       if (el) el.dataset.i = "" + j;
@@ -81,7 +72,6 @@ export const TagInput = (
   };
 
   PaginationHandler.onClick = () => {
-    const isFav = TabHandle.tab === TabFavorites;
-    search(recentQuery, tags, isFav);
+    search(recentQuery, tags, TabHandle.tab === TabFavorites);
   };
 };

@@ -9,6 +9,9 @@ const isProd = import.meta.env?.PROD ?? process.env.NODE_ENV === "production";
 
 export default defineConfig({
   publicDir: isProd ? "public" : "../assets/public",
+  resolve: {
+    tsconfigPaths: true,
+  },
   css: {
     postcss: {
       plugins: [cssNano({ preset: "advanced" })],

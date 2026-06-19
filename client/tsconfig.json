@@ -16,7 +16,8 @@
     "noEmit": true,
 
     "paths": {
-      "@typegen/*": ["../bindings/*"]
+      "@typegen/*": ["../bindings/*", "../crates/sample-model/bindings/*"],
+      "@state": ["./src/state/state.ts"]
     },
 
     // Best practices

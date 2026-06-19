@@ -5,11 +5,10 @@ import type { SchemaFieldWithValue } from "@typegen/SchemaFieldWithValue";
 import type { SearchRequest } from "@typegen/SearchRequest";
 
 import { invoke, IPC } from "./invoke/invoke";
-
-const parse = JSON.parse;
+import { JsonParse } from "./alias";
 
 export const getSampleMetedata = async (path: string): Promise<SampleEntry> =>
-  parse(await invoke(IPC.GetSampleMetadata, path));
+  JsonParse(await invoke(IPC.GetSampleMetadata, path));
 
 export const toggleFav = (path: string) => invoke(IPC.ToggleSampleFav, path);
 export const isFav = async (path: string) => !!+(await invoke(IPC.IsSampleFav, path));
@@ -20,12 +19,12 @@ export const callOnlineSearch = async (params: SearchRequest) =>
   invoke(IPC.PluginSearchForSample, params);
 
 export const getPluginPaths = (): Promise<PluginSidebarView[]> =>
-  invoke(IPC.GetPluginPaths).then(parse);
+  invoke(IPC.GetPluginPaths).then(JsonParse);
 export const getSampleFolders = () =>
   invoke(IPC.GetSampleFolders).then((res) => res.split("\n").filter((e) => e));
 
 export const getConfigFields = (): Promise<Record<string, SchemaFieldWithValue>> =>
-  invoke(IPC.GetConfigFields).then(parse);
+  invoke(IPC.GetConfigFields).then(JsonParse);
 
 export const downloadFile = (params: DownloadRequest) =>
   invoke(IPC.PluginDownloadFile, params);

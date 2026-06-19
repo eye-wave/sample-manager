@@ -1,79 +1,63 @@
 import { toggleFav } from "../api";
-import { basename, renderTags, setLikedView } from "../helpers";
-import { listen } from "../invoke/invoke";
-import { playerHandle } from "../player/player";
-
+import { renderTags, setLikedView } from "../helpers";
 import { missingUri } from "./missing";
+import { onFavChanged, onWaveformReady } from "@state";
+import type { Readable, Writable } from "../store";
 
-preview_fav__.onclick = () => {
-  if (!PreviewHandler.path) return;
-  toggleFav(PreviewHandler.path);
+type PreviewStores = {
+  currentPath: Writable<string | null>;
+  position: Readable<number>;
+  previewMeta: Writable<{ label: string; tags: string[]; fav: boolean }>;
+  waveformUri: Writable<string | null>;
 };
 
-function createPreview() {
+export const createPreview = (stores: PreviewStores, seek: (pos: number) => void) => {
+  // --- seek ---
   waveform__.onclick = (e) => {
     const rect = waveform__.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-
-    const prog = x / rect.width;
-    playerHandle.seek(prog);
+    seek((e.clientX - rect.left) / rect.width);
   };
 
-  let path = "";
+  // --- position ---
+  stores.position.subscribe((pos) => {
+    const p = Math.max(Math.min(1, pos), 0) * 100;
+    const margin = 0.1;
+    waveform__.style.backgroundSize = `${p}% 100%, ${100 - p}% 100%`;
+    wave_thumb__.style.background = `linear-gradient(to right,transparent ${p - margin}%,var(--text-primary) ${p}%,transparent ${p + margin}%)`;
+  });
+
+  // --- waveform image ---
   let currentUri = "";
 
-  return {
-    get path() {
-      return path;
-    },
-    set path(p: string) {
-      path = p;
-    },
-    get label() {
-      return basename(path);
-    },
-    set position(pos: number) {
-      const margin = 0.1;
-      const p = Math.max(Math.min(1, pos), 0) * 100;
+  onWaveformReady.on((uri) => stores.waveformUri.set(uri));
 
-      waveform__.style.backgroundSize = `${p}% 100%, ${100 - p}% 100%`;
-      wave_thumb__.style.background = `linear-gradient(to right,transparent ${p - margin}%,var(--text-primary) ${p}%,transparent ${p + margin}%)`;
-    },
-    set img(uri: string | undefined) {
-      if (!uri || currentUri === uri) return;
+  stores.waveformUri.subscribe((uri) => {
+    if (!uri || currentUri === uri) return;
+    waveform__.style.maskImage = `url("${
+      uri === "ff-missing"
+        ? missingUri(
+            "FFMPEG couldn't be found on your system path, install it or set it manually in the app settings.",
+          )
+        : uri
+    }")`;
+    currentUri = uri;
+  });
 
-      waveform__.style.maskImage = `url("${uri === "ff-missing" ? missingUri("FFMPEG couldn't be found on your system path, install it or set it manually in the app settings.") : uri}")`;
-      currentUri = uri;
-    },
+  // --- meta ---
+  stores.previewMeta.subscribe(({ label, tags, fav }) => {
+    preview_label__.textContent = label;
+    renderTags(preview_tags__, tags);
+    setLikedView(fav, preview_fav__);
+  });
 
-    set label(label: string) {
-      preview_label__.textContent = label;
-    },
-
-    set tags(tags: string[]) {
-      renderTags(preview_tags__, tags);
-    },
-
-    set fav(state: boolean) {
-      setLikedView(state, preview_fav__);
-    },
+  // --- fav ---
+  preview_fav__.onclick = () => {
+    const path = stores.currentPath.get();
+    if (!path) return;
+    toggleFav(path);
   };
-}
 
-export const PreviewHandler = createPreview();
-
-listen("read_audio", (uri) => {
-  if (PreviewHandler.img !== uri) {
-    PreviewHandler.img = uri;
-  }
-});
-
-listen("s_tick", (n) => (s_total__.textContent = n));
-
-listen("set-fav", (payload) => {
-  const fav = !!+payload.charAt(0);
-
-  if (PreviewHandler.label === payload) {
-    PreviewHandler.fav = fav;
-  }
-});
+  onFavChanged.on(({ path, fav }) => {
+    if (stores.currentPath.get() === path) stores.previewMeta.update((m) => ({ ...m, fav }));
+  });
+};
