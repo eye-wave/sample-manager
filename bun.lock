@@ -1,0 +1,14 @@
+{
+  "lockfileVersion": 2,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "dependencies": {
+        "lucide-static": "^1.55.0",
+      },
+    },
+  },
+  "packages": {
+    "lucide-static": ["lucide-static@1.57.0", "", {}, "sha512-nuf4YoaKt3Pq9scXVQ71SLr0Q1/UZiTcfBBivFsCVL6biAzPplTikVWXLetBmK3oFEJS6f2L1rzgEsoJN/Ce0Q=="],
+  }
+}

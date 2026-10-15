@@ -1,0 +1,745 @@
+//! Raw Vulkan (ash). Knows nothing about icons, fonts or layout: it draws a [`Scene`] (two lists of
+//! vertices, see below) with an [`Atlas`] texture on whatever surface it is given. The GUI side
+//! lives in render.rs, platform code only supplies the surface.
+// no HiDPI, 4x MSAA is the only antialiasing, unwrap() instead of error handling (a
+// panic only kills the render thread, never the host).
+#![allow(unsafe_op_in_unsafe_fn)] // the whole renderer is one unsafe block
+use ash::{Entry, Instance, khr, vk};
+use std::ffi::{CStr, c_char};
+use std::io::Cursor;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
+
+/// 4 samples is the one MSAA count the Vulkan spec requires every device to support.
+const SAMPLES: vk::SampleCountFlags = vk::SampleCountFlags::TYPE_4;
+
+/// Room for this many vertices (16 bytes each) in the vertex buffer: flat and textured together.
+const MAX_VERTS: usize = 8192;
+
+const SPV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shader.spv"));
+
+/// Packs a window size for the `size` argument of [`render`].
+pub const fn pack_size(w: u32, h: u32) -> u64 {
+    (w as u64) << 32 | h as u64
+}
+
+/// The texture the `textured` vertices sample (R8G8B8A8_UNORM, i.e. no sRGB decoding).
+pub struct Atlas<'a> {
+    pub w: u32,
+    pub h: u32,
+    pub rgba: &'a [u8],
+}
+
+/// What to draw for one window size, as triangle lists in NDC with y down (see shader.wgsl).
+pub struct Scene {
+    /// Solid colour, `[x, y]`.
+    pub flat: Vec<[f32; 2]>,
+    /// Drawn after `flat`, `[x, y, u, v]`, sampled from the atlas (the MSDF fragment shader).
+    pub textured: Vec<[f32; 4]>,
+}
+
+/// Everything that depends on the surface size; rebuilt when the window is resized.
+struct Frame {
+    sc: vk::SwapchainKHR,
+    extent: vk::Extent2D,
+    views: Vec<vk::ImageView>,
+    fbs: Vec<vk::Framebuffer>,
+    cmds: Vec<vk::CommandBuffer>,
+    msaa: (vk::Image, vk::DeviceMemory, vk::ImageView),
+}
+
+fn color_range() -> vk::ImageSubresourceRange {
+    vk::ImageSubresourceRange::default()
+        .aspect_mask(vk::ImageAspectFlags::COLOR)
+        .level_count(1)
+        .layer_count(1)
+}
+
+/// Creates a Vulkan instance, device and swapchain for the surface that `surface` returns, then
+/// draws at 4x MSAA until `stop` is set. The swapchain follows the size of the surface, so the
+/// caller only has to resize the window. Everything is destroyed again before this returns.
+///
+/// `scene` is called with the surface size (on this thread) at the start and after every resize;
+/// it may return a different number of vertices each time, up to [`MAX_VERTS`] in total.
+///
+/// `exts` are the instance extensions the surface needs. `size` (see [`pack_size`]) is the
+/// current window size; it is only read where the surface does not report its own size
+/// (Wayland), and must then be kept up to date by the caller.
+///
+/// Each frame is acquire -> submit -> present -> `queue_wait_idle`.
+///
+/// # Safety
+///
+/// - A Vulkan loader must be installed, and `exts` must contain every instance extension that the
+///   surface returned by `surface` needs.
+/// - `surface` must return a valid surface for a native window, created from the `Entry` and
+///   `Instance` it is given. The window must stay alive until this function returns. This
+///   function takes ownership of the surface and destroys it, so the caller must not.
+/// - The surface must not be used by anything else meanwhile, and on X11 the `Display` behind it
+///   must not be used by other threads (Xlib is not thread-safe here).
+///
+/// # Panics
+///
+/// Panics on any Vulkan error (there is no error handling), if no device can present to the
+/// surface, or if a scene has more than `MAX_VERTS` vertices. Resources are leaked in that
+/// case, which only matters if the process continues.
+// queue_wait_idle + a 16 ms sleep per frame instead of frames-in-flight / redraw on demand.
+pub unsafe fn render(
+    exts: &[*const c_char],
+    surface: impl FnOnce(&Entry, &Instance) -> vk::SurfaceKHR,
+    size: &AtomicU64,
+    stop: &AtomicBool,
+    atlas: &Atlas,
+    scene: impl Fn(u32, u32) -> Scene,
+) {
+    let entry = Entry::load().unwrap();
+    let inst = entry
+        .create_instance(
+            &vk::InstanceCreateInfo::default().enabled_extension_names(exts),
+            None,
+        )
+        .unwrap();
+    let surf_i = khr::surface::Instance::new(&entry, &inst);
+    let surf = surface(&entry, &inst);
+
+    let (pd, qf) = inst
+        .enumerate_physical_devices()
+        .unwrap()
+        .into_iter()
+        .find_map(|pd| {
+            let fams = inst.get_physical_device_queue_family_properties(pd);
+            (0..fams.len() as u32)
+                .find(|&i| {
+                    fams[i as usize]
+                        .queue_flags
+                        .contains(vk::QueueFlags::GRAPHICS)
+                        && surf_i
+                            .get_physical_device_surface_support(pd, i, surf)
+                            .unwrap()
+                })
+                .map(|i| (pd, i))
+        })
+        .expect("no Vulkan device can present to this window");
+    let dev = inst
+        .create_device(
+            pd,
+            &vk::DeviceCreateInfo::default()
+                .queue_create_infos(&[vk::DeviceQueueCreateInfo::default()
+                    .queue_family_index(qf)
+                    .queue_priorities(&[1.0])])
+                .enabled_extension_names(&[khr::swapchain::NAME.as_ptr()]),
+            None,
+        )
+        .unwrap();
+    let queue = dev.get_device_queue(qf, 0);
+    let pool = dev
+        .create_command_pool(
+            &vk::CommandPoolCreateInfo::default().queue_family_index(qf),
+            None,
+        )
+        .unwrap();
+
+    let sc_d = khr::swapchain::Device::new(&inst, &dev);
+    let fmt = surf_i
+        .get_physical_device_surface_formats(pd, surf)
+        .unwrap()[0];
+    let mp = inst.get_physical_device_memory_properties(pd);
+    let mem_type = |bits: u32, want: vk::MemoryPropertyFlags| {
+        (0..mp.memory_type_count)
+            .find(|&i| {
+                bits & (1 << i) != 0 && mp.memory_types[i as usize].property_flags.contains(want)
+            })
+            .unwrap()
+    };
+    let host = vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
+
+    // a buffer with its own memory
+    let buffer = |bytes: usize, usage: vk::BufferUsageFlags| {
+        let b = dev
+            .create_buffer(
+                &vk::BufferCreateInfo::default()
+                    .size(bytes as u64)
+                    .usage(usage)
+                    .sharing_mode(vk::SharingMode::EXCLUSIVE),
+                None,
+            )
+            .unwrap();
+        let req = dev.get_buffer_memory_requirements(b);
+        let mem = dev
+            .allocate_memory(
+                &vk::MemoryAllocateInfo::default()
+                    .allocation_size(req.size)
+                    .memory_type_index(mem_type(req.memory_type_bits, host)),
+                None,
+            )
+            .unwrap();
+        dev.bind_buffer_memory(b, mem, 0).unwrap();
+        (b, mem)
+    };
+
+    // vertex buffer, rewritten (while the GPU is idle) whenever the scene is rebuilt
+    let (vb, vmem) = buffer(MAX_VERTS * 16, vk::BufferUsageFlags::VERTEX_BUFFER);
+    let verts = dev
+        .map_memory(vmem, 0, vk::WHOLE_SIZE, vk::MemoryMapFlags::empty())
+        .unwrap() as *mut [f32; 4];
+
+    // the atlas: staging buffer -> device-local image, left in SHADER_READ_ONLY_OPTIMAL
+    let (stg, stg_mem) = buffer(atlas.rgba.len(), vk::BufferUsageFlags::TRANSFER_SRC);
+    let p = dev
+        .map_memory(stg_mem, 0, vk::WHOLE_SIZE, vk::MemoryMapFlags::empty())
+        .unwrap() as *mut u8;
+    p.copy_from_nonoverlapping(atlas.rgba.as_ptr(), atlas.rgba.len());
+    dev.unmap_memory(stg_mem);
+    let extent3 = vk::Extent3D {
+        width: atlas.w,
+        height: atlas.h,
+        depth: 1,
+    };
+    let tex = dev
+        .create_image(
+            &vk::ImageCreateInfo::default()
+                .image_type(vk::ImageType::TYPE_2D)
+                .format(vk::Format::R8G8B8A8_UNORM)
+                .extent(extent3)
+                .mip_levels(1)
+                .array_layers(1)
+                .samples(vk::SampleCountFlags::TYPE_1)
+                .tiling(vk::ImageTiling::OPTIMAL)
+                .usage(vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED)
+                .sharing_mode(vk::SharingMode::EXCLUSIVE)
+                .initial_layout(vk::ImageLayout::UNDEFINED),
+            None,
+        )
+        .unwrap();
+    let req = dev.get_image_memory_requirements(tex);
+    let tmem = dev
+        .allocate_memory(
+            &vk::MemoryAllocateInfo::default()
+                .allocation_size(req.size)
+                .memory_type_index(mem_type(
+                    req.memory_type_bits,
+                    vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                )),
+            None,
+        )
+        .unwrap();
+    dev.bind_image_memory(tex, tmem, 0).unwrap();
+    let cmd = dev
+        .allocate_command_buffers(
+            &vk::CommandBufferAllocateInfo::default()
+                .command_pool(pool)
+                .command_buffer_count(1),
+        )
+        .unwrap()[0];
+    let barrier = |old, new, src_access, dst_access, src_stage, dst_stage| {
+        dev.cmd_pipeline_barrier(
+            cmd,
+            src_stage,
+            dst_stage,
+            vk::DependencyFlags::empty(),
+            &[],
+            &[],
+            &[vk::ImageMemoryBarrier::default()
+                .old_layout(old)
+                .new_layout(new)
+                .src_access_mask(src_access)
+                .dst_access_mask(dst_access)
+                .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                .image(tex)
+                .subresource_range(color_range())],
+        )
+    };
+    dev.begin_command_buffer(cmd, &vk::CommandBufferBeginInfo::default())
+        .unwrap();
+    barrier(
+        vk::ImageLayout::UNDEFINED,
+        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        vk::AccessFlags::empty(),
+        vk::AccessFlags::TRANSFER_WRITE,
+        vk::PipelineStageFlags::TOP_OF_PIPE,
+        vk::PipelineStageFlags::TRANSFER,
+    );
+    dev.cmd_copy_buffer_to_image(
+        cmd,
+        stg,
+        tex,
+        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        &[vk::BufferImageCopy::default()
+            .image_subresource(
+                vk::ImageSubresourceLayers::default()
+                    .aspect_mask(vk::ImageAspectFlags::COLOR)
+                    .layer_count(1),
+            )
+            .image_extent(extent3)],
+    );
+    barrier(
+        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        vk::AccessFlags::TRANSFER_WRITE,
+        vk::AccessFlags::SHADER_READ,
+        vk::PipelineStageFlags::TRANSFER,
+        vk::PipelineStageFlags::FRAGMENT_SHADER,
+    );
+    dev.end_command_buffer(cmd).unwrap();
+    dev.queue_submit(
+        queue,
+        &[vk::SubmitInfo::default().command_buffers(&[cmd])],
+        vk::Fence::null(),
+    )
+    .unwrap();
+    dev.queue_wait_idle(queue).unwrap();
+    dev.free_command_buffers(pool, &[cmd]);
+    dev.destroy_buffer(stg, None);
+    dev.free_memory(stg_mem, None);
+
+    let view = |img, format| {
+        dev.create_image_view(
+            &vk::ImageViewCreateInfo::default()
+                .image(img)
+                .view_type(vk::ImageViewType::TYPE_2D)
+                .format(format)
+                .subresource_range(color_range()),
+            None,
+        )
+        .unwrap()
+    };
+    let tview = view(tex, vk::Format::R8G8B8A8_UNORM);
+    let sampler = dev
+        .create_sampler(
+            &vk::SamplerCreateInfo::default()
+                .mag_filter(vk::Filter::LINEAR)
+                .min_filter(vk::Filter::LINEAR)
+                .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+                .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+                .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE),
+            None,
+        )
+        .unwrap();
+    // set 0: binding 0 the atlas, binding 1 its sampler (WGSL keeps them separate)
+    let dsl = dev
+        .create_descriptor_set_layout(
+            &vk::DescriptorSetLayoutCreateInfo::default().bindings(&[
+                vk::DescriptorSetLayoutBinding::default()
+                    .binding(0)
+                    .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+                vk::DescriptorSetLayoutBinding::default()
+                    .binding(1)
+                    .descriptor_type(vk::DescriptorType::SAMPLER)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+            ]),
+            None,
+        )
+        .unwrap();
+    let dpool = dev
+        .create_descriptor_pool(
+            &vk::DescriptorPoolCreateInfo::default()
+                .max_sets(1)
+                .pool_sizes(&[
+                    vk::DescriptorPoolSize::default()
+                        .ty(vk::DescriptorType::SAMPLED_IMAGE)
+                        .descriptor_count(1),
+                    vk::DescriptorPoolSize::default()
+                        .ty(vk::DescriptorType::SAMPLER)
+                        .descriptor_count(1),
+                ]),
+            None,
+        )
+        .unwrap();
+    let set = dev
+        .allocate_descriptor_sets(
+            &vk::DescriptorSetAllocateInfo::default()
+                .descriptor_pool(dpool)
+                .set_layouts(&[dsl]),
+        )
+        .unwrap()[0];
+    dev.update_descriptor_sets(
+        &[
+            vk::WriteDescriptorSet::default()
+                .dst_set(set)
+                .dst_binding(0)
+                .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
+                .image_info(&[vk::DescriptorImageInfo::default()
+                    .image_view(tview)
+                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)]),
+            vk::WriteDescriptorSet::default()
+                .dst_set(set)
+                .dst_binding(1)
+                .descriptor_type(vk::DescriptorType::SAMPLER)
+                .image_info(&[vk::DescriptorImageInfo::default().sampler(sampler)]),
+        ],
+        &[],
+    );
+
+    // render pass: draw into a multisampled image, resolve it into the swapchain image
+    let attach = [
+        vk::AttachmentDescription::default()
+            .format(fmt.format)
+            .samples(SAMPLES)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL),
+        vk::AttachmentDescription::default()
+            .format(fmt.format)
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .load_op(vk::AttachmentLoadOp::DONT_CARE)
+            .store_op(vk::AttachmentStoreOp::STORE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::PRESENT_SRC_KHR),
+    ];
+    let color_ref = [vk::AttachmentReference::default()
+        .attachment(0)
+        .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)];
+    let resolve_ref = [vk::AttachmentReference::default()
+        .attachment(1)
+        .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)];
+    let subpass = [vk::SubpassDescription::default()
+        .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+        .color_attachments(&color_ref)
+        .resolve_attachments(&resolve_ref)];
+    let dep = [vk::SubpassDependency::default()
+        .src_subpass(vk::SUBPASS_EXTERNAL)
+        .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+        .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+        .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)];
+    let rp = dev
+        .create_render_pass(
+            &vk::RenderPassCreateInfo::default()
+                .attachments(&attach)
+                .subpasses(&subpass)
+                .dependencies(&dep),
+            None,
+        )
+        .unwrap();
+
+    // pipelines: all shaders live in one SPIR-V module (entry points "vs", "fs_flat", "fs_text").
+    // Viewport and scissor are dynamic so a resize does not need new pipelines.
+    let code = ash::util::read_spv(&mut Cursor::new(SPV)).unwrap();
+    let module = dev
+        .create_shader_module(&vk::ShaderModuleCreateInfo::default().code(&code), None)
+        .unwrap();
+    let stages = |fs: &'static CStr| {
+        [
+            vk::PipelineShaderStageCreateInfo::default()
+                .stage(vk::ShaderStageFlags::VERTEX)
+                .module(module)
+                .name(c"vs"),
+            vk::PipelineShaderStageCreateInfo::default()
+                .stage(vk::ShaderStageFlags::FRAGMENT)
+                .module(module)
+                .name(fs),
+        ]
+    };
+    let (flat_stages, text_stages) = (stages(c"fs_flat"), stages(c"fs_text"));
+    let pl = dev
+        .create_pipeline_layout(
+            &vk::PipelineLayoutCreateInfo::default().set_layouts(&[dsl]),
+            None,
+        )
+        .unwrap();
+    // straight alpha blending: the text fragments carry their coverage in alpha
+    let blend = [vk::PipelineColorBlendAttachmentState::default()
+        .blend_enable(true)
+        .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
+        .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
+        .color_blend_op(vk::BlendOp::ADD)
+        .src_alpha_blend_factor(vk::BlendFactor::ONE)
+        .dst_alpha_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
+        .alpha_blend_op(vk::BlendOp::ADD)
+        .color_write_mask(vk::ColorComponentFlags::RGBA)];
+    let binds = [vk::VertexInputBindingDescription::default()
+        .stride(16)
+        .input_rate(vk::VertexInputRate::VERTEX)];
+    let attrs = [
+        vk::VertexInputAttributeDescription::default()
+            .location(0)
+            .format(vk::Format::R32G32_SFLOAT)
+            .offset(0),
+        vk::VertexInputAttributeDescription::default()
+            .location(1)
+            .format(vk::Format::R32G32_SFLOAT)
+            .offset(8),
+    ];
+    let vin = vk::PipelineVertexInputStateCreateInfo::default()
+        .vertex_binding_descriptions(&binds)
+        .vertex_attribute_descriptions(&attrs);
+    let ia = vk::PipelineInputAssemblyStateCreateInfo::default()
+        .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
+    let vp = vk::PipelineViewportStateCreateInfo::default()
+        .viewport_count(1)
+        .scissor_count(1);
+    let dyn_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
+    let dynamic = vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dyn_states);
+    let rs = vk::PipelineRasterizationStateCreateInfo::default()
+        .polygon_mode(vk::PolygonMode::FILL)
+        .cull_mode(vk::CullModeFlags::NONE)
+        .line_width(1.0);
+    let ms = vk::PipelineMultisampleStateCreateInfo::default().rasterization_samples(SAMPLES);
+    let cb = vk::PipelineColorBlendStateCreateInfo::default().attachments(&blend);
+    let base = vk::GraphicsPipelineCreateInfo::default()
+        .vertex_input_state(&vin)
+        .input_assembly_state(&ia)
+        .viewport_state(&vp)
+        .dynamic_state(&dynamic)
+        .rasterization_state(&rs)
+        .multisample_state(&ms)
+        .color_blend_state(&cb)
+        .layout(pl)
+        .render_pass(rp);
+    let pipes = dev
+        .create_graphics_pipelines(
+            vk::PipelineCache::null(),
+            &[base.stages(&flat_stages), base.stages(&text_stages)],
+            None,
+        )
+        .unwrap();
+    let (pipe_flat, pipe_text) = (pipes[0], pipes[1]);
+
+    let clear = vk::ClearValue {
+        color: vk::ClearColorValue {
+            float32: [0.08, 0.08, 0.1, 1.0],
+        },
+    };
+
+    // the size the surface has now
+    let extent_of = || {
+        let caps = surf_i
+            .get_physical_device_surface_capabilities(pd, surf)
+            .unwrap();
+        if caps.current_extent.width != u32::MAX {
+            return caps.current_extent;
+        }
+        let s = size.load(Relaxed);
+        vk::Extent2D {
+            width: ((s >> 32) as u32)
+                .clamp(caps.min_image_extent.width, caps.max_image_extent.width),
+            height: (s as u32).clamp(caps.min_image_extent.height, caps.max_image_extent.height),
+        }
+    };
+
+    // (re)creates everything that depends on the size; the GPU must be idle. `old` is the
+    // swapchain being replaced (null at first); it must still be freed by the caller.
+    let build = |old: vk::SwapchainKHR, extent: vk::Extent2D| {
+        let caps = surf_i
+            .get_physical_device_surface_capabilities(pd, surf)
+            .unwrap();
+        let sc = sc_d
+            .create_swapchain(
+                &vk::SwapchainCreateInfoKHR::default()
+                    .surface(surf)
+                    .min_image_count(caps.min_image_count.max(2))
+                    .image_format(fmt.format)
+                    .image_color_space(fmt.color_space)
+                    .image_extent(extent)
+                    .image_array_layers(1)
+                    .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
+                    .pre_transform(caps.current_transform)
+                    .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
+                    .present_mode(vk::PresentModeKHR::FIFO)
+                    .clipped(true)
+                    .old_swapchain(old),
+                None,
+            )
+            .unwrap();
+        let images = sc_d.get_swapchain_images(sc).unwrap();
+
+        // the multisampled image that the render pass draws into
+        let img = dev
+            .create_image(
+                &vk::ImageCreateInfo::default()
+                    .image_type(vk::ImageType::TYPE_2D)
+                    .format(fmt.format)
+                    .extent(vk::Extent3D {
+                        width: extent.width,
+                        height: extent.height,
+                        depth: 1,
+                    })
+                    .mip_levels(1)
+                    .array_layers(1)
+                    .samples(SAMPLES)
+                    .tiling(vk::ImageTiling::OPTIMAL)
+                    .usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
+                    .sharing_mode(vk::SharingMode::EXCLUSIVE)
+                    .initial_layout(vk::ImageLayout::UNDEFINED),
+                None,
+            )
+            .unwrap();
+        let req = dev.get_image_memory_requirements(img);
+        let imem = dev
+            .allocate_memory(
+                &vk::MemoryAllocateInfo::default()
+                    .allocation_size(req.size)
+                    .memory_type_index(mem_type(
+                        req.memory_type_bits,
+                        vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                    )),
+                None,
+            )
+            .unwrap();
+        dev.bind_image_memory(img, imem, 0).unwrap();
+        let mview = view(img, fmt.format);
+
+        // flat vertices first (uv unused), then the textured ones
+        let s = scene(extent.width, extent.height);
+        let (nf, nt) = (s.flat.len(), s.textured.len());
+        assert!(nf + nt <= MAX_VERTS, "scene has too many vertices");
+        for (i, v) in s.flat.iter().enumerate() {
+            verts.add(i).write([v[0], v[1], 0.0, 0.0]);
+        }
+        verts
+            .add(nf)
+            .copy_from_nonoverlapping(s.textured.as_ptr(), nt);
+
+        let cmds = dev
+            .allocate_command_buffers(
+                &vk::CommandBufferAllocateInfo::default()
+                    .command_pool(pool)
+                    .command_buffer_count(images.len() as u32),
+            )
+            .unwrap();
+        let area = vk::Rect2D {
+            offset: vk::Offset2D::default(),
+            extent,
+        };
+        let (mut views, mut fbs) = (vec![], vec![]);
+        for (&img, &cmd) in images.iter().zip(&cmds) {
+            let v = view(img, fmt.format);
+            let fb = dev
+                .create_framebuffer(
+                    &vk::FramebufferCreateInfo::default()
+                        .render_pass(rp)
+                        .attachments(&[mview, v])
+                        .width(extent.width)
+                        .height(extent.height)
+                        .layers(1),
+                    None,
+                )
+                .unwrap();
+            dev.begin_command_buffer(cmd, &vk::CommandBufferBeginInfo::default())
+                .unwrap();
+            dev.cmd_begin_render_pass(
+                cmd,
+                &vk::RenderPassBeginInfo::default()
+                    .render_pass(rp)
+                    .framebuffer(fb)
+                    .render_area(area)
+                    .clear_values(&[clear, clear]),
+                vk::SubpassContents::INLINE,
+            );
+            dev.cmd_set_viewport(
+                cmd,
+                0,
+                &[vk::Viewport {
+                    x: 0.0,
+                    y: 0.0,
+                    width: extent.width as f32,
+                    height: extent.height as f32,
+                    min_depth: 0.0,
+                    max_depth: 1.0,
+                }],
+            );
+            dev.cmd_set_scissor(cmd, 0, &[area]);
+            dev.cmd_bind_vertex_buffers(cmd, 0, &[vb], &[0]);
+            dev.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, pipe_flat);
+            dev.cmd_draw(cmd, nf as u32, 1, 0, 0);
+            dev.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, pipe_text);
+            dev.cmd_bind_descriptor_sets(cmd, vk::PipelineBindPoint::GRAPHICS, pl, 0, &[set], &[]);
+            dev.cmd_draw(cmd, nt as u32, 1, nf as u32, 0);
+            dev.cmd_end_render_pass(cmd);
+            dev.end_command_buffer(cmd).unwrap();
+            views.push(v);
+            fbs.push(fb);
+        }
+        Frame {
+            sc,
+            extent,
+            views,
+            fbs,
+            cmds,
+            msaa: (img, imem, mview),
+        }
+    };
+    // destroys a `Frame`, the GPU must be idle
+    let free = |f: Frame| {
+        dev.free_command_buffers(pool, &f.cmds);
+        f.fbs
+            .into_iter()
+            .for_each(|x| dev.destroy_framebuffer(x, None));
+        f.views
+            .into_iter()
+            .for_each(|x| dev.destroy_image_view(x, None));
+        dev.destroy_image_view(f.msaa.2, None);
+        dev.destroy_image(f.msaa.0, None);
+        dev.free_memory(f.msaa.1, None);
+        sc_d.destroy_swapchain(f.sc, None);
+    };
+
+    // frame loop
+    let mut frame = build(vk::SwapchainKHR::null(), extent_of());
+    let acquire = dev
+        .create_semaphore(&vk::SemaphoreCreateInfo::default(), None)
+        .unwrap();
+    let done = dev
+        .create_semaphore(&vk::SemaphoreCreateInfo::default(), None)
+        .unwrap();
+    while !stop.load(Relaxed) {
+        std::thread::sleep(std::time::Duration::from_millis(16));
+        let now = extent_of();
+        if now.width == 0 || now.height == 0 {
+            continue; // minimized
+        }
+        if now != frame.extent {
+            dev.device_wait_idle().unwrap();
+            let new = build(frame.sc, now);
+            free(std::mem::replace(&mut frame, new));
+        }
+        // errors (e.g. out of date mid-resize) just skip the frame; the next one rebuilds
+        if let Ok((i, _)) = sc_d.acquire_next_image(frame.sc, u64::MAX, acquire, vk::Fence::null())
+        {
+            dev.queue_submit(
+                queue,
+                &[vk::SubmitInfo::default()
+                    .wait_semaphores(&[acquire])
+                    .wait_dst_stage_mask(&[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT])
+                    .command_buffers(&[frame.cmds[i as usize]])
+                    .signal_semaphores(&[done])],
+                vk::Fence::null(),
+            )
+            .unwrap();
+            let _ = sc_d.queue_present(
+                queue,
+                &vk::PresentInfoKHR::default()
+                    .wait_semaphores(&[done])
+                    .swapchains(&[frame.sc])
+                    .image_indices(&[i]),
+            );
+            dev.queue_wait_idle(queue).unwrap();
+        }
+    }
+
+    // teardown
+    dev.device_wait_idle().unwrap();
+    dev.destroy_semaphore(acquire, None);
+    dev.destroy_semaphore(done, None);
+    free(frame);
+    dev.destroy_command_pool(pool, None);
+    dev.destroy_buffer(vb, None);
+    dev.free_memory(vmem, None); // also unmaps
+    dev.destroy_pipeline(pipe_flat, None);
+    dev.destroy_pipeline(pipe_text, None);
+    dev.destroy_pipeline_layout(pl, None);
+    dev.destroy_shader_module(module, None);
+    dev.destroy_render_pass(rp, None);
+    dev.destroy_descriptor_pool(dpool, None);
+    dev.destroy_descriptor_set_layout(dsl, None);
+    dev.destroy_sampler(sampler, None);
+    dev.destroy_image_view(tview, None);
+    dev.destroy_image(tex, None);
+    dev.free_memory(tmem, None);
+    dev.destroy_device(None);
+    surf_i.destroy_surface(surf, None);
+    inst.destroy_instance(None);
+}
