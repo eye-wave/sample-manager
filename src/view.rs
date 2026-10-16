@@ -1,9 +1,9 @@
 //! The screen, as a `bx_ui` tree (sample data for now). `view` knows the window size only for the
 //! number of waveform bars; everything else is the layout engine's job.
 use crate::icons::{self, GRIP};
-use crate::theme::*;
 use crate::scan::{Dir, Sample, Tree};
 use crate::search::search;
+use crate::theme::*;
 use bx_ui::*;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -86,7 +86,9 @@ impl Ui {
 
     /// Keeps the table from scrolling past its last row (also after a resize).
     pub fn clamp(&mut self, h: u32) {
-        self.first = self.first.min(self.results.len().saturating_sub(visible_rows(h)));
+        self.first = self
+            .first
+            .min(self.results.len().saturating_sub(visible_rows(h)));
     }
 
     /// Where the thumb starts, px from the top of the track.
@@ -109,13 +111,19 @@ impl Ui {
         let Some(ty) = self.track_top() else { return };
         let (vis, total) = (visible_rows(h), self.results.len());
         let (top, th) = (ty + self.thumb_top(h), thumb_h(vis, total));
-        self.drag = Some(if (top..top + th).contains(&y) { y - top } else { th / 2.0 });
+        self.drag = Some(if (top..top + th).contains(&y) {
+            y - top
+        } else {
+            th / 2.0
+        });
         self.drag_to(y, h);
     }
 
     /// Scrolls so that the thumb follows the mouse at `y` (px from the top of the window).
     pub fn drag_to(&mut self, y: f32, h: u32) {
-        let (Some(off), Some(ty)) = (self.drag, self.track_top()) else { return };
+        let (Some(off), Some(ty)) = (self.drag, self.track_top()) else {
+            return;
+        };
         let (vis, total) = (visible_rows(h), self.results.len());
         if total <= vis {
             return;
@@ -175,7 +183,9 @@ fn folder(d: &Dir, depth: f32, open: bool) -> Node {
         icon(chevron, 10.0, DIM),
         icon(icon_id, 16.0, DIM),
         text(d.name.as_str(), 13.0, TEXT).w(Fill(1)).truncate(),
-        text(d.count.to_string(), 10.0, DIM).pad_xy(6.0, 2.0).bg(FIELD, 9.0),
+        text(d.count.to_string(), 10.0, DIM)
+            .pad_xy(6.0, 2.0)
+            .bg(FIELD, 9.0),
         space().w(Fixed(4.0)),
     ])
     .spacing(6.0)
@@ -276,7 +286,9 @@ fn table(h: u32, ui: &Ui) -> Node {
     let bar = if total > vis {
         col(vec![
             space().h(Fixed(ui.thumb_top(h))),
-            space().size(Fixed(6.0), Fixed(thumb_h(vis, total))).bg(DIM, 3.0),
+            space()
+                .size(Fixed(6.0), Fixed(thumb_h(vis, total)))
+                .bg(DIM, 3.0),
         ])
         .align(Align::Center)
         .size(Fixed(12.0), Fixed(vis as f32 * ROW_H))

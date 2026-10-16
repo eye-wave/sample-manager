@@ -184,7 +184,11 @@ impl Native {
     /// From now on the window puts its clicks, keys, wheel turns and mouse position into `events`
     /// and `mouse` (see `pack_mouse`) as the host's message loop delivers them.
     pub fn attach(&self, events: Arc<Events>, mouse: Arc<AtomicU64>) {
-        let hooks = Arc::new(Hooks { events, mouse, tracking: AtomicBool::new(false) });
+        let hooks = Arc::new(Hooks {
+            events,
+            mouse,
+            tracking: AtomicBool::new(false),
+        });
         // the window's count, given back in `Drop`
         let raw = Arc::into_raw(hooks.clone()) as isize;
         unsafe { SetWindowLongPtrW(self.hwnd as _, GWLP_USERDATA, raw) };

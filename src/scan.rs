@@ -56,14 +56,23 @@ fn walk(path: &Path, name: String, stop: &AtomicBool, all: &mut Vec<Sample>) -> 
                 .extension()
                 .is_some_and(|x| AUDIO.iter().any(|a| x.eq_ignore_ascii_case(a)))
         {
-            all.push(Sample { name: n.clone(), path: e.path() });
+            all.push(Sample {
+                name: n.clone(),
+                path: e.path(),
+            });
             files.push(n);
         }
     }
     dirs.sort_by_cached_key(|d| d.name.to_lowercase());
     files.sort_by_cached_key(|f| f.to_lowercase());
     let count = files.len() + dirs.iter().map(|d| d.count).sum::<usize>();
-    Dir { id: 0, name, dirs, files, count }
+    Dir {
+        id: 0,
+        name,
+        dirs,
+        files,
+        count,
+    }
 }
 
 fn number(d: &mut Dir, next: &mut u32) {
@@ -84,7 +93,10 @@ pub fn scan(roots: &[PathBuf], stop: &AtomicBool) -> Scan {
             d
         })
         .collect();
-    Scan { roots, files: Arc::new(files) }
+    Scan {
+        roots,
+        files: Arc::new(files),
+    }
 }
 
 #[cfg(test)]
@@ -95,7 +107,13 @@ mod tests {
     fn counts_audio_skips_hidden_and_numbers_uniquely() {
         let root = std::env::temp_dir().join(format!("sm-scan-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
-        for f in ["a.WAV", "b.txt", "sub/c.mp3", "sub/deep/d.flac", ".hid/e.wav"] {
+        for f in [
+            "a.WAV",
+            "b.txt",
+            "sub/c.mp3",
+            "sub/deep/d.flac",
+            ".hid/e.wav",
+        ] {
             let p = root.join(f);
             std::fs::create_dir_all(p.parent().unwrap()).unwrap();
             std::fs::write(p, "").unwrap();
@@ -103,10 +121,20 @@ mod tests {
         let s = scan(&[root.clone(), root.join("nope")], &AtomicBool::new(false));
         std::fs::remove_dir_all(&root).unwrap();
         assert_eq!(s.files.len(), 3);
-        assert!(s.files.iter().any(|f| f.name == "d.flac" && f.ext() == "FLAC"));
+        assert!(
+            s.files
+                .iter()
+                .any(|f| f.name == "d.flac" && f.ext() == "FLAC")
+        );
         let t = s.roots;
-        assert_eq!((t[0].count, &t[0].files[..], t[0].dirs.len()), (3, &["a.WAV".to_string()][..], 1));
-        assert_eq!((t[0].dirs[0].id, t[0].dirs[0].dirs[0].id, t[1].id), (1, 2, 3));
+        assert_eq!(
+            (t[0].count, &t[0].files[..], t[0].dirs.len()),
+            (3, &["a.WAV".to_string()][..], 1)
+        );
+        assert_eq!(
+            (t[0].dirs[0].id, t[0].dirs[0].dirs[0].id, t[1].id),
+            (1, 2, 3)
+        );
         assert_eq!(t[1].count, 0);
     }
 }

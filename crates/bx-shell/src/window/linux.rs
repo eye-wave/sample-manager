@@ -46,7 +46,13 @@ pub(crate) unsafe fn push_key(events: &Events, ev: &mut xlib::XKeyEvent) {
     let mut buf = [0u8; 8];
     let mut sym = 0;
     let n = unsafe {
-        xlib::XLookupString(ev, buf.as_mut_ptr() as _, buf.len() as _, &mut sym, std::ptr::null_mut())
+        xlib::XLookupString(
+            ev,
+            buf.as_mut_ptr() as _,
+            buf.len() as _,
+            &mut sym,
+            std::ptr::null_mut(),
+        )
     };
     use x11::keysym::*;
     #[allow(non_upper_case_globals)] // the keysym constants are named like in X11

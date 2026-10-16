@@ -281,7 +281,10 @@ impl PluginGuiImpl for Main<'_> {
             h,
         )
         .map_err(PluginError::Message)?;
-        let (mouse, events) = (Arc::new(AtomicU64::new(NO_MOUSE)), Arc::new(UiEvents::new()));
+        let (mouse, events) = (
+            Arc::new(AtomicU64::new(NO_MOUSE)),
+            Arc::new(UiEvents::new()),
+        );
         // Win32 delivers input to the window procedure, which needs no host timer (FL Studio has
         // none); X11 is polled in `on_timer`
         #[cfg(windows)]

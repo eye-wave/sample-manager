@@ -11,9 +11,16 @@ fn file() -> Option<PathBuf> {
 pub fn tracked_dirs() -> Vec<PathBuf> {
     let Some(f) = file() else { return vec![] };
     if let Ok(s) = std::fs::read_to_string(&f) {
-        return s.lines().filter(|l| !l.is_empty()).map(PathBuf::from).collect();
+        return s
+            .lines()
+            .filter(|l| !l.is_empty())
+            .map(PathBuf::from)
+            .collect();
     }
-    let list: Vec<PathBuf> = dirs::home_dir().map(|h| h.join("Music")).into_iter().collect();
+    let list: Vec<PathBuf> = dirs::home_dir()
+        .map(|h| h.join("Music"))
+        .into_iter()
+        .collect();
     save(&f, &list);
     list
 }
