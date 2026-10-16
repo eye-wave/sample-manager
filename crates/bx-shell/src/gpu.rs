@@ -193,9 +193,20 @@ unsafe fn run(
         .unwrap();
 
     let sc_d = khr::swapchain::Device::new(&inst, &dev);
-    let fmt = surf_i
+    // UNORM, not SRGB: the colours are written as the sRGB values they are (`bx_ui::rgb`), an
+    // SRGB format would encode them a second time and wash them out
+    let fmts = surf_i
         .get_physical_device_surface_formats(pd, surf)
-        .unwrap()[0];
+        .unwrap();
+    let fmt = *fmts
+        .iter()
+        .find(|f| {
+            matches!(
+                f.format,
+                vk::Format::B8G8R8A8_UNORM | vk::Format::R8G8B8A8_UNORM
+            )
+        })
+        .unwrap_or(&fmts[0]);
     let mp = inst.get_physical_device_memory_properties(pd);
     let mem_type = |bits: u32, want: vk::MemoryPropertyFlags| {
         (0..mp.memory_type_count)
