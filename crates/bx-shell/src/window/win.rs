@@ -11,8 +11,8 @@ use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::Graphics::Gdi::ScreenToClient;
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-    ReleaseCapture, SetCapture, TME_LEAVE, TRACKMOUSEEVENT, TrackMouseEvent, VK_DELETE, VK_END,
-    VK_HOME, VK_LEFT, VK_RIGHT,
+    GetKeyState, ReleaseCapture, SetCapture, TME_LEAVE, TRACKMOUSEEVENT, TrackMouseEvent,
+    VK_CONTROL, VK_DELETE, VK_END, VK_HOME, VK_LEFT, VK_RIGHT,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
@@ -127,6 +127,8 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT
             WM_CHAR => {
                 match char::from_u32(w as u32) {
                     Some('\u{8}') => EVENTS.push(Event::Key(Key::Backspace)),
+                    Some('\u{7f}') => EVENTS.push(Event::Key(Key::CtrlBackspace)),
+                    Some('\u{1}') => EVENTS.push(Event::Key(Key::CtrlA)),
                     Some('\r') => EVENTS.push(Event::Key(Key::Enter)),
                     Some('\u{1b}') => EVENTS.push(Event::Key(Key::Escape)),
                     Some(c) if !c.is_control() => EVENTS.push(Event::Char(c)),
@@ -136,6 +138,9 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT
             }
             WM_KEYDOWN => {
                 match w as u16 {
+                    VK_DELETE if GetKeyState(VK_CONTROL as i32) < 0 => {
+                        EVENTS.push(Event::Key(Key::CtrlDelete))
+                    }
                     VK_DELETE => EVENTS.push(Event::Key(Key::Delete)),
                     VK_LEFT => EVENTS.push(Event::Key(Key::Left)),
                     VK_RIGHT => EVENTS.push(Event::Key(Key::Right)),

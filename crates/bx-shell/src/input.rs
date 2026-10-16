@@ -8,6 +8,9 @@ use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 pub enum Key {
     Backspace,
     Delete,
+    CtrlBackspace,
+    CtrlDelete,
+    CtrlA,
     Left,
     Right,
     Home,

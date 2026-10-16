@@ -61,6 +61,9 @@ pub fn scene(w: u32, h: u32, mouse: [f32; 2], ui: &mut Ui, events: Vec<Event>) -
                 let edit = match k {
                     Key::Backspace => Edit::Backspace,
                     Key::Delete => Edit::Delete,
+                    Key::CtrlBackspace => Edit::WordBackspace,
+                    Key::CtrlDelete => Edit::WordDelete,
+                    Key::CtrlA => Edit::SelectAll,
                     Key::Left => Edit::Left,
                     Key::Right => Edit::Right,
                     Key::Home => Edit::Home,

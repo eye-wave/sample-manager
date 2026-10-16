@@ -10,6 +10,12 @@ pub enum Edit {
     Char(char),
     Backspace,
     Delete,
+    /// Ctrl+Backspace / Ctrl+Delete: the word before / after the caret.
+    WordBackspace,
+    WordDelete,
+    /// Ctrl+A. ponytail: hack, nothing is drawn; the next Backspace / Delete / typing replaces
+    /// everything, any other edit drops it. TODO: real selection.
+    SelectAll,
     Left,
     Right,
     Home,
@@ -23,6 +29,7 @@ pub struct TextBox {
     pub focused: bool,
     /// In characters from the start.
     caret: usize,
+    all: bool,
 }
 
 impl TextBox {
@@ -32,6 +39,7 @@ impl TextBox {
             text: text.into(),
             focused: false,
             caret: text.chars().count(),
+            all: false,
         }
     }
 
@@ -42,9 +50,49 @@ impl TextBox {
             .map_or(self.text.len(), |(i, _)| i)
     }
 
+    /// Removes chars `a..b`, the caret goes to `a`.
+    fn cut(&mut self, a: usize, b: usize) {
+        self.text.replace_range(self.byte(a)..self.byte(b), "");
+        self.caret = a;
+    }
+
+    /// Where Ctrl+Backspace / Ctrl+Delete stop: past the blanks, then past the word.
+    fn word(&self, back: bool) -> usize {
+        let c: Vec<char> = self.text.chars().collect();
+        let (mut i, blank) = (self.caret, |c: &char| c.is_whitespace());
+        if back {
+            while i > 0 && blank(&c[i - 1]) {
+                i -= 1;
+            }
+            while i > 0 && !blank(&c[i - 1]) {
+                i -= 1;
+            }
+        } else {
+            while i < c.len() && !blank(&c[i]) {
+                i += 1;
+            }
+            while i < c.len() && blank(&c[i]) {
+                i += 1;
+            }
+        }
+        i
+    }
+
     pub fn edit(&mut self, e: Edit) {
         let len = self.text.chars().count();
+        if std::mem::take(&mut self.all) {
+            match e {
+                Edit::Backspace | Edit::Delete | Edit::WordBackspace | Edit::WordDelete => {
+                    return self.cut(0, len);
+                }
+                Edit::Char(c) if !c.is_control() => self.cut(0, len),
+                _ => {}
+            }
+        }
         match e {
+            Edit::SelectAll => self.all = true,
+            Edit::WordBackspace => self.cut(self.word(true), self.caret),
+            Edit::WordDelete => self.cut(self.caret, self.word(false)),
             Edit::Char(c) if !c.is_control() => {
                 self.text.insert(self.byte(self.caret), c);
                 self.caret += 1;
@@ -99,5 +147,32 @@ mod tests {
         t.edit(Edit::Delete); // nothing after the end
         t.edit(Edit::Char('\n')); // not text
         assert_eq!(t.text, "lo");
+    }
+
+    #[test]
+    fn words_and_select_all() {
+        let mut t = TextBox::new("one two  three");
+        t.edit(Edit::WordBackspace);
+        assert_eq!(t.text, "one two  ");
+        t.edit(Edit::WordBackspace); // blanks, then the word
+        assert_eq!(t.text, "one ");
+        t.edit(Edit::Home);
+        t.edit(Edit::WordDelete); // the word and the blank after it
+        assert_eq!(t.text, "");
+        let mut t = TextBox::new("héllo wörld");
+        t.edit(Edit::Left);
+        t.edit(Edit::WordBackspace);
+        assert_eq!(t.text, "héllo d");
+        t.edit(Edit::SelectAll);
+        t.edit(Edit::End); // any other edit drops the hack
+        t.edit(Edit::Delete);
+        assert_eq!(t.text, "héllo ");
+        t.edit(Edit::SelectAll);
+        t.edit(Edit::Backspace);
+        assert_eq!(t.text, "");
+        t.edit(Edit::Char('a'));
+        t.edit(Edit::SelectAll);
+        t.edit(Edit::Char('b')); // typing replaces
+        assert_eq!(t.text, "b");
     }
 }
