@@ -16,6 +16,10 @@ use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
+// Not in `WindowsAndMessaging` (newer windows-sys has it in `UI::Controls`): as a bare name in the
+// `match` below it was a catch-all binding, and every message after it, WM_NCCREATE too, got 0.
+const WM_MOUSELEAVE: u32 = 0x02A3;
+
 // no WS_THICKFRAME / WS_MAXIMIZEBOX: the edges do not resize
 const STYLE: u32 = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VISIBLE;
 

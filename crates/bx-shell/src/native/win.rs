@@ -21,7 +21,7 @@ impl Native {
             GetModuleHandleExW(
                 GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS
                     | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                Self::new as usize as *const u16,
+                Self::new as *const () as usize as *const u16,
                 &mut hinst,
             );
 

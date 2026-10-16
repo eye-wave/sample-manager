@@ -16,8 +16,10 @@ serde = { version = "1", features = ["derive"] }
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+# not `sample-manager`: a bin and a lib of the same name collide on `sample_manager.pdb`
 [[bin]]
-name = "sample-manager"
+name = "sample-manager-standalone"
+path = "src/main.rs"
 required-features = ["standalone"]
 
 [features]
