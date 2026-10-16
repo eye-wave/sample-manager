@@ -113,6 +113,14 @@ unsafe impl Target for Native {
                 .unwrap()
         }
     }
+
+    fn set_cursor(&self, pointer: bool) {
+        // the class cursor, which Windows uses on the next mouse move
+        unsafe {
+            let c = LoadCursorW(null_mut(), if pointer { IDC_HAND } else { IDC_ARROW });
+            SetClassLongPtrW(self.hwnd as _, GCLP_HCURSOR, c as isize);
+        }
+    }
 }
 
 impl Drop for Native {

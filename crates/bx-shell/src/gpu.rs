@@ -1,5 +1,5 @@
 //! Raw Vulkan (ash). Knows nothing about icons, fonts or layout: it draws a [`Scene`] (flat and
-//! textured 2D vertices, and a mesh for the app's own shader) on a [`Target`] (a window of this
+//! textured 2D vertices, twice: the page and what goes over it) on a [`Target`] (a window of this
 //! crate). What to draw is up to the app, see [`Content`].
 // no HiDPI, 4x MSAA is the only antialiasing, unwrap() instead of error handling (a
 // panic only kills the render thread, never the host).
@@ -26,21 +26,26 @@ const EXTS: [&CStr; 2] = [khr::surface::NAME, khr::win32_surface::NAME];
 pub unsafe trait Target: Sync {
     /// Called on the render thread, once. The caller owns the surface and destroys it.
     fn surface(&self, entry: &Entry, inst: &Instance) -> vk::SurfaceKHR;
+    /// Called on the render thread when the scene asks for another mouse cursor: the hand
+    /// (`true`, [`Scene::pointer`]) or the usual arrow.
+    fn set_cursor(&self, _pointer: bool) {}
 }
 
 /// 4 samples is the one MSAA count the Vulkan spec requires every device to support.
 const SAMPLES: vk::SampleCountFlags = vk::SampleCountFlags::TYPE_4;
 
-/// Room for this many vertices (16 bytes each) in the vertex buffer: flat and textured together.
-const MAX_VERTS: usize = 8192;
-
-/// Room for this many mesh vertices (24 bytes each).
-const MAX_MESH_VERTS: usize = 1024;
-
-/// 16 bits are plenty for what the mesh pass is for, and every device has this format.
-const DEPTH_FORMAT: vk::Format = vk::Format::D16_UNORM;
+/// Room for this many vertices (32 bytes each) in the vertex buffer: flat and textured together.
+const MAX_VERTS: usize = 65536;
 
 const SPV: &[u8] = include_shader!("shader.wgsl");
+
+/// "The mouse is not on the window", see [`pack_mouse`].
+pub const NO_MOUSE: u64 = u64::MAX;
+
+/// Packs a mouse position (px from the top left of the window) for [`Content::mouse`].
+pub const fn pack_mouse(x: i32, y: i32) -> u64 {
+    (x as u32 as u64) << 32 | y as u32 as u64
+}
 
 /// Packs a window size for the `size` argument of [`render`].
 pub const fn pack_size(w: u32, h: u32) -> u64 {
@@ -54,32 +59,33 @@ pub struct Atlas {
     pub rgba: Vec<u8>,
 }
 
-/// What to draw for one window size, as triangle lists in NDC with y down (see shader.wgsl).
+/// A 2D vertex: `[x, y, u, v, r, g, b, a]`, position in NDC with y down (see shader.wgsl).
+pub type Vert = [f32; 8];
+
+/// What to draw for one window size, as triangle lists.
 pub struct Scene {
-    /// Solid colour, `[x, y]`.
-    pub flat: Vec<[f32; 2]>,
-    /// Drawn after `flat`, `[x, y, u, v]`, sampled from the atlas (the MSDF fragment shader).
-    pub textured: Vec<[f32; 4]>,
-    /// Drawn between the two, with depth testing, by the app's own shader (see [`Content`]):
-    /// triangles as `[x, y, z, r, g, b]`, at most `MAX_MESH_VERTS` (1024) of them.
-    pub mesh: Vec<[f32; 6]>,
+    /// Solid colour (the vertex colour); the uv is unused.
+    pub flat: Vec<Vert>,
+    /// Drawn after `flat`, sampled from the atlas (the MSDF fragment shader), tinted by the vertex colour.
+    pub textured: Vec<Vert>,
+    /// Like `flat` and `textured` again, drawn on top of both (a tooltip).
+    pub over_flat: Vec<Vert>,
+    pub over_textured: Vec<Vert>,
+    /// Show the hand cursor instead of the arrow.
+    pub pointer: bool,
 }
 
 /// What the app brings to [`render`].
 pub struct Content<'a> {
     /// For the `textured` vertices.
     pub atlas: &'a Atlas,
-    /// Called with the window size (on the render thread) at the start and after every resize; it
-    /// may return a different number of vertices each time, up to [`MAX_VERTS`] in total.
-    pub scene: &'a dyn Fn(u32, u32) -> Scene,
-    /// SPIR-V of the shader for `Scene::mesh`: entry points `vs` (inputs: location 0 `vec3`
-    /// position, location 1 `vec3` colour) and `fs` (outputs `vec4`). Its one resource is
-    /// `@group(0) @binding(2) var<uniform>`, a `mat4x4<f32>` or a struct of 64 bytes. WGSL
-    /// conventions (y up, z 0..1) apply, no culling is done, depth testing is on.
-    pub mesh_shader: &'a [u8],
-    /// Called before every frame with the window size and the seconds since the start: the 16
-    /// floats of the uniform for `mesh_shader` (column-major if it is a matrix).
-    pub uniform: &'a dyn Fn(u32, u32, f32) -> [f32; 16],
+    /// Called (on the render thread) at the start, after every resize and whenever the mouse has
+    /// moved, with the window size and the mouse in px from the top left (NaN when it is not on
+    /// the window); it may return a different number of vertices each time, up to [`MAX_VERTS`]
+    /// in total.
+    pub scene: &'a dyn Fn(u32, u32, [f32; 2]) -> Scene,
+    /// Where the mouse is, see [`pack_mouse`] (written by the window, polled every frame).
+    pub mouse: &'a AtomicU64,
 }
 
 /// Everything that depends on the surface size; rebuilt when the window is resized.
@@ -90,7 +96,6 @@ struct Frame {
     fbs: Vec<vk::Framebuffer>,
     cmds: Vec<vk::CommandBuffer>,
     msaa: (vk::Image, vk::DeviceMemory, vk::ImageView),
-    depth: (vk::Image, vk::DeviceMemory, vk::ImageView),
 }
 
 fn color_range() -> vk::ImageSubresourceRange {
@@ -226,19 +231,10 @@ unsafe fn run(
     };
 
     // vertex buffer, rewritten (while the GPU is idle) whenever the scene is rebuilt
-    let (vb, vmem) = buffer(MAX_VERTS * 16, vk::BufferUsageFlags::VERTEX_BUFFER);
+    let (vb, vmem) = buffer(MAX_VERTS * 32, vk::BufferUsageFlags::VERTEX_BUFFER);
     let verts = dev
         .map_memory(vmem, 0, vk::WHOLE_SIZE, vk::MemoryMapFlags::empty())
-        .unwrap() as *mut [f32; 4];
-    let (mvb, mvmem) = buffer(MAX_MESH_VERTS * 24, vk::BufferUsageFlags::VERTEX_BUFFER);
-    let mverts = dev
-        .map_memory(mvmem, 0, vk::WHOLE_SIZE, vk::MemoryMapFlags::empty())
-        .unwrap() as *mut [f32; 6];
-    // the mesh shader's uniform, written before every frame
-    let (ubo, umem) = buffer(64, vk::BufferUsageFlags::UNIFORM_BUFFER);
-    let uptr = dev
-        .map_memory(umem, 0, vk::WHOLE_SIZE, vk::MemoryMapFlags::empty())
-        .unwrap() as *mut [f32; 16];
+        .unwrap() as *mut Vert;
 
     // the atlas: staging buffer -> device-local image, left in SHADER_READ_ONLY_OPTIMAL
     let (stg, stg_mem) = buffer(atlas.rgba.len(), vk::BufferUsageFlags::TRANSFER_SRC);
@@ -373,8 +369,7 @@ unsafe fn run(
             None,
         )
         .unwrap();
-    // set 0: binding 0 the atlas, binding 1 its sampler (WGSL keeps them separate), binding 2 the
-    // uniform of the mesh shader
+    // set 0: binding 0 the atlas, binding 1 its sampler (WGSL keeps them separate)
     let dsl = dev
         .create_descriptor_set_layout(
             &vk::DescriptorSetLayoutCreateInfo::default().bindings(&[
@@ -388,11 +383,6 @@ unsafe fn run(
                     .descriptor_type(vk::DescriptorType::SAMPLER)
                     .descriptor_count(1)
                     .stage_flags(vk::ShaderStageFlags::FRAGMENT),
-                vk::DescriptorSetLayoutBinding::default()
-                    .binding(2)
-                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                    .descriptor_count(1)
-                    .stage_flags(vk::ShaderStageFlags::VERTEX),
             ]),
             None,
         )
@@ -407,9 +397,6 @@ unsafe fn run(
                         .descriptor_count(1),
                     vk::DescriptorPoolSize::default()
                         .ty(vk::DescriptorType::SAMPLER)
-                        .descriptor_count(1),
-                    vk::DescriptorPoolSize::default()
-                        .ty(vk::DescriptorType::UNIFORM_BUFFER)
                         .descriptor_count(1),
                 ]),
             None,
@@ -436,19 +423,11 @@ unsafe fn run(
                 .dst_binding(1)
                 .descriptor_type(vk::DescriptorType::SAMPLER)
                 .image_info(&[vk::DescriptorImageInfo::default().sampler(sampler)]),
-            vk::WriteDescriptorSet::default()
-                .dst_set(set)
-                .dst_binding(2)
-                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                .buffer_info(&[vk::DescriptorBufferInfo::default()
-                    .buffer(ubo)
-                    .offset(0)
-                    .range(64)]),
         ],
         &[],
     );
 
-    // render pass: draw into a multisampled image (with depth), resolve it into the swapchain image
+    // render pass: draw into a multisampled image, resolve it into the swapchain image
     let attach = [
         vk::AttachmentDescription::default()
             .format(fmt.format)
@@ -464,17 +443,7 @@ unsafe fn run(
             .store_op(vk::AttachmentStoreOp::STORE)
             .initial_layout(vk::ImageLayout::UNDEFINED)
             .final_layout(vk::ImageLayout::PRESENT_SRC_KHR),
-        vk::AttachmentDescription::default()
-            .format(DEPTH_FORMAT)
-            .samples(SAMPLES)
-            .load_op(vk::AttachmentLoadOp::CLEAR)
-            .store_op(vk::AttachmentStoreOp::DONT_CARE)
-            .initial_layout(vk::ImageLayout::UNDEFINED)
-            .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
     ];
-    let depth_ref = vk::AttachmentReference::default()
-        .attachment(2)
-        .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
     let color_ref = [vk::AttachmentReference::default()
         .attachment(0)
         .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)];
@@ -484,19 +453,13 @@ unsafe fn run(
     let subpass = [vk::SubpassDescription::default()
         .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
         .color_attachments(&color_ref)
-        .resolve_attachments(&resolve_ref)
-        .depth_stencil_attachment(&depth_ref)];
-    let stage = vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
-        | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS
-        | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS;
+        .resolve_attachments(&resolve_ref)];
+    let stage = vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT;
     let dep = [vk::SubpassDependency::default()
         .src_subpass(vk::SUBPASS_EXTERNAL)
         .src_stage_mask(stage)
         .dst_stage_mask(stage)
-        .dst_access_mask(
-            vk::AccessFlags::COLOR_ATTACHMENT_WRITE
-                | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
-        )];
+        .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)];
     let rp = dev
         .create_render_pass(
             &vk::RenderPassCreateInfo::default()
@@ -507,8 +470,7 @@ unsafe fn run(
         )
         .unwrap();
 
-    // pipelines: the shaders of the 2D parts live in one SPIR-V module (entry points "vs",
-    // "fs_flat", "fs_text"), the app's mesh shader is another module ("vs", "fs").
+    // pipelines: the shaders live in one SPIR-V module (entry points "vs", "fs_flat", "fs_text").
     // Viewport and scissor are dynamic so a resize does not need new pipelines.
     let code = ash::util::read_spv(&mut Cursor::new(SPV)).unwrap();
     let module = dev
@@ -527,23 +489,6 @@ unsafe fn run(
         ]
     };
     let (flat_stages, text_stages) = (stages(c"fs_flat"), stages(c"fs_text"));
-    let mesh_code = ash::util::read_spv(&mut Cursor::new(content.mesh_shader)).unwrap();
-    let mesh_module = dev
-        .create_shader_module(
-            &vk::ShaderModuleCreateInfo::default().code(&mesh_code),
-            None,
-        )
-        .unwrap();
-    let mesh_stages = [
-        vk::PipelineShaderStageCreateInfo::default()
-            .stage(vk::ShaderStageFlags::VERTEX)
-            .module(mesh_module)
-            .name(c"vs"),
-        vk::PipelineShaderStageCreateInfo::default()
-            .stage(vk::ShaderStageFlags::FRAGMENT)
-            .module(mesh_module)
-            .name(c"fs"),
-    ];
     let pl = dev
         .create_pipeline_layout(
             &vk::PipelineLayoutCreateInfo::default().set_layouts(&[dsl]),
@@ -561,7 +506,7 @@ unsafe fn run(
         .alpha_blend_op(vk::BlendOp::ADD)
         .color_write_mask(vk::ColorComponentFlags::RGBA)];
     let binds = [vk::VertexInputBindingDescription::default()
-        .stride(16)
+        .stride(32)
         .input_rate(vk::VertexInputRate::VERTEX)];
     let attrs = [
         vk::VertexInputAttributeDescription::default()
@@ -572,32 +517,14 @@ unsafe fn run(
             .location(1)
             .format(vk::Format::R32G32_SFLOAT)
             .offset(8),
+        vk::VertexInputAttributeDescription::default()
+            .location(2)
+            .format(vk::Format::R32G32B32A32_SFLOAT)
+            .offset(16),
     ];
     let vin = vk::PipelineVertexInputStateCreateInfo::default()
         .vertex_binding_descriptions(&binds)
         .vertex_attribute_descriptions(&attrs);
-    let mesh_binds = [vk::VertexInputBindingDescription::default()
-        .stride(24)
-        .input_rate(vk::VertexInputRate::VERTEX)];
-    let mesh_attrs = [
-        vk::VertexInputAttributeDescription::default()
-            .location(0)
-            .format(vk::Format::R32G32B32_SFLOAT)
-            .offset(0),
-        vk::VertexInputAttributeDescription::default()
-            .location(1)
-            .format(vk::Format::R32G32B32_SFLOAT)
-            .offset(12),
-    ];
-    let mesh_vin = vk::PipelineVertexInputStateCreateInfo::default()
-        .vertex_binding_descriptions(&mesh_binds)
-        .vertex_attribute_descriptions(&mesh_attrs);
-    // only the mesh is depth tested
-    let depth_off = vk::PipelineDepthStencilStateCreateInfo::default();
-    let depth_on = vk::PipelineDepthStencilStateCreateInfo::default()
-        .depth_test_enable(true)
-        .depth_write_enable(true)
-        .depth_compare_op(vk::CompareOp::LESS);
     let ia = vk::PipelineInputAssemblyStateCreateInfo::default()
         .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
     let vp = vk::PipelineViewportStateCreateInfo::default()
@@ -619,29 +546,16 @@ unsafe fn run(
         .rasterization_state(&rs)
         .multisample_state(&ms)
         .color_blend_state(&cb)
-        .depth_stencil_state(&depth_off)
         .layout(pl)
         .render_pass(rp);
     let pipes = dev
         .create_graphics_pipelines(
             vk::PipelineCache::null(),
-            &[
-                base.stages(&flat_stages),
-                base.stages(&text_stages),
-                base.stages(&mesh_stages)
-                    .vertex_input_state(&mesh_vin)
-                    .depth_stencil_state(&depth_on),
-            ],
+            &[base.stages(&flat_stages), base.stages(&text_stages)],
             None,
         )
         .unwrap();
-    let (pipe_flat, pipe_text, pipe_mesh) = (pipes[0], pipes[1], pipes[2]);
-    let depth_clear = vk::ClearValue {
-        depth_stencil: vk::ClearDepthStencilValue {
-            depth: 1.0,
-            stencil: 0,
-        },
-    };
+    let (pipe_flat, pipe_text) = (pipes[0], pipes[1]);
 
     let clear = vk::ClearValue {
         color: vk::ClearColorValue {
@@ -691,7 +605,7 @@ unsafe fn run(
             .unwrap();
         let images = sc_d.get_swapchain_images(sc).unwrap();
 
-        // the multisampled images that the render pass draws into: colour and depth
+        // the multisampled images that the render pass draws into: colour
         let msaa_image = |format, usage| {
             let img = dev
                 .create_image(
@@ -729,37 +643,7 @@ unsafe fn run(
             (img, mem)
         };
         let (img, imem) = msaa_image(fmt.format, vk::ImageUsageFlags::COLOR_ATTACHMENT);
-        let (dimg, dmem) = msaa_image(DEPTH_FORMAT, vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT);
-        let dview = dev
-            .create_image_view(
-                &vk::ImageViewCreateInfo::default()
-                    .image(dimg)
-                    .view_type(vk::ImageViewType::TYPE_2D)
-                    .format(DEPTH_FORMAT)
-                    .subresource_range(
-                        vk::ImageSubresourceRange::default()
-                            .aspect_mask(vk::ImageAspectFlags::DEPTH)
-                            .level_count(1)
-                            .layer_count(1),
-                    ),
-                None,
-            )
-            .unwrap();
         let mview = view(img, fmt.format);
-
-        // the 2D vertices: flat first (uv unused), then the textured ones; the mesh has its own buffer
-        let s = scene(extent.width, extent.height);
-        let (nf, nt) = (s.flat.len(), s.textured.len());
-        assert!(nf + nt <= MAX_VERTS, "scene has too many vertices");
-        for (i, v) in s.flat.iter().enumerate() {
-            verts.add(i).write([v[0], v[1], 0.0, 0.0]);
-        }
-        verts
-            .add(nf)
-            .copy_from_nonoverlapping(s.textured.as_ptr(), nt);
-        let nm = s.mesh.len();
-        assert!(nm <= MAX_MESH_VERTS, "mesh has too many vertices");
-        mverts.copy_from_nonoverlapping(s.mesh.as_ptr(), nm);
 
         let cmds = dev
             .allocate_command_buffers(
@@ -768,63 +652,22 @@ unsafe fn run(
                     .command_buffer_count(images.len() as u32),
             )
             .unwrap();
-        let area = vk::Rect2D {
-            offset: vk::Offset2D::default(),
-            extent,
-        };
         let (mut views, mut fbs) = (vec![], vec![]);
-        for (&img, &cmd) in images.iter().zip(&cmds) {
+        for &img in &images {
             let v = view(img, fmt.format);
-            let fb = dev
-                .create_framebuffer(
+            fbs.push(
+                dev.create_framebuffer(
                     &vk::FramebufferCreateInfo::default()
                         .render_pass(rp)
-                        .attachments(&[mview, v, dview])
+                        .attachments(&[mview, v])
                         .width(extent.width)
                         .height(extent.height)
                         .layers(1),
                     None,
                 )
-                .unwrap();
-            dev.begin_command_buffer(cmd, &vk::CommandBufferBeginInfo::default())
-                .unwrap();
-            dev.cmd_begin_render_pass(
-                cmd,
-                &vk::RenderPassBeginInfo::default()
-                    .render_pass(rp)
-                    .framebuffer(fb)
-                    .render_area(area)
-                    .clear_values(&[clear, clear, depth_clear]),
-                vk::SubpassContents::INLINE,
+                .unwrap(),
             );
-            dev.cmd_set_viewport(
-                cmd,
-                0,
-                &[vk::Viewport {
-                    x: 0.0,
-                    y: 0.0,
-                    width: extent.width as f32,
-                    height: extent.height as f32,
-                    min_depth: 0.0,
-                    max_depth: 1.0,
-                }],
-            );
-            dev.cmd_set_scissor(cmd, 0, &[area]);
-            dev.cmd_bind_descriptor_sets(cmd, vk::PipelineBindPoint::GRAPHICS, pl, 0, &[set], &[]);
-            // flat, then the mesh, then the text on top
-            dev.cmd_bind_vertex_buffers(cmd, 0, &[vb], &[0]);
-            dev.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, pipe_flat);
-            dev.cmd_draw(cmd, nf as u32, 1, 0, 0);
-            dev.cmd_bind_vertex_buffers(cmd, 0, &[mvb], &[0]);
-            dev.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, pipe_mesh);
-            dev.cmd_draw(cmd, nm as u32, 1, 0, 0);
-            dev.cmd_bind_vertex_buffers(cmd, 0, &[vb], &[0]);
-            dev.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, pipe_text);
-            dev.cmd_draw(cmd, nt as u32, 1, nf as u32, 0);
-            dev.cmd_end_render_pass(cmd);
-            dev.end_command_buffer(cmd).unwrap();
             views.push(v);
-            fbs.push(fb);
         }
         Frame {
             sc,
@@ -833,7 +676,6 @@ unsafe fn run(
             fbs,
             cmds,
             msaa: (img, imem, mview),
-            depth: (dimg, dmem, dview),
         }
     };
     // destroys a `Frame`, the GPU must be idle
@@ -848,10 +690,75 @@ unsafe fn run(
         dev.destroy_image_view(f.msaa.2, None);
         dev.destroy_image(f.msaa.0, None);
         dev.free_memory(f.msaa.1, None);
-        dev.destroy_image_view(f.depth.2, None);
-        dev.destroy_image(f.depth.0, None);
-        dev.free_memory(f.depth.1, None);
         sc_d.destroy_swapchain(f.sc, None);
+    };
+
+    // draws the scene for the mouse `m` (see `pack_mouse`) into the vertex buffer and records every
+    // command buffer of `f` again; the GPU must be idle
+    let record = |f: &Frame, m: u64| {
+        let mouse = if m == NO_MOUSE {
+            [f32::NAN; 2]
+        } else {
+            [(m >> 32) as u32 as i32 as f32, m as u32 as i32 as f32]
+        };
+        let s = scene(f.extent.width, f.extent.height, mouse);
+        target.set_cursor(s.pointer);
+        // flat, textured, over_flat, over_textured, one after the other (uv of the flat ones unused)
+        let parts = [&s.flat, &s.textured, &s.over_flat, &s.over_textured];
+        let n = parts.map(|p| p.len());
+        assert!(
+            n.iter().sum::<usize>() <= MAX_VERTS,
+            "scene has too many vertices"
+        );
+        let mut at = 0;
+        for p in parts {
+            verts.add(at).copy_from_nonoverlapping(p.as_ptr(), p.len());
+            at += p.len();
+        }
+        let area = vk::Rect2D {
+            offset: vk::Offset2D::default(),
+            extent: f.extent,
+        };
+        dev.reset_command_pool(pool, vk::CommandPoolResetFlags::empty())
+            .unwrap();
+        for (&cmd, &fb) in f.cmds.iter().zip(&f.fbs) {
+            dev.begin_command_buffer(cmd, &vk::CommandBufferBeginInfo::default())
+                .unwrap();
+            dev.cmd_begin_render_pass(
+                cmd,
+                &vk::RenderPassBeginInfo::default()
+                    .render_pass(rp)
+                    .framebuffer(fb)
+                    .render_area(area)
+                    .clear_values(&[clear, clear]),
+                vk::SubpassContents::INLINE,
+            );
+            dev.cmd_set_viewport(
+                cmd,
+                0,
+                &[vk::Viewport {
+                    x: 0.0,
+                    y: 0.0,
+                    width: f.extent.width as f32,
+                    height: f.extent.height as f32,
+                    min_depth: 0.0,
+                    max_depth: 1.0,
+                }],
+            );
+            dev.cmd_set_scissor(cmd, 0, &[area]);
+            dev.cmd_bind_descriptor_sets(cmd, vk::PipelineBindPoint::GRAPHICS, pl, 0, &[set], &[]);
+            dev.cmd_bind_vertex_buffers(cmd, 0, &[vb], &[0]);
+            // the page: flat, text on top; then the same for what goes over it
+            let mut first = 0;
+            for (i, &count) in n.iter().enumerate() {
+                let pipe = if i % 2 == 0 { pipe_flat } else { pipe_text };
+                dev.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, pipe);
+                dev.cmd_draw(cmd, count as u32, 1, first as u32, 0);
+                first += count;
+            }
+            dev.cmd_end_render_pass(cmd);
+            dev.end_command_buffer(cmd).unwrap();
+        }
     };
 
     // frame loop
@@ -862,7 +769,7 @@ unsafe fn run(
     let done = dev
         .create_semaphore(&vk::SemaphoreCreateInfo::default(), None)
         .unwrap();
-    let start = std::time::Instant::now();
+    let mut last = !1; // the mouse of the last recording; never a real one, so the first frame records
     while !stop.load(Relaxed) {
         let now = extent_of();
         if now.width == 0 || now.height == 0 {
@@ -875,12 +782,12 @@ unsafe fn run(
             let new = build(frame.sc, now);
             free(std::mem::replace(&mut frame, new));
         }
-        // the GPU is idle here (queue_wait_idle below), so the uniform can be rewritten
-        uptr.write((content.uniform)(
-            frame.extent.width,
-            frame.extent.height,
-            start.elapsed().as_secs_f32(),
-        ));
+        // the GPU is idle here (queue_wait_idle below), so the scene can be rewritten
+        let m = content.mouse.load(Relaxed);
+        if resized || m != last {
+            record(&frame, m);
+            last = m;
+        }
         // errors (e.g. out of date mid-resize) just skip the frame; the next one rebuilds
         if let Ok((i, _)) = sc_d.acquire_next_image(frame.sc, u64::MAX, acquire, vk::Fence::null())
         {
@@ -919,12 +826,6 @@ unsafe fn run(
     dev.destroy_command_pool(pool, None);
     dev.destroy_buffer(vb, None);
     dev.free_memory(vmem, None); // also unmaps
-    dev.destroy_buffer(mvb, None);
-    dev.free_memory(mvmem, None);
-    dev.destroy_buffer(ubo, None);
-    dev.free_memory(umem, None);
-    dev.destroy_pipeline(pipe_mesh, None);
-    dev.destroy_shader_module(mesh_module, None);
     dev.destroy_pipeline(pipe_flat, None);
     dev.destroy_pipeline(pipe_text, None);
     dev.destroy_pipeline_layout(pl, None);

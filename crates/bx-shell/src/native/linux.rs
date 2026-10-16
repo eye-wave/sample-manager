@@ -10,6 +10,7 @@ pub struct Native {
     dpy: usize,
     vdpy: usize,
     win: xlib::Window,
+    hand: xlib::Cursor,
 }
 
 impl Native {
@@ -28,6 +29,7 @@ impl Native {
                 dpy: dpy as usize,
                 vdpy: vdpy as usize,
                 win,
+                hand: xlib::XCreateFontCursor(dpy, 60), // XC_hand2
             })
         }
     }
@@ -90,6 +92,15 @@ unsafe impl Target for Native {
                     None,
                 )
                 .unwrap()
+        }
+    }
+
+    fn set_cursor(&self, pointer: bool) {
+        // the render thread's own connection, the cursor itself is a server object
+        let (dpy, c) = (self.vdpy as *mut xlib::Display, self.hand);
+        unsafe {
+            xlib::XDefineCursor(dpy, self.win, if pointer { c } else { 0 });
+            xlib::XFlush(dpy);
         }
     }
 }

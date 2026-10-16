@@ -30,6 +30,17 @@ pub fn atlas() -> Atlas {
     }
 }
 
+/// Width of `s` in px at `size` px per em (what `text` advances by).
+pub fn width(s: &str, size: f32) -> f32 {
+    let adv = |c: char| {
+        GLYPHS
+            .get((c as usize).wrapping_sub(32))
+            .unwrap_or(&GLYPHS[(b'?' - 32) as usize])
+            .adv
+    };
+    s.chars().map(adv).sum::<f32>() * size
+}
+
 /// Appends 6 vertices per char of `s`: it starts at `origin` (px from the top left of the `w` x `h`
 /// px surface, on the baseline) and is `size` px per em. Chars outside ASCII draw as `?`.
 pub fn text(

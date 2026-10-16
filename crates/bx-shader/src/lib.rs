@@ -31,6 +31,7 @@ pub fn main(path: impl AsRef<std::path::Path>) {
             .unwrap_or_else(|e| panic!("{}/{name}: validation error:\n{e:?}", path.display()));
 
         let options = spv::Options {
+            // ponytail: WGSL clip space is y-up, Vulkan is y-down; naga flips y in the vertex shader
             flags: spv::WriterFlags::ADJUST_COORDINATE_SPACE,
             ..Default::default()
         };

@@ -34,6 +34,7 @@ plugin = [
 bx_shader = { path = "./crates/bx-shader" }
 bx_shell = { path = "./crates/bx-shell" }
 bx_svg = { path = "./crates/bx-svg" }
+bx_ui = { path = "./crates/bx-ui" }
 clack-plugin = { version = "0.2", optional = true }
 clack-extensions = { version = "0.2", features = [
   "clack-plugin",

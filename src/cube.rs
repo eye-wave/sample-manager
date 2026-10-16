@@ -2,8 +2,6 @@
 //! between the title and the icon row. The shader is cube.wgsl; shell::gpu draws it.
 use bx_shader::include_shader;
 
-use crate::icons::{TITLE_BAND, icons_top};
-
 /// A 4x4 matrix, column-major (what WGSL's `mat4x4` is in memory).
 pub type Mat = [f32; 16];
 
@@ -70,7 +68,7 @@ fn rot_y(a: f32) -> Mat {
 /// the middle of the free space between the title and the icons.
 pub fn mvp(w: u32, h: u32, t: f32) -> Mat {
     let (w, h) = (w as f32, h as f32);
-    let (top, bottom) = (TITLE_BAND, icons_top(h));
+    let (top, bottom) = (0.0, h); // ponytail: the cube is not in the scene any more, just centred
     let (cx, cy) = (w / 2.0, (top + bottom) / 2.0);
     let (focal, dist, near, far) = (1.0 / 25f32.to_radians().tan(), 3.0, 0.1, 10.0);
 

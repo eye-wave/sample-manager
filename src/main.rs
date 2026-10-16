@@ -11,7 +11,7 @@ fn main() {
     let size = AtomicU64::new(pack_size(W, H));
     let stop = AtomicBool::new(false);
     std::thread::scope(|s| {
-        s.spawn(|| run(&win, &size, &stop, win.presented()));
+        s.spawn(|| run(&win, &size, &stop, win.presented(), win.mouse()));
         win.run();
         stop.store(true, Relaxed); // the scope joins the render thread
     });

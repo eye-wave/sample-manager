@@ -1,10 +1,10 @@
 //! X11: a top-level window. Wayland runs through XWayland.
 use super::Grip;
-use crate::gpu::Target;
+use crate::gpu::{NO_MOUSE, Target, pack_mouse};
 use ash::{Entry, Instance, khr, vk};
 use std::ffi::CString;
 use std::ptr::null;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 use x11::xlib;
 
 // Display* stored as usize so `Window` is Sync. Xlib is not thread-safe without XInitThreads, so
@@ -16,10 +16,12 @@ pub struct Window {
     win: xlib::Window,
     delete: xlib::Atom,
     grip_cursor: xlib::Cursor,
+    hand_cursor: xlib::Cursor,
     size: (u32, u32),
     min_w: u32,
     grip: Grip,
     presented: AtomicU64,
+    mouse: AtomicU64,
 }
 
 /// Makes the window `w` x `h`. The size hints say min = max, so the window manager offers no way
@@ -57,6 +59,7 @@ impl Window {
                 win,
                 xlib::StructureNotifyMask
                     | xlib::PointerMotionMask
+                    | xlib::LeaveWindowMask
                     | xlib::ButtonPressMask
                     | xlib::ButtonReleaseMask,
             );
@@ -68,10 +71,12 @@ impl Window {
                 win,
                 delete,
                 grip_cursor: xlib::XCreateFontCursor(dpy, 14), // XC_bottom_right_corner
+                hand_cursor: xlib::XCreateFontCursor(dpy, 60), // XC_hand2
                 size,
                 min_w: min.0,
                 grip,
                 presented: AtomicU64::new(0),
+                mouse: AtomicU64::new(NO_MOUSE),
             }
         }
     }
@@ -82,11 +87,18 @@ impl Window {
         &self.presented
     }
 
+    /// For the renderer (`render`'s mouse): where the mouse is on the window, for hover effects.
+    pub fn mouse(&self) -> &AtomicU64 {
+        &self.mouse
+    }
+
     pub fn run(&self) {
         let dpy = self.dpy as *mut xlib::Display;
         let (mut w, mut h) = self.size;
         // a resize drag: the mouse x on the screen and the window width when it started
         let mut drag: Option<(i32, u32)> = None;
+        // the cursor is the renderer's (see `set_cursor`) except on the handle
+        let mut on_grip = false;
         unsafe {
             let mut ev: xlib::XEvent = std::mem::zeroed();
             loop {
@@ -96,7 +108,10 @@ impl Window {
                         (w, h) = (ev.configure.width as u32, ev.configure.height as u32)
                     }
                     // the button is held, so these keep coming to this window even outside of it
+                    xlib::LeaveNotify => self.mouse.store(NO_MOUSE, Relaxed),
                     xlib::MotionNotify => {
+                        self.mouse
+                            .store(pack_mouse(ev.motion.x, ev.motion.y), Relaxed);
                         if let Some((x0, w0)) = drag {
                             let nw =
                                 (w0 as i32 + ev.motion.x_root - x0).max(self.min_w as i32) as u32;
@@ -106,11 +121,14 @@ impl Window {
                             }
                         } else {
                             let on = (self.grip)(ev.motion.x, ev.motion.y, w, h);
-                            xlib::XDefineCursor(
-                                dpy,
-                                self.win,
-                                if on { self.grip_cursor } else { 0 },
-                            );
+                            if on != on_grip {
+                                on_grip = on;
+                                xlib::XDefineCursor(
+                                    dpy,
+                                    self.win,
+                                    if on { self.grip_cursor } else { 0 },
+                                );
+                            }
                         }
                     }
                     xlib::ButtonPress
@@ -142,6 +160,15 @@ unsafe impl Target for Window {
                     None,
                 )
                 .unwrap()
+        }
+    }
+
+    fn set_cursor(&self, pointer: bool) {
+        // the render thread's own connection, the cursor itself is a server object
+        let (dpy, c) = (self.vdpy as *mut xlib::Display, self.hand_cursor);
+        unsafe {
+            xlib::XDefineCursor(dpy, self.win, if pointer { c } else { 0 });
+            xlib::XFlush(dpy);
         }
     }
 }

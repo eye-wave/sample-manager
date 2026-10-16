@@ -1,6 +1,6 @@
 //! Win32: a top-level window.
 use super::Grip;
-use crate::gpu::{Target, pack_size};
+use crate::gpu::{NO_MOUSE, Target, pack_mouse, pack_size};
 use ash::{Entry, Instance, khr, vk};
 use std::ptr::{null, null_mut};
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
@@ -9,7 +9,9 @@ use std::time::{Duration, Instant};
 use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::Graphics::Gdi::ScreenToClient;
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows_sys::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+    ReleaseCapture, SetCapture, TME_LEAVE, TRACKMOUSEEVENT, TrackMouseEvent,
+};
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 // no WS_THICKFRAME / WS_MAXIMIZEBOX: the edges do not resize
@@ -21,6 +23,9 @@ static STATE: OnceLock<(Grip, (u32, u32), (u32, u32))> = OnceLock::new(); // gri
 
 /// The size of the last frame the renderer presented, 0 until the first.
 static PRESENTED: AtomicU64 = AtomicU64::new(0);
+
+/// Where the mouse is on the window (`pack_mouse`), `NO_MOUSE` when it is not.
+static MOUSE: AtomicU64 = AtomicU64::new(NO_MOUSE);
 
 /// A resize drag: the mouse x (client coordinates) and the client width when it started.
 static DRAG: Mutex<Option<(i32, u32)>> = Mutex::new(None);
@@ -79,6 +84,17 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT
                 0
             }
             WM_MOUSEMOVE => {
+                // the first move after the mouse came in: ask for a WM_MOUSELEAVE
+                let (mx, my) = (l as i16 as i32, (l >> 16) as i16 as i32);
+                if MOUSE.swap(pack_mouse(mx, my), Relaxed) == NO_MOUSE {
+                    let mut t = TRACKMOUSEEVENT {
+                        cbSize: size_of::<TRACKMOUSEEVENT>() as u32,
+                        dwFlags: TME_LEAVE,
+                        hwndTrack: h,
+                        dwHoverTime: 0,
+                    };
+                    TrackMouseEvent(&mut t);
+                }
                 let drag = *DRAG.lock().unwrap(); // copied: SetWindowPos re-enters this procedure
                 if let Some((x0, w0)) = drag {
                     let x = l as i16 as i32;
@@ -94,6 +110,10 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT
                         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
                     );
                 }
+                0
+            }
+            WM_MOUSELEAVE => {
+                MOUSE.store(NO_MOUSE, Relaxed);
                 0
             }
             WM_LBUTTONUP | WM_CAPTURECHANGED => {
@@ -169,6 +189,11 @@ impl Window {
         &PRESENTED
     }
 
+    /// For the renderer (`render`'s mouse): where the mouse is on the window, for hover effects.
+    pub fn mouse(&self) -> &AtomicU64 {
+        &MOUSE
+    }
+
     pub fn run(&self) {
         unsafe {
             let mut msg: MSG = std::mem::zeroed();
@@ -190,6 +215,14 @@ unsafe impl Target for Window {
                     None,
                 )
                 .unwrap()
+        }
+    }
+
+    fn set_cursor(&self, pointer: bool) {
+        // the class cursor, which Windows uses on the next mouse move
+        unsafe {
+            let c = LoadCursorW(null_mut(), if pointer { IDC_HAND } else { IDC_ARROW });
+            SetClassLongPtrW(self.hwnd as _, GCLP_HCURSOR, c as isize);
         }
     }
 }

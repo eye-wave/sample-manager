@@ -19,7 +19,7 @@ use clack_plugin::stream::{InputStream, OutputStream};
 use serde::{Deserialize, Serialize};
 
 use crate::icons::in_grip;
-use crate::render::{H, MIN_W, W, height_for, pack_size, run};
+use crate::render::{H, MIN_W, NO_MOUSE, W, height_for, pack_mouse, pack_size, run};
 
 #[cfg(unix)]
 const API: GuiApiType<'static> = GuiApiType::X11;
@@ -135,6 +135,8 @@ struct Open {
     thread: Option<JoinHandle<()>>,
     /// Only here because `run` wants it; X11 and Win32 report the window size themselves.
     size: Arc<AtomicU64>,
+    /// Where the mouse is on the window (`pack_mouse`), polled with the timer, for hover effects.
+    mouse: Arc<AtomicU64>,
     /// Running while shown, to poll the mouse.
     timer: Option<TimerId>,
     /// A resize drag: the mouse position on the screen and the window size when it started.
@@ -187,6 +189,9 @@ impl PluginTimerImpl for Main<'_> {
             let mut g = self.open.borrow_mut();
             let Some(o) = g.as_mut() else { return };
             let p = o.native.pointer();
+            let on = (0..w as i32).contains(&p.x) && (0..h as i32).contains(&p.y);
+            o.mouse
+                .store(if on { pack_mouse(p.x, p.y) } else { NO_MOUSE }, Relaxed);
             // a drag starts with a press on the handle (not a button already held while moving in)
             if o.drag.is_none() && p.down && !o.was_down && in_grip(p.x, p.y, w, h) {
                 o.drag = Some((p.sx, p.sy, w, h));
@@ -277,6 +282,7 @@ impl PluginGuiImpl for Main<'_> {
             stop: Arc::new(AtomicBool::new(false)),
             thread: None,
             size: Arc::new(AtomicU64::new(pack_size(w, h))),
+            mouse: Arc::new(AtomicU64::new(NO_MOUSE)),
             timer: None,
             drag: None,
             was_down: false,
@@ -296,10 +302,15 @@ impl PluginGuiImpl for Main<'_> {
         o.native.show();
         if o.thread.is_none() {
             o.stop.store(false, Relaxed);
-            let (native, stop, size) = (o.native.clone(), o.stop.clone(), o.size.clone());
+            let (native, stop, size, mouse) = (
+                o.native.clone(),
+                o.stop.clone(),
+                o.size.clone(),
+                o.mouse.clone(),
+            );
             o.thread = Some(std::thread::spawn(move || {
                 // nobody waits for `presented` in a host window
-                run(&*native, &size, &stop, &AtomicU64::new(0))
+                run(&*native, &size, &stop, &AtomicU64::new(0), &mouse)
             }));
         }
         if o.timer.is_none()
