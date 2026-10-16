@@ -66,6 +66,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
 
 [[package]]
+name = "bx_shader"
+version = "0.1.0"
+dependencies = [
+ "naga",
+]
+
+[[package]]
+name = "bx_shell"
+version = "0.1.0"
+dependencies = [
+ "ash",
+ "bx_shader",
+ "windows-sys",
+ "x11",
+]
+
+[[package]]
+name = "bx_svg"
+version = "0.1.0"
+dependencies = [
+ "lyon_tessellation",
+ "quote",
+ "syn 3.0.5",
+ "usvg",
+]
+
+[[package]]
 name = "bytemuck"
 version = "1.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -299,16 +326,6 @@ dependencies = [
  "serde",
  "spin",
  "stable_deref_trait",
-]
-
-[[package]]
-name = "icon_macro"
-version = "0.1.0"
-dependencies = [
- "lyon_tessellation",
- "quote",
- "syn 3.0.5",
- "usvg",
 ]
 
 [[package]]
@@ -602,12 +619,13 @@ dependencies = [
 name = "sample-manager"
 version = "0.1.0"
 dependencies = [
+ "bx_shader",
+ "bx_shell",
+ "bx_svg",
  "clack-extensions",
  "clack-plugin",
- "icon_macro",
  "postcard",
  "serde",
- "shell",
 ]
 
 [[package]]
@@ -650,16 +668,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.5",
-]
-
-[[package]]
-name = "shell"
-version = "0.1.0"
-dependencies = [
- "ash",
- "naga",
- "windows-sys",
- "x11",
 ]
 
 [[package]]

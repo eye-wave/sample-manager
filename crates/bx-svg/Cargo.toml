@@ -1,6 +1,6 @@
 
 [package]
-name = "icon_macro"
+name = "bx_svg"
 version = "0.1.0"
 edition = "2024"
 

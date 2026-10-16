@@ -1,10 +1,12 @@
+
 [package]
-name = "shell"
+name = "bx_shell"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 ash = "0.38"
+bx_shader = { path = "../bx-shader" }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = ">=0.59, <=0.61", features = [
@@ -19,4 +21,4 @@ windows-sys = { version = ">=0.59, <=0.61", features = [
 x11 = { version = "2", features = ["xlib"] }
 
 [build-dependencies]
-naga = { version = "30", features = ["wgsl-in", "spv-out"] }
+bx_shader = { path = "../bx-shader", features = ["build"] }

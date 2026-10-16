@@ -9,7 +9,6 @@ use clack_extensions::state::*;
 use clack_extensions::timer::*;
 use clack_plugin::plugin::features::UTILITY;
 use clack_plugin::prelude::*;
-use clack_plugin::stream::{InputStream, OutputStream};
 use serde::{Deserialize, Serialize};
 use shell::native::Native;
 use std::cell::{Cell, RefCell};

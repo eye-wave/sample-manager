@@ -1,0 +1,11 @@
+
+[package]
+name = "bx_shader"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+build = ["dep:naga"]
+
+[dependencies]
+naga = { version = "30", features = ["wgsl-in", "spv-out"], optional = true }

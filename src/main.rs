@@ -1,8 +1,8 @@
 //! Standalone app: a window (see shell::window) with the renderer on its own thread (same as the
 //! plugin).
+use bx_shell::window::Window;
 use sample_manager::icons::in_grip;
 use sample_manager::render::{H, MIN_H, MIN_W, W, pack_size, run};
-use shell::window::Window;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
 
 fn main() {

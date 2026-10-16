@@ -103,9 +103,9 @@ fn main() {
         };
         let config = MsdfGeneratorConfig::default();
         let mut bitmap = Bitmap::<Rgb<f32>>::new(w as u32, h as u32);
-        shape.generate_msdf(&mut bitmap, framing, config);
-        shape.correct_sign(&mut bitmap, framing, FillRule::default());
-        shape.correct_msdf_error(&mut bitmap, framing, config);
+        shape.generate_msdf(&mut bitmap, &framing, &config);
+        shape.correct_sign(&mut bitmap, &framing, FillRule::default());
+        shape.correct_msdf_error(&mut bitmap, &framing, &config);
 
         // msdfgen's rows start at the bottom, the atlas' at the top
         bitmap.flip_y();

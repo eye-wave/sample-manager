@@ -8,7 +8,10 @@ edition = "2024"
 
 [workspace]
 resolver = "3"
-members = ["shell", "shell/tools/msdf", "icon_macro"]
+members = ["crates/bx-*"]
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -20,11 +23,17 @@ required-features = ["standalone"]
 [features]
 default = ["standalone"]
 standalone = []
-plugin = ["dep:clack-plugin", "dep:clack-extensions", "dep:postcard", "dep:serde"]
+plugin = [
+  "dep:clack-plugin",
+  "dep:clack-extensions",
+  "dep:postcard",
+  "dep:serde",
+]
 
 [dependencies]
-shell = { path = "./shell" }
-icon_macro = { path = "./icon_macro" }
+bx_shader = { path = "./crates/bx-shader" }
+bx_shell = { path = "./crates/bx-shell" }
+bx_svg = { path = "./crates/bx-svg" }
 clack-plugin = { version = "0.2", optional = true }
 clack-extensions = { version = "0.2", features = [
   "clack-plugin",
@@ -33,7 +42,10 @@ clack-extensions = { version = "0.2", features = [
   "state",
 ], optional = true }
 postcard = { version = "1", features = ["use-std"], optional = true }
-serde = { version = "1", features = ["derive"], optional = true }
+serde = { workspace = true, optional = true }
+
+[build-dependencies]
+bx_shader = { path = "./crates/bx-shader", features = ["build"] }
 
 [profile.release]
 opt-level = 3

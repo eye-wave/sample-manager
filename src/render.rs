@@ -1,17 +1,18 @@
-//! The GUI: what is drawn (icons, resize handle, text) for a given window size. No Vulkan or
-//! windowing here, `shell::gpu` draws what [`scene`] returns. Shared by the standalone app and
+//! The GUI: what is drawn (icons, resize handle, text, the cube) for a given window size. No Vulkan or
+//! windowing here, `shell::gpu` draws what [`scene`] returns (and spins the cube, see cube.rs). Shared by the standalone app and
 //! the plugin.
+use crate::cube;
 use crate::icons::layout;
-use shell::font;
-use shell::gpu::{self, Scene, Target};
+use bx_shell::font;
+use bx_shell::gpu::{self, Content, Scene, Target};
 use std::sync::atomic::{AtomicBool, AtomicU64};
 
-pub use shell::gpu::pack_size;
+pub use bx_shell::gpu::pack_size;
 
 /// Initial window size in px.
 pub const W: u32 = 400;
 pub const H: u32 = 300;
-/// Smallest allowed window size: the icon row (336 px) plus some margin.
+/// Smallest allowed window size, the same shape as the initial one.
 pub const MIN_W: u32 = 360;
 pub const MIN_H: u32 = MIN_W * H / W;
 
@@ -35,11 +36,19 @@ pub fn scene(w: u32, h: u32) -> Scene {
     Scene {
         flat: layout(w, h),
         textured,
+        mesh: cube::mesh(),
     }
 }
 
 /// Draws the GUI on `target` until `stop` is set: [`gpu::render`] with this module's scene and
 /// the font atlas, see there for the arguments. Run it on a thread of its own.
 pub fn run(target: &impl Target, size: &AtomicU64, stop: &AtomicBool, presented: &AtomicU64) {
-    gpu::render(target, size, stop, presented, &font::atlas(), scene)
+    let atlas = font::atlas();
+    let content = Content {
+        atlas: &atlas,
+        scene: &scene,
+        mesh_shader: cube::SHADER,
+        uniform: &cube::mvp,
+    };
+    gpu::render(target, size, stop, presented, &content)
 }

@@ -1,6 +1,6 @@
-//! Raw Vulkan (ash). Knows nothing about icons, fonts or layout: it draws a [`Scene`] (two lists of
-//! vertices, see below) with an [`Atlas`] texture on a [`Target`] (a window of this crate). What
-//! to draw is up to the app.
+//! Raw Vulkan (ash). Knows nothing about icons, fonts or layout: it draws a [`Scene`] (flat and
+//! textured 2D vertices, and a mesh for the app's own shader) on a [`Target`] (a window of this
+//! crate). What to draw is up to the app, see [`Content`].
 // no HiDPI, 4x MSAA is the only antialiasing, unwrap() instead of error handling (a
 // panic only kills the render thread, never the host).
 #![allow(unsafe_op_in_unsafe_fn)] // the whole renderer is one unsafe block
@@ -8,6 +8,8 @@ use ash::{Entry, Instance, khr, vk};
 use std::ffi::CStr;
 use std::io::Cursor;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
+
+use bx_shader::include_shader;
 
 #[cfg(all(unix, not(target_os = "macos")))]
 const EXTS: [&CStr; 2] = [khr::surface::NAME, khr::xlib_surface::NAME];
@@ -32,7 +34,13 @@ const SAMPLES: vk::SampleCountFlags = vk::SampleCountFlags::TYPE_4;
 /// Room for this many vertices (16 bytes each) in the vertex buffer: flat and textured together.
 const MAX_VERTS: usize = 8192;
 
-const SPV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/shader.spv"));
+/// Room for this many mesh vertices (24 bytes each).
+const MAX_MESH_VERTS: usize = 1024;
+
+/// 16 bits are plenty for what the mesh pass is for, and every device has this format.
+const DEPTH_FORMAT: vk::Format = vk::Format::D16_UNORM;
+
+const SPV: &[u8] = include_shader!("shader.wgsl");
 
 /// Packs a window size for the `size` argument of [`render`].
 pub const fn pack_size(w: u32, h: u32) -> u64 {
@@ -52,6 +60,26 @@ pub struct Scene {
     pub flat: Vec<[f32; 2]>,
     /// Drawn after `flat`, `[x, y, u, v]`, sampled from the atlas (the MSDF fragment shader).
     pub textured: Vec<[f32; 4]>,
+    /// Drawn between the two, with depth testing, by the app's own shader (see [`Content`]):
+    /// triangles as `[x, y, z, r, g, b]`, at most `MAX_MESH_VERTS` (1024) of them.
+    pub mesh: Vec<[f32; 6]>,
+}
+
+/// What the app brings to [`render`].
+pub struct Content<'a> {
+    /// For the `textured` vertices.
+    pub atlas: &'a Atlas,
+    /// Called with the window size (on the render thread) at the start and after every resize; it
+    /// may return a different number of vertices each time, up to [`MAX_VERTS`] in total.
+    pub scene: &'a dyn Fn(u32, u32) -> Scene,
+    /// SPIR-V of the shader for `Scene::mesh`: entry points `vs` (inputs: location 0 `vec3`
+    /// position, location 1 `vec3` colour) and `fs` (outputs `vec4`). Its one resource is
+    /// `@group(0) @binding(2) var<uniform>`, a `mat4x4<f32>` or a struct of 64 bytes. WGSL
+    /// conventions (y up, z 0..1) apply, no culling is done, depth testing is on.
+    pub mesh_shader: &'a [u8],
+    /// Called before every frame with the window size and the seconds since the start: the 16
+    /// floats of the uniform for `mesh_shader` (column-major if it is a matrix).
+    pub uniform: &'a dyn Fn(u32, u32, f32) -> [f32; 16],
 }
 
 /// Everything that depends on the surface size; rebuilt when the window is resized.
@@ -62,6 +90,7 @@ struct Frame {
     fbs: Vec<vk::Framebuffer>,
     cmds: Vec<vk::CommandBuffer>,
     msaa: (vk::Image, vk::DeviceMemory, vk::ImageView),
+    depth: (vk::Image, vk::DeviceMemory, vk::ImageView),
 }
 
 fn color_range() -> vk::ImageSubresourceRange {
@@ -75,8 +104,7 @@ fn color_range() -> vk::ImageSubresourceRange {
 /// `stop` is set. The swapchain follows the size of the window, so the caller only has to resize
 /// the window. Everything is destroyed again before this returns. Meant for a thread of its own.
 ///
-/// `scene` is called with the window size (on this thread) at the start and after every resize;
-/// it may return a different number of vertices each time, up to [`MAX_VERTS`] in total.
+/// `content` is what is drawn, see [`Content`]; its callbacks run on this thread.
 ///
 /// `size` (see [`pack_size`]) is the current window size; it is only read where the surface does
 /// not report its own size (Wayland), and must then be kept up to date by the caller. After every
@@ -89,7 +117,7 @@ fn color_range() -> vk::ImageSubresourceRange {
 /// # Panics
 ///
 /// On any Vulkan error (there is no error handling), without a Vulkan loader, if no device can
-/// present to the window, or if a scene has more than `MAX_VERTS` vertices. Resources are leaked
+/// present to the window, or if a scene has too many vertices. Resources are leaked
 /// then, which only matters if the process continues.
 // queue_wait_idle instead of frames-in-flight, constant redraw instead of redraw on demand.
 pub fn render(
@@ -97,11 +125,10 @@ pub fn render(
     size: &AtomicU64,
     stop: &AtomicBool,
     presented: &AtomicU64,
-    atlas: &Atlas,
-    scene: impl Fn(u32, u32) -> Scene,
+    content: &Content,
 ) {
     // sound because of the contract of `Target`
-    unsafe { run(target, size, stop, presented, atlas, scene) }
+    unsafe { run(target, size, stop, presented, content) }
 }
 
 unsafe fn run(
@@ -109,9 +136,9 @@ unsafe fn run(
     size: &AtomicU64,
     stop: &AtomicBool,
     presented: &AtomicU64,
-    atlas: &Atlas,
-    scene: impl Fn(u32, u32) -> Scene,
+    content: &Content,
 ) {
+    let (atlas, scene) = (content.atlas, content.scene);
     let entry = Entry::load().unwrap();
     let exts = EXTS.map(|e| e.as_ptr());
     let inst = entry
@@ -203,6 +230,15 @@ unsafe fn run(
     let verts = dev
         .map_memory(vmem, 0, vk::WHOLE_SIZE, vk::MemoryMapFlags::empty())
         .unwrap() as *mut [f32; 4];
+    let (mvb, mvmem) = buffer(MAX_MESH_VERTS * 24, vk::BufferUsageFlags::VERTEX_BUFFER);
+    let mverts = dev
+        .map_memory(mvmem, 0, vk::WHOLE_SIZE, vk::MemoryMapFlags::empty())
+        .unwrap() as *mut [f32; 6];
+    // the mesh shader's uniform, written before every frame
+    let (ubo, umem) = buffer(64, vk::BufferUsageFlags::UNIFORM_BUFFER);
+    let uptr = dev
+        .map_memory(umem, 0, vk::WHOLE_SIZE, vk::MemoryMapFlags::empty())
+        .unwrap() as *mut [f32; 16];
 
     // the atlas: staging buffer -> device-local image, left in SHADER_READ_ONLY_OPTIMAL
     let (stg, stg_mem) = buffer(atlas.rgba.len(), vk::BufferUsageFlags::TRANSFER_SRC);
@@ -337,7 +373,8 @@ unsafe fn run(
             None,
         )
         .unwrap();
-    // set 0: binding 0 the atlas, binding 1 its sampler (WGSL keeps them separate)
+    // set 0: binding 0 the atlas, binding 1 its sampler (WGSL keeps them separate), binding 2 the
+    // uniform of the mesh shader
     let dsl = dev
         .create_descriptor_set_layout(
             &vk::DescriptorSetLayoutCreateInfo::default().bindings(&[
@@ -351,6 +388,11 @@ unsafe fn run(
                     .descriptor_type(vk::DescriptorType::SAMPLER)
                     .descriptor_count(1)
                     .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+                vk::DescriptorSetLayoutBinding::default()
+                    .binding(2)
+                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                    .descriptor_count(1)
+                    .stage_flags(vk::ShaderStageFlags::VERTEX),
             ]),
             None,
         )
@@ -365,6 +407,9 @@ unsafe fn run(
                         .descriptor_count(1),
                     vk::DescriptorPoolSize::default()
                         .ty(vk::DescriptorType::SAMPLER)
+                        .descriptor_count(1),
+                    vk::DescriptorPoolSize::default()
+                        .ty(vk::DescriptorType::UNIFORM_BUFFER)
                         .descriptor_count(1),
                 ]),
             None,
@@ -391,11 +436,19 @@ unsafe fn run(
                 .dst_binding(1)
                 .descriptor_type(vk::DescriptorType::SAMPLER)
                 .image_info(&[vk::DescriptorImageInfo::default().sampler(sampler)]),
+            vk::WriteDescriptorSet::default()
+                .dst_set(set)
+                .dst_binding(2)
+                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                .buffer_info(&[vk::DescriptorBufferInfo::default()
+                    .buffer(ubo)
+                    .offset(0)
+                    .range(64)]),
         ],
         &[],
     );
 
-    // render pass: draw into a multisampled image, resolve it into the swapchain image
+    // render pass: draw into a multisampled image (with depth), resolve it into the swapchain image
     let attach = [
         vk::AttachmentDescription::default()
             .format(fmt.format)
@@ -411,7 +464,17 @@ unsafe fn run(
             .store_op(vk::AttachmentStoreOp::STORE)
             .initial_layout(vk::ImageLayout::UNDEFINED)
             .final_layout(vk::ImageLayout::PRESENT_SRC_KHR),
+        vk::AttachmentDescription::default()
+            .format(DEPTH_FORMAT)
+            .samples(SAMPLES)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(vk::ImageLayout::UNDEFINED)
+            .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
     ];
+    let depth_ref = vk::AttachmentReference::default()
+        .attachment(2)
+        .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
     let color_ref = [vk::AttachmentReference::default()
         .attachment(0)
         .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)];
@@ -421,12 +484,19 @@ unsafe fn run(
     let subpass = [vk::SubpassDescription::default()
         .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
         .color_attachments(&color_ref)
-        .resolve_attachments(&resolve_ref)];
+        .resolve_attachments(&resolve_ref)
+        .depth_stencil_attachment(&depth_ref)];
+    let stage = vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+        | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS
+        | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS;
     let dep = [vk::SubpassDependency::default()
         .src_subpass(vk::SUBPASS_EXTERNAL)
-        .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
-        .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
-        .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)];
+        .src_stage_mask(stage)
+        .dst_stage_mask(stage)
+        .dst_access_mask(
+            vk::AccessFlags::COLOR_ATTACHMENT_WRITE
+                | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+        )];
     let rp = dev
         .create_render_pass(
             &vk::RenderPassCreateInfo::default()
@@ -437,7 +507,8 @@ unsafe fn run(
         )
         .unwrap();
 
-    // pipelines: all shaders live in one SPIR-V module (entry points "vs", "fs_flat", "fs_text").
+    // pipelines: the shaders of the 2D parts live in one SPIR-V module (entry points "vs",
+    // "fs_flat", "fs_text"), the app's mesh shader is another module ("vs", "fs").
     // Viewport and scissor are dynamic so a resize does not need new pipelines.
     let code = ash::util::read_spv(&mut Cursor::new(SPV)).unwrap();
     let module = dev
@@ -456,6 +527,23 @@ unsafe fn run(
         ]
     };
     let (flat_stages, text_stages) = (stages(c"fs_flat"), stages(c"fs_text"));
+    let mesh_code = ash::util::read_spv(&mut Cursor::new(content.mesh_shader)).unwrap();
+    let mesh_module = dev
+        .create_shader_module(
+            &vk::ShaderModuleCreateInfo::default().code(&mesh_code),
+            None,
+        )
+        .unwrap();
+    let mesh_stages = [
+        vk::PipelineShaderStageCreateInfo::default()
+            .stage(vk::ShaderStageFlags::VERTEX)
+            .module(mesh_module)
+            .name(c"vs"),
+        vk::PipelineShaderStageCreateInfo::default()
+            .stage(vk::ShaderStageFlags::FRAGMENT)
+            .module(mesh_module)
+            .name(c"fs"),
+    ];
     let pl = dev
         .create_pipeline_layout(
             &vk::PipelineLayoutCreateInfo::default().set_layouts(&[dsl]),
@@ -488,6 +576,28 @@ unsafe fn run(
     let vin = vk::PipelineVertexInputStateCreateInfo::default()
         .vertex_binding_descriptions(&binds)
         .vertex_attribute_descriptions(&attrs);
+    let mesh_binds = [vk::VertexInputBindingDescription::default()
+        .stride(24)
+        .input_rate(vk::VertexInputRate::VERTEX)];
+    let mesh_attrs = [
+        vk::VertexInputAttributeDescription::default()
+            .location(0)
+            .format(vk::Format::R32G32B32_SFLOAT)
+            .offset(0),
+        vk::VertexInputAttributeDescription::default()
+            .location(1)
+            .format(vk::Format::R32G32B32_SFLOAT)
+            .offset(12),
+    ];
+    let mesh_vin = vk::PipelineVertexInputStateCreateInfo::default()
+        .vertex_binding_descriptions(&mesh_binds)
+        .vertex_attribute_descriptions(&mesh_attrs);
+    // only the mesh is depth tested
+    let depth_off = vk::PipelineDepthStencilStateCreateInfo::default();
+    let depth_on = vk::PipelineDepthStencilStateCreateInfo::default()
+        .depth_test_enable(true)
+        .depth_write_enable(true)
+        .depth_compare_op(vk::CompareOp::LESS);
     let ia = vk::PipelineInputAssemblyStateCreateInfo::default()
         .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
     let vp = vk::PipelineViewportStateCreateInfo::default()
@@ -509,16 +619,29 @@ unsafe fn run(
         .rasterization_state(&rs)
         .multisample_state(&ms)
         .color_blend_state(&cb)
+        .depth_stencil_state(&depth_off)
         .layout(pl)
         .render_pass(rp);
     let pipes = dev
         .create_graphics_pipelines(
             vk::PipelineCache::null(),
-            &[base.stages(&flat_stages), base.stages(&text_stages)],
+            &[
+                base.stages(&flat_stages),
+                base.stages(&text_stages),
+                base.stages(&mesh_stages)
+                    .vertex_input_state(&mesh_vin)
+                    .depth_stencil_state(&depth_on),
+            ],
             None,
         )
         .unwrap();
-    let (pipe_flat, pipe_text) = (pipes[0], pipes[1]);
+    let (pipe_flat, pipe_text, pipe_mesh) = (pipes[0], pipes[1], pipes[2]);
+    let depth_clear = vk::ClearValue {
+        depth_stencil: vk::ClearDepthStencilValue {
+            depth: 1.0,
+            stencil: 0,
+        },
+    };
 
     let clear = vk::ClearValue {
         color: vk::ClearColorValue {
@@ -568,43 +691,63 @@ unsafe fn run(
             .unwrap();
         let images = sc_d.get_swapchain_images(sc).unwrap();
 
-        // the multisampled image that the render pass draws into
-        let img = dev
-            .create_image(
-                &vk::ImageCreateInfo::default()
-                    .image_type(vk::ImageType::TYPE_2D)
-                    .format(fmt.format)
-                    .extent(vk::Extent3D {
-                        width: extent.width,
-                        height: extent.height,
-                        depth: 1,
-                    })
-                    .mip_levels(1)
-                    .array_layers(1)
-                    .samples(SAMPLES)
-                    .tiling(vk::ImageTiling::OPTIMAL)
-                    .usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
-                    .sharing_mode(vk::SharingMode::EXCLUSIVE)
-                    .initial_layout(vk::ImageLayout::UNDEFINED),
+        // the multisampled images that the render pass draws into: colour and depth
+        let msaa_image = |format, usage| {
+            let img = dev
+                .create_image(
+                    &vk::ImageCreateInfo::default()
+                        .image_type(vk::ImageType::TYPE_2D)
+                        .format(format)
+                        .extent(vk::Extent3D {
+                            width: extent.width,
+                            height: extent.height,
+                            depth: 1,
+                        })
+                        .mip_levels(1)
+                        .array_layers(1)
+                        .samples(SAMPLES)
+                        .tiling(vk::ImageTiling::OPTIMAL)
+                        .usage(usage)
+                        .sharing_mode(vk::SharingMode::EXCLUSIVE)
+                        .initial_layout(vk::ImageLayout::UNDEFINED),
+                    None,
+                )
+                .unwrap();
+            let req = dev.get_image_memory_requirements(img);
+            let mem = dev
+                .allocate_memory(
+                    &vk::MemoryAllocateInfo::default()
+                        .allocation_size(req.size)
+                        .memory_type_index(mem_type(
+                            req.memory_type_bits,
+                            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                        )),
+                    None,
+                )
+                .unwrap();
+            dev.bind_image_memory(img, mem, 0).unwrap();
+            (img, mem)
+        };
+        let (img, imem) = msaa_image(fmt.format, vk::ImageUsageFlags::COLOR_ATTACHMENT);
+        let (dimg, dmem) = msaa_image(DEPTH_FORMAT, vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT);
+        let dview = dev
+            .create_image_view(
+                &vk::ImageViewCreateInfo::default()
+                    .image(dimg)
+                    .view_type(vk::ImageViewType::TYPE_2D)
+                    .format(DEPTH_FORMAT)
+                    .subresource_range(
+                        vk::ImageSubresourceRange::default()
+                            .aspect_mask(vk::ImageAspectFlags::DEPTH)
+                            .level_count(1)
+                            .layer_count(1),
+                    ),
                 None,
             )
             .unwrap();
-        let req = dev.get_image_memory_requirements(img);
-        let imem = dev
-            .allocate_memory(
-                &vk::MemoryAllocateInfo::default()
-                    .allocation_size(req.size)
-                    .memory_type_index(mem_type(
-                        req.memory_type_bits,
-                        vk::MemoryPropertyFlags::DEVICE_LOCAL,
-                    )),
-                None,
-            )
-            .unwrap();
-        dev.bind_image_memory(img, imem, 0).unwrap();
         let mview = view(img, fmt.format);
 
-        // flat vertices first (uv unused), then the textured ones
+        // the 2D vertices: flat first (uv unused), then the textured ones; the mesh has its own buffer
         let s = scene(extent.width, extent.height);
         let (nf, nt) = (s.flat.len(), s.textured.len());
         assert!(nf + nt <= MAX_VERTS, "scene has too many vertices");
@@ -614,6 +757,9 @@ unsafe fn run(
         verts
             .add(nf)
             .copy_from_nonoverlapping(s.textured.as_ptr(), nt);
+        let nm = s.mesh.len();
+        assert!(nm <= MAX_MESH_VERTS, "mesh has too many vertices");
+        mverts.copy_from_nonoverlapping(s.mesh.as_ptr(), nm);
 
         let cmds = dev
             .allocate_command_buffers(
@@ -633,7 +779,7 @@ unsafe fn run(
                 .create_framebuffer(
                     &vk::FramebufferCreateInfo::default()
                         .render_pass(rp)
-                        .attachments(&[mview, v])
+                        .attachments(&[mview, v, dview])
                         .width(extent.width)
                         .height(extent.height)
                         .layers(1),
@@ -648,7 +794,7 @@ unsafe fn run(
                     .render_pass(rp)
                     .framebuffer(fb)
                     .render_area(area)
-                    .clear_values(&[clear, clear]),
+                    .clear_values(&[clear, clear, depth_clear]),
                 vk::SubpassContents::INLINE,
             );
             dev.cmd_set_viewport(
@@ -664,11 +810,16 @@ unsafe fn run(
                 }],
             );
             dev.cmd_set_scissor(cmd, 0, &[area]);
+            dev.cmd_bind_descriptor_sets(cmd, vk::PipelineBindPoint::GRAPHICS, pl, 0, &[set], &[]);
+            // flat, then the mesh, then the text on top
             dev.cmd_bind_vertex_buffers(cmd, 0, &[vb], &[0]);
             dev.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, pipe_flat);
             dev.cmd_draw(cmd, nf as u32, 1, 0, 0);
+            dev.cmd_bind_vertex_buffers(cmd, 0, &[mvb], &[0]);
+            dev.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, pipe_mesh);
+            dev.cmd_draw(cmd, nm as u32, 1, 0, 0);
+            dev.cmd_bind_vertex_buffers(cmd, 0, &[vb], &[0]);
             dev.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, pipe_text);
-            dev.cmd_bind_descriptor_sets(cmd, vk::PipelineBindPoint::GRAPHICS, pl, 0, &[set], &[]);
             dev.cmd_draw(cmd, nt as u32, 1, nf as u32, 0);
             dev.cmd_end_render_pass(cmd);
             dev.end_command_buffer(cmd).unwrap();
@@ -682,6 +833,7 @@ unsafe fn run(
             fbs,
             cmds,
             msaa: (img, imem, mview),
+            depth: (dimg, dmem, dview),
         }
     };
     // destroys a `Frame`, the GPU must be idle
@@ -696,6 +848,9 @@ unsafe fn run(
         dev.destroy_image_view(f.msaa.2, None);
         dev.destroy_image(f.msaa.0, None);
         dev.free_memory(f.msaa.1, None);
+        dev.destroy_image_view(f.depth.2, None);
+        dev.destroy_image(f.depth.0, None);
+        dev.free_memory(f.depth.1, None);
         sc_d.destroy_swapchain(f.sc, None);
     };
 
@@ -707,6 +862,7 @@ unsafe fn run(
     let done = dev
         .create_semaphore(&vk::SemaphoreCreateInfo::default(), None)
         .unwrap();
+    let start = std::time::Instant::now();
     while !stop.load(Relaxed) {
         let now = extent_of();
         if now.width == 0 || now.height == 0 {
@@ -719,6 +875,12 @@ unsafe fn run(
             let new = build(frame.sc, now);
             free(std::mem::replace(&mut frame, new));
         }
+        // the GPU is idle here (queue_wait_idle below), so the uniform can be rewritten
+        uptr.write((content.uniform)(
+            frame.extent.width,
+            frame.extent.height,
+            start.elapsed().as_secs_f32(),
+        ));
         // errors (e.g. out of date mid-resize) just skip the frame; the next one rebuilds
         if let Ok((i, _)) = sc_d.acquire_next_image(frame.sc, u64::MAX, acquire, vk::Fence::null())
         {
@@ -757,6 +919,12 @@ unsafe fn run(
     dev.destroy_command_pool(pool, None);
     dev.destroy_buffer(vb, None);
     dev.free_memory(vmem, None); // also unmaps
+    dev.destroy_buffer(mvb, None);
+    dev.free_memory(mvmem, None);
+    dev.destroy_buffer(ubo, None);
+    dev.free_memory(umem, None);
+    dev.destroy_pipeline(pipe_mesh, None);
+    dev.destroy_shader_module(mesh_module, None);
     dev.destroy_pipeline(pipe_flat, None);
     dev.destroy_pipeline(pipe_text, None);
     dev.destroy_pipeline_layout(pl, None);
