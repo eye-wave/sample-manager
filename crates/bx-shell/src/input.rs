@@ -23,6 +23,10 @@ pub enum Event {
     /// Typed text, one character at a time (never a control character).
     Char(char),
     Key(Key),
+    /// The wheel: this many rows down (negative: up).
+    Scroll(i32),
+    /// The left button went up (or was taken away), wherever the mouse is.
+    Release,
 }
 
 pub struct Events {
@@ -39,6 +43,10 @@ impl Events {
     }
     pub fn push(&self, e: Event) {
         self.queue.lock().unwrap().push(e);
+        self.dirty.store(true, Relaxed);
+    }
+    /// Makes the next frame draw again without an event (something else changed, like a scan).
+    pub fn wake(&self) {
         self.dirty.store(true, Relaxed);
     }
     /// Everything pushed since the last call, oldest first.

@@ -2,7 +2,9 @@
 //! what [`scene`] returns. Shared by the standalone app and the plugin. The tree is view.rs, the
 //! layout is `bx_ui`; this file only turns the draw list into vertices.
 use crate::icons::ICONS;
-use crate::view::{SEARCH, Ui, view};
+use crate::scan::{Tree, scan};
+use crate::state::tracked_dirs;
+use crate::view::{FOLDER0, SCROLL, SEARCH, Ui, view};
 use bx_shell::font;
 use bx_shell::gpu::{self, Content, Scene, Target, Vert};
 use bx_shell::input::{Event, Events, Key};
@@ -32,10 +34,27 @@ pub fn scene(w: u32, h: u32, mouse: [f32; 2], ui: &mut Ui, events: Vec<Event>) -
         match e {
             Event::Click(x, y) => {
                 let at = [x as f32, y as f32];
-                ui.search.focused = ui.rects.iter().any(|&(id, [rx, ry, rw, rh])| {
-                    id == SEARCH && (rx..rx + rw).contains(&at[0]) && (ry..ry + rh).contains(&at[1])
-                });
+                let hit: Vec<u32> = ui
+                    .rects
+                    .iter()
+                    .filter(|&&(_, [rx, ry, rw, rh])| {
+                        (rx..rx + rw).contains(&at[0]) && (ry..ry + rh).contains(&at[1])
+                    })
+                    .map(|&(id, _)| id)
+                    .collect();
+                ui.search.focused = hit.contains(&SEARCH);
+                if hit.contains(&SCROLL) {
+                    ui.grab(at[1], h);
+                }
+                if let Some(&id) = hit.iter().find(|&&id| id >= FOLDER0) {
+                    let id = id - FOLDER0;
+                    if !ui.toggled.remove(&id) {
+                        ui.toggled.insert(id);
+                    }
+                }
             }
+            Event::Scroll(n) => ui.first = ui.first.saturating_add_signed(n as isize * 3),
+            Event::Release => ui.drag = None,
             Event::Char(c) if ui.search.focused => ui.search.edit(Edit::Char(c)),
             Event::Key(Key::Enter | Key::Escape) => ui.search.focused = false,
             Event::Key(k) if ui.search.focused => {
@@ -51,6 +70,11 @@ pub fn scene(w: u32, h: u32, mouse: [f32; 2], ui: &mut Ui, events: Vec<Event>) -
             }
             _ => {}
         }
+    }
+    ui.refresh();
+    ui.clamp(h);
+    if ui.drag.is_some() && !mouse[1].is_nan() {
+        ui.drag_to(mouse[1], h); // the thumb follows the mouse
     }
     let (fw, fh) = (w as f32, h as f32);
     let ndc = |[x, y]: [f32; 2], c: [f32; 4]| -> Vert {
@@ -99,7 +123,7 @@ pub fn scene(w: u32, h: u32, mouse: [f32; 2], ui: &mut Ui, events: Vec<Event>) -
             }
             (flat, textured)
         };
-    let l = layout(&view(w, ui), [0.0, 0.0, fw, fh], &font::width, mouse);
+    let l = layout(&view(w, h, ui), [0.0, 0.0, fw, fh], &font::width, mouse);
     ui.rects = l.rects.clone();
     let ((flat, textured), (over_flat, over_textured)) = (layer(l.base), layer(l.over));
     Scene {
@@ -128,12 +152,20 @@ pub fn run(
     events: &Events,
 ) {
     let atlas = font::atlas();
-    let ui = Mutex::new(Ui::new());
-    let content = Content {
-        atlas: &atlas,
-        scene: &|w, h, m| scene(w, h, m, &mut ui.lock().unwrap(), events.take()),
-        mouse,
-        events,
-    };
-    gpu::render(target, size, stop, presented, &content)
+    let tree = Tree::default();
+    // the scan runs beside the renderer and wakes it when done; `stop` cuts it short
+    std::thread::scope(|s| {
+        s.spawn(|| {
+            *tree.lock().unwrap() = Some(scan(&tracked_dirs(), stop));
+            events.wake();
+        });
+        let ui = Mutex::new(Ui::new(tree.clone()));
+        let content = Content {
+            atlas: &atlas,
+            scene: &|w, h, m| scene(w, h, m, &mut ui.lock().unwrap(), events.take()),
+            mouse,
+            events,
+        };
+        gpu::render(target, size, stop, presented, &content)
+    })
 }

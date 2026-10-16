@@ -81,11 +81,11 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT
             WM_LBUTTONDOWN => {
                 let (x, y) = (l as i16 as i32, (l >> 16) as i16 as i32);
                 EVENTS.push(Event::Click(x, y));
+                SetCapture(h); // so that the release (the end of a scrollbar drag) arrives too
                 let mut r: RECT = std::mem::zeroed();
                 GetClientRect(h, &mut r);
                 if grip(x, y, r.right as u32, r.bottom as u32) {
                     *DRAG.lock().unwrap() = Some((x, r.right as u32));
-                    SetCapture(h);
                 }
                 0
             }
@@ -145,7 +145,13 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT
                 MOUSE.store(NO_MOUSE, Relaxed);
                 0
             }
+            // whole notches only, a smooth wheel (delta < 120) does not scroll
+            WM_MOUSEWHEEL => {
+                EVENTS.push(Event::Scroll(-((w >> 16) as i16 as i32) / 120));
+                0
+            }
             WM_LBUTTONUP | WM_CAPTURECHANGED => {
+                EVENTS.push(Event::Release);
                 *DRAG.lock().unwrap() = None;
                 if m == WM_LBUTTONUP {
                     ReleaseCapture();

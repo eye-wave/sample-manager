@@ -26,7 +26,11 @@ impl Native {
             let win = xlib::XCreateSimpleWindow(dpy, parent as xlib::Window, 0, 0, w, h, 0, 0, 0);
             xlib::XSetWindowBackgroundPixmap(dpy, win, 0); // None: the server must not clear on resize
             // the host never forwards input to a child window; ask the server for it directly
-            xlib::XSelectInput(dpy, win, xlib::KeyPressMask | xlib::ButtonPressMask);
+            xlib::XSelectInput(
+                dpy,
+                win,
+                xlib::KeyPressMask | xlib::ButtonPressMask | xlib::ButtonReleaseMask,
+            );
             xlib::XFlush(dpy); // so `vdpy` can see the window
             Ok(Self {
                 dpy: dpy as usize,

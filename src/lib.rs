@@ -2,6 +2,9 @@
 //! (main.rs) and the CLAP plugin (plugin.rs). Windows, Vulkan and text are the `shell` crate.
 pub mod icons;
 pub mod render;
+mod scan;
+mod search;
+mod state;
 mod theme;
 mod view;
 

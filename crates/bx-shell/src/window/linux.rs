@@ -180,7 +180,12 @@ impl Window {
                             self.dragging.store(true, Relaxed);
                         }
                     }
+                    xlib::ButtonPress if matches!(ev.button.button, 4 | 5) => {
+                        self.events
+                            .push(Event::Scroll(if ev.button.button == 4 { -1 } else { 1 }));
+                    }
                     xlib::ButtonRelease => {
+                        self.events.push(Event::Release);
                         drag = None;
                         self.dragging.store(false, Relaxed);
                     }

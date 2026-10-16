@@ -1,0 +1,12 @@
+diff a/crates/bx-shell/src/native/linux.rs b/crates/bx-shell/src/native/linux.rs	(rejected hunks)
+@@ -75,6 +79,10 @@
+                         xlib::XSetInputFocus(dpy, self.win, xlib::RevertToParent, xlib::CurrentTime);
+                         events.push(crate::input::Event::Click(ev.button.x, ev.button.y));
+                     }
++                    xlib::ButtonPress if matches!(ev.button.button, 4 | 5) => {
++                        events.push(crate::input::Event::Scroll(if ev.button.button == 4 { -1 } else { 1 }));
++                    }
++                    xlib::ButtonRelease => events.push(crate::input::Event::Release),
+                     xlib::KeyPress => crate::window::push_key(events, &mut ev.key),
+                     _ => {}
+                 }
