@@ -138,7 +138,7 @@ struct Open {
     size: Arc<AtomicU64>,
     /// Where the mouse is on the window (`pack_mouse`), polled with the timer, for hover effects.
     mouse: Arc<AtomicU64>,
-    /// Nobody pushes here: ponytail, keys in a host's window are the host's, no typing in the plugin yet.
+    /// Clicks and typing, pushed by `Native::poll` on the timer.
     events: Arc<UiEvents>,
     /// Running while shown, to poll the mouse.
     timer: Option<TimerId>,
@@ -191,6 +191,8 @@ impl PluginTimerImpl for Main<'_> {
         let target = {
             let mut g = self.open.borrow_mut();
             let Some(o) = g.as_mut() else { return };
+            #[cfg(unix)] // Win32 child windows get no input yet
+            o.native.poll(&o.events);
             let p = o.native.pointer();
             let on = (0..w as i32).contains(&p.x) && (0..h as i32).contains(&p.y);
             o.mouse

@@ -41,6 +41,44 @@ unsafe fn set_size(dpy: *mut xlib::Display, win: xlib::Window, w: u32, h: u32) {
     }
 }
 
+/// Turns an X11 key press into `Key` / `Char` events.
+pub(crate) unsafe fn push_key(events: &Events, ev: &mut xlib::XKeyEvent) {
+    let mut buf = [0u8; 8];
+    let mut sym = 0;
+    let n = unsafe {
+        xlib::XLookupString(
+            ev,
+            buf.as_mut_ptr() as _,
+            buf.len() as _,
+            &mut sym,
+            std::ptr::null_mut(),
+        )
+    };
+    use x11::keysym::*;
+    #[allow(non_upper_case_globals)] // the keysym constants are named like in X11
+    let key = match sym as u32 {
+        XK_BackSpace => Some(Key::Backspace),
+        XK_Delete => Some(Key::Delete),
+        XK_Left => Some(Key::Left),
+        XK_Right => Some(Key::Right),
+        XK_Home => Some(Key::Home),
+        XK_End => Some(Key::End),
+        XK_Return | XK_KP_Enter => Some(Key::Enter),
+        XK_Escape => Some(Key::Escape),
+        _ => None,
+    };
+    if let Some(k) = key {
+        events.push(Event::Key(k));
+    } else {
+        // Latin-1 only (XLookupString), Xutf8LookupString needs an input method
+        for &b in &buf[..n.max(0) as usize] {
+            if b >= 32 && b != 127 {
+                events.push(Event::Char(b as char));
+            }
+        }
+    }
+}
+
 impl Window {
     pub fn new(title: &str, size: (u32, u32), min: (u32, u32), grip: Grip) -> Self {
         unsafe {
@@ -134,41 +172,7 @@ impl Window {
                             }
                         }
                     }
-                    xlib::KeyPress => {
-                        let mut buf = [0u8; 8];
-                        let mut sym = 0;
-                        let n = xlib::XLookupString(
-                            &mut ev.key,
-                            buf.as_mut_ptr() as _,
-                            buf.len() as _,
-                            &mut sym,
-                            std::ptr::null_mut(),
-                        );
-                        use x11::keysym::*;
-                        #[allow(non_upper_case_globals)]
-                        // the keysym constants are named like in X11
-                        let key = match sym as u32 {
-                            XK_BackSpace => Some(Key::Backspace),
-                            XK_Delete => Some(Key::Delete),
-                            XK_Left => Some(Key::Left),
-                            XK_Right => Some(Key::Right),
-                            XK_Home => Some(Key::Home),
-                            XK_End => Some(Key::End),
-                            XK_Return | XK_KP_Enter => Some(Key::Enter),
-                            XK_Escape => Some(Key::Escape),
-                            _ => None,
-                        };
-                        if let Some(k) = key {
-                            self.events.push(Event::Key(k));
-                        } else {
-                            // ponytail: Latin-1 only (XLookupString), Xutf8LookupString needs an input method
-                            for &b in &buf[..n.max(0) as usize] {
-                                if b >= 32 && b != 127 {
-                                    self.events.push(Event::Char(b as char));
-                                }
-                            }
-                        }
-                    }
+                    xlib::KeyPress => push_key(&self.events, &mut ev.key),
                     xlib::ButtonPress if ev.button.button == 1 => {
                         self.events.push(Event::Click(ev.button.x, ev.button.y));
                         if (self.grip)(ev.button.x, ev.button.y, w, h) {

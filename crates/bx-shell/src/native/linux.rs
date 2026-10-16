@@ -25,6 +25,8 @@ impl Native {
             }
             let win = xlib::XCreateSimpleWindow(dpy, parent as xlib::Window, 0, 0, w, h, 0, 0, 0);
             xlib::XSetWindowBackgroundPixmap(dpy, win, 0); // None: the server must not clear on resize
+            // the host never forwards input to a child window; ask the server for it directly
+            xlib::XSelectInput(dpy, win, xlib::KeyPressMask | xlib::ButtonPressMask);
             xlib::XFlush(dpy); // so `vdpy` can see the window
             Ok(Self {
                 dpy: dpy as usize,
@@ -57,6 +59,31 @@ impl Native {
         unsafe {
             xlib::XResizeWindow(self.dpy as _, self.win, w, h);
             xlib::XFlush(self.dpy as _);
+        }
+    }
+
+    /// Drains this window's key and click events into `events`. A click also takes the keyboard
+    /// focus: the host's window has it otherwise, and typing would never get here.
+    pub fn poll(&self, events: &crate::input::Events) {
+        let dpy = self.dpy as *mut xlib::Display;
+        unsafe {
+            let mut ev: xlib::XEvent = std::mem::zeroed();
+            while xlib::XPending(dpy) > 0 {
+                xlib::XNextEvent(dpy, &mut ev);
+                match ev.get_type() {
+                    xlib::ButtonPress if ev.button.button == 1 => {
+                        xlib::XSetInputFocus(
+                            dpy,
+                            self.win,
+                            xlib::RevertToParent,
+                            xlib::CurrentTime,
+                        );
+                        events.push(crate::input::Event::Click(ev.button.x, ev.button.y));
+                    }
+                    xlib::KeyPress => crate::window::push_key(events, &mut ev.key),
+                    _ => {}
+                }
+            }
         }
     }
 
