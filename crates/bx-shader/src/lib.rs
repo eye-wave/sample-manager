@@ -31,7 +31,7 @@ pub fn main(path: impl AsRef<std::path::Path>) {
             .unwrap_or_else(|e| panic!("{}/{name}: validation error:\n{e:?}", path.display()));
 
         let options = spv::Options {
-            flags: spv::WriterFlags::empty(),
+            flags: spv::WriterFlags::ADJUST_COORDINATE_SPACE,
             ..Default::default()
         };
         let words = spv::write_vec(&module, &info, &options, None)
