@@ -7,20 +7,13 @@ fn file() -> Option<PathBuf> {
 }
 
 /// The tracked directories; the first run (no file yet) tracks `$HOME/Music` and saves that.
-// a path with a newline in it does not round-trip; switch to postcard/serde if state grows
+// ponytail: a path with a newline in it does not round-trip; switch to postcard/serde if state grows
 pub fn tracked_dirs() -> Vec<PathBuf> {
     let Some(f) = file() else { return vec![] };
     if let Ok(s) = std::fs::read_to_string(&f) {
-        return s
-            .lines()
-            .filter(|l| !l.is_empty())
-            .map(PathBuf::from)
-            .collect();
+        return s.lines().filter(|l| !l.is_empty()).map(PathBuf::from).collect();
     }
-    let list: Vec<PathBuf> = dirs::home_dir()
-        .map(|h| h.join("Music"))
-        .into_iter()
-        .collect();
+    let list: Vec<PathBuf> = dirs::home_dir().map(|h| h.join("Music")).into_iter().collect();
     save(&f, &list);
     list
 }

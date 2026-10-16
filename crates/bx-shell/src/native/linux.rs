@@ -76,14 +76,13 @@ impl Native {
                 xlib::XNextEvent(dpy, &mut ev);
                 match ev.get_type() {
                     xlib::ButtonPress if ev.button.button == 1 => {
-                        xlib::XSetInputFocus(
-                            dpy,
-                            self.win,
-                            xlib::RevertToParent,
-                            xlib::CurrentTime,
-                        );
+                        xlib::XSetInputFocus(dpy, self.win, xlib::RevertToParent, xlib::CurrentTime);
                         events.push(crate::input::Event::Click(ev.button.x, ev.button.y));
                     }
+                    xlib::ButtonPress if matches!(ev.button.button, 4 | 5) => {
+                        events.push(crate::input::Event::Scroll(if ev.button.button == 4 { -1 } else { 1 }));
+                    }
+                    xlib::ButtonRelease => events.push(crate::input::Event::Release),
                     xlib::KeyPress => crate::window::push_key(events, &mut ev.key),
                     _ => {}
                 }

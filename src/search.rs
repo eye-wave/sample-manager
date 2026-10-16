@@ -18,7 +18,7 @@ pub fn search(files: &[Sample], query: &str) -> Vec<usize> {
         .enumerate()
         .filter_map(|(i, f)| m.fuzzy_match(&f.name, query).map(|s| (s, i)))
         .collect();
-    // a full sort, `select_nth_unstable` if a million files ever make it slow
+    // ponytail: a full sort, `select_nth_unstable` if a million files ever make it slow
     hits.sort_unstable_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
     hits.into_iter().take(MAX).map(|(_, i)| i).collect()
 }
@@ -28,13 +28,7 @@ mod tests {
     use super::*;
 
     fn samples(names: &[&str]) -> Vec<Sample> {
-        names
-            .iter()
-            .map(|n| Sample {
-                name: n.to_string(),
-                path: n.into(),
-            })
-            .collect()
+        names.iter().map(|n| Sample { name: n.to_string(), path: n.into() }).collect()
     }
 
     #[test]
@@ -46,9 +40,6 @@ mod tests {
         assert_eq!(f[search(&f, "snare")[0]].name, "snare.wav");
         assert!(search(&f, "zzz").is_empty());
         let many = samples(&vec!["a.wav"; 500]);
-        assert_eq!(
-            (search(&many, "").len(), search(&many, "a").len()),
-            (MAX, MAX)
-        );
+        assert_eq!((search(&many, "").len(), search(&many, "a").len()), (MAX, MAX));
     }
 }

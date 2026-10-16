@@ -23,7 +23,7 @@ const WM_MOUSELEAVE: u32 = 0x02A3;
 // no WS_THICKFRAME / WS_MAXIMIZEBOX: the edges do not resize
 const STYLE: u32 = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VISIBLE;
 
-// the window procedure reads this instead of per-window state, so there is one window
+// ponytail: the window procedure reads this instead of per-window state, so there is one window
 // per process; GWLP_USERDATA if that ever matters.
 static STATE: OnceLock<(Grip, (u32, u32), (u32, u32))> = OnceLock::new(); // grip, min, aspect
 
@@ -122,7 +122,7 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT
                 }
                 0
             }
-            // typed text: UTF-16 units (characters outside the BMP arrive as two surrogates
+            // typed text: UTF-16 units (ponytail: characters outside the BMP arrive as two surrogates
             // and are dropped); Backspace, Enter and Escape are control characters here
             WM_CHAR => {
                 match char::from_u32(w as u32) {
@@ -149,7 +149,7 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT
                 MOUSE.store(NO_MOUSE, Relaxed);
                 0
             }
-            // whole notches only, a smooth wheel (delta < 120) does not scroll
+            // ponytail: whole notches only, a smooth wheel (delta < 120) does not scroll
             WM_MOUSEWHEEL => {
                 EVENTS.push(Event::Scroll(-((w >> 16) as i16 as i32) / 120));
                 0

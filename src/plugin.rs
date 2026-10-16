@@ -138,7 +138,8 @@ struct Open {
     size: Arc<AtomicU64>,
     /// Where the mouse is on the window (`pack_mouse`), polled with the timer, for hover effects.
     mouse: Arc<AtomicU64>,
-    /// Clicks and typing, pushed by `Native::poll` on the timer.
+    /// Clicks, typing and the wheel: pushed by `Native::poll` on the timer (X11) or by the window
+    /// procedure (Win32).
     events: Arc<UiEvents>,
     /// Running while shown, to poll the mouse.
     timer: Option<TimerId>,
@@ -191,7 +192,7 @@ impl PluginTimerImpl for Main<'_> {
         let target = {
             let mut g = self.open.borrow_mut();
             let Some(o) = g.as_mut() else { return };
-            #[cfg(unix)] // Win32 child windows get no input yet
+            #[cfg(unix)]
             o.native.poll(&o.events);
             let p = o.native.pointer();
             let on = (0..w as i32).contains(&p.x) && (0..h as i32).contains(&p.y);
@@ -274,21 +275,24 @@ impl PluginGuiImpl for Main<'_> {
     fn set_parent(&self, window: Window) -> Result<(), PluginError> {
         self.destroy();
         let (w, h) = self.size.get();
+        let native = Native::new(
+            parent_handle(&window).ok_or(PluginError::Message("unsupported parent window"))?,
+            w,
+            h,
+        )
+        .map_err(PluginError::Message)?;
+        let (mouse, events) = (Arc::new(AtomicU64::new(NO_MOUSE)), Arc::new(UiEvents::new()));
+        // Win32 delivers input to the window procedure, which needs no host timer (FL Studio has
+        // none); X11 is polled in `on_timer`
+        #[cfg(windows)]
+        native.attach(events.clone(), mouse.clone());
         *self.open.borrow_mut() = Some(Open {
-            native: Arc::new(
-                Native::new(
-                    parent_handle(&window)
-                        .ok_or(PluginError::Message("unsupported parent window"))?,
-                    w,
-                    h,
-                )
-                .map_err(PluginError::Message)?,
-            ),
+            native: Arc::new(native),
             stop: Arc::new(AtomicBool::new(false)),
             thread: None,
             size: Arc::new(AtomicU64::new(pack_size(w, h))),
-            mouse: Arc::new(AtomicU64::new(NO_MOUSE)),
-            events: Arc::new(UiEvents::new()),
+            mouse,
+            events,
             timer: None,
             drag: None,
             was_down: false,

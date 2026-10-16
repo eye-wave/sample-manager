@@ -1,16 +1,115 @@
 //! Win32: a child window.
 use super::*;
+use crate::gpu::{NO_MOUSE, pack_mouse};
+use crate::input::{Event, Events, Key};
 use std::ptr::{null, null_mut};
-use windows_sys::Win32::Foundation::{HMODULE, POINT};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
+use std::sync::{Arc, Mutex};
+use windows_sys::Win32::Foundation::{HMODULE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows_sys::Win32::Graphics::Gdi::ScreenToClient;
 use windows_sys::Win32::System::LibraryLoader::*;
-use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+    GetAsyncKeyState, ReleaseCapture, SetCapture, SetFocus, TME_LEAVE, TRACKMOUSEEVENT,
+    TrackMouseEvent, VK_DELETE, VK_END, VK_HOME, VK_LBUTTON, VK_LEFT, VK_RIGHT,
+};
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
+
+// Plain values: where these constants live differs between windows-sys versions.
+const WM_GETDLGCODE: u32 = 0x0087;
+const WM_MOUSELEAVE: u32 = 0x02A3;
+const DLGC_WANTALLKEYS: isize = 0x0004;
+
+/// Where `proc` puts the input the host's message loop delivers to the window (`Native::attach`).
+/// Not polled on a host timer: not every host has one (FL Studio does not seem to).
+struct Hooks {
+    events: Arc<Events>,
+    mouse: Arc<AtomicU64>,
+    /// A WM_MOUSELEAVE is pending.
+    tracking: AtomicBool,
+}
+
+unsafe extern "system" fn proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    unsafe {
+        let hooks = GetWindowLongPtrW(h, GWLP_USERDATA) as *const Hooks;
+        if hooks.is_null() {
+            return DefWindowProcW(h, m, w, l); // not attached yet
+        }
+        let hooks = &*hooks;
+        let push = |e| hooks.events.push(e);
+        match m {
+            WM_MOUSEMOVE => {
+                let (x, y) = (l as i16 as i32, (l >> 16) as i16 as i32);
+                hooks.mouse.store(pack_mouse(x, y), Relaxed);
+                if !hooks.tracking.swap(true, Relaxed) {
+                    let mut t = TRACKMOUSEEVENT {
+                        cbSize: size_of::<TRACKMOUSEEVENT>() as u32,
+                        dwFlags: TME_LEAVE,
+                        hwndTrack: h,
+                        dwHoverTime: 0,
+                    };
+                    TrackMouseEvent(&mut t);
+                }
+                0
+            }
+            WM_MOUSELEAVE => {
+                hooks.tracking.store(false, Relaxed);
+                hooks.mouse.store(NO_MOUSE, Relaxed);
+                0
+            }
+            // the host owns the keyboard focus until we take it: without this, typing never gets here
+            WM_LBUTTONDOWN => {
+                SetFocus(h);
+                SetCapture(h); // so that the release arrives wherever the mouse is
+                push(Event::Click(l as i16 as i32, (l >> 16) as i16 as i32));
+                0
+            }
+            WM_LBUTTONUP | WM_CAPTURECHANGED => {
+                push(Event::Release);
+                if m == WM_LBUTTONUP {
+                    ReleaseCapture();
+                }
+                0
+            }
+            // ponytail: whole notches only, a smooth wheel (delta < 120) does not scroll
+            WM_MOUSEWHEEL => {
+                push(Event::Scroll(-((w >> 16) as i16 as i32) / 120));
+                0
+            }
+            // ask for the keys the host would otherwise take for its own dialog handling
+            WM_GETDLGCODE => DLGC_WANTALLKEYS,
+            // typed text: UTF-16 units (ponytail: characters outside the BMP arrive as two
+            // surrogates and are dropped); Backspace, Enter and Escape are control characters here
+            WM_CHAR => {
+                match char::from_u32(w as u32) {
+                    Some('\u{8}') => push(Event::Key(Key::Backspace)),
+                    Some('\r') => push(Event::Key(Key::Enter)),
+                    Some('\u{1b}') => push(Event::Key(Key::Escape)),
+                    Some(c) if !c.is_control() => push(Event::Char(c)),
+                    _ => {}
+                }
+                0
+            }
+            WM_KEYDOWN => {
+                match w as u16 {
+                    VK_DELETE => push(Event::Key(Key::Delete)),
+                    VK_LEFT => push(Event::Key(Key::Left)),
+                    VK_RIGHT => push(Event::Key(Key::Right)),
+                    VK_HOME => push(Event::Key(Key::Home)),
+                    VK_END => push(Event::Key(Key::End)),
+                    _ => {}
+                }
+                DefWindowProcW(h, m, w, l) // so that WM_CHAR follows
+            }
+            _ => DefWindowProcW(h, m, w, l),
+        }
+    }
+}
 
 // Raw handles stored as usize so `Native` is Send + Sync (the render thread only needs the HWND).
 pub struct Native {
     hwnd: usize,
     hinst: usize,
+    hooks: Mutex<Option<Arc<Hooks>>>,
 }
 
 impl Native {
@@ -28,7 +127,7 @@ impl Native {
             let class: Vec<u16> = "SampleManagerGui\0".encode_utf16().collect();
             let mut wc: WNDCLASSEXW = std::mem::zeroed();
             wc.cbSize = std::mem::size_of::<WNDCLASSEXW>() as u32;
-            wc.lpfnWndProc = Some(DefWindowProcW);
+            wc.lpfnWndProc = Some(proc);
             wc.hInstance = hinst;
             wc.lpszClassName = class.as_ptr();
             // fails harmlessly if another plugin instance already registered it; never
@@ -55,6 +154,7 @@ impl Native {
             Ok(Self {
                 hwnd: hwnd as usize,
                 hinst: hinst as usize,
+                hooks: Mutex::new(None),
             })
         }
     }
@@ -79,6 +179,16 @@ impl Native {
                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
             )
         };
+    }
+
+    /// From now on the window puts its clicks, keys, wheel turns and mouse position into `events`
+    /// and `mouse` (see `pack_mouse`) as the host's message loop delivers them.
+    pub fn attach(&self, events: Arc<Events>, mouse: Arc<AtomicU64>) {
+        let hooks = Arc::new(Hooks { events, mouse, tracking: AtomicBool::new(false) });
+        // the window's count, given back in `Drop`
+        let raw = Arc::into_raw(hooks.clone()) as isize;
+        unsafe { SetWindowLongPtrW(self.hwnd as _, GWLP_USERDATA, raw) };
+        *self.hooks.lock().unwrap() = Some(hooks);
     }
 
     // GetAsyncKeyState is the physical left button, so swapped mouse buttons are not
@@ -131,6 +241,12 @@ unsafe impl Target for Native {
 
 impl Drop for Native {
     fn drop(&mut self) {
-        unsafe { DestroyWindow(self.hwnd as _) };
+        unsafe {
+            DestroyWindow(self.hwnd as _);
+            // the window is gone, so `proc` can no longer see the pointer
+            if let Some(h) = self.hooks.lock().unwrap().take() {
+                drop(Arc::from_raw(Arc::as_ptr(&h)));
+            }
+        }
     }
 }
