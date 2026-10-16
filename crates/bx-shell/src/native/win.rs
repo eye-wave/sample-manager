@@ -71,14 +71,14 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT
                 }
                 0
             }
-            // ponytail: whole notches only, a smooth wheel (delta < 120) does not scroll
+            // whole notches only, a smooth wheel (delta < 120) does not scroll
             WM_MOUSEWHEEL => {
                 push(Event::Scroll(-((w >> 16) as i16 as i32) / 120));
                 0
             }
             // ask for the keys the host would otherwise take for its own dialog handling
             WM_GETDLGCODE => DLGC_WANTALLKEYS,
-            // typed text: UTF-16 units (ponytail: characters outside the BMP arrive as two
+            // typed text: UTF-16 units (characters outside the BMP arrive as two
             // surrogates and are dropped); Backspace, Enter and Escape are control characters here
             WM_CHAR => {
                 match char::from_u32(w as u32) {

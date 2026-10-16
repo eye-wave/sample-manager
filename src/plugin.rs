@@ -1,5 +1,6 @@
-//! The CLAP plugin: no audio, no params, just the editor window (a child window under the host's
-//! parent, rendered by render.rs and shell on its own thread). The window is resizable: the resize handle
+//! The CLAP plugin: no params, one stereo output that plays the sample picked in the editor (a
+//! loop, audio.rs), and the editor window (a child window under the host's parent, rendered by
+//! render.rs and shell on its own thread). The window is resizable: the resize handle
 //! drawn in the corner is dragged with the mouse, which is polled on a host timer (the host owns
 //! the event loop), and the new size is requested from the host.
 
@@ -11,16 +12,19 @@ use std::thread::JoinHandle;
 
 use bx_shell::input::Events as UiEvents;
 use bx_shell::native::Native;
+use clack_extensions::audio_ports::*;
 use clack_extensions::gui::*;
 use clack_extensions::state::*;
 use clack_extensions::timer::*;
-use clack_plugin::plugin::features::UTILITY;
+use clack_plugin::plugin::features::{INSTRUMENT, UTILITY};
 use clack_plugin::prelude::*;
 use clack_plugin::stream::{InputStream, OutputStream};
 use serde::{Deserialize, Serialize};
 
+use crate::audio::{Player, Voice};
 use crate::icons::in_grip;
 use crate::render::{H, MIN_W, NO_MOUSE, W, height_for, pack_mouse, pack_size, run};
+use clack_plugin::utils::ClapId;
 
 #[cfg(unix)]
 const API: GuiApiType<'static> = GuiApiType::X11;
@@ -38,16 +42,20 @@ fn parent_handle(w: &Window) -> Option<usize> {
 }
 
 pub struct Editor;
-pub struct Shared;
+/// What the editor and the audio thread share.
+pub struct Shared {
+    player: Arc<Player>,
+}
 impl PluginShared<'_> for Shared {}
 
 impl Plugin for Editor {
-    type AudioProcessor<'a> = Idle;
+    type AudioProcessor<'a> = Playback<'a>;
     type Shared<'a> = Shared;
     type MainThread<'a> = Main<'a>;
 
     fn declare_extensions(b: &mut PluginExtensions<Self>, _: Option<&Shared>) {
-        b.register::<PluginGui>()
+        b.register::<PluginAudioPorts>()
+            .register::<PluginGui>()
             .register::<PluginTimer>()
             .register::<PluginState>();
     }
@@ -56,40 +64,83 @@ impl Plugin for Editor {
 impl DefaultPluginFactory for Editor {
     fn get_descriptor() -> PluginDescriptor {
         PluginDescriptor::new("org.example.sample-manager", "Sample Manager")
-            .with_features([UTILITY])
+            .with_features([INSTRUMENT, UTILITY])
     }
 
     fn new_shared(_: HostSharedHandle<'_>) -> Result<Shared, PluginError> {
-        Ok(Shared)
+        Ok(Shared {
+            player: Arc::default(),
+        })
     }
 
     fn new_main_thread<'a>(
         host: HostMainThreadHandle<'a>,
-        _: &'a Shared,
+        shared: &'a Shared,
     ) -> Result<Main<'a>, PluginError> {
         Ok(Main {
             host,
+            player: shared.player.clone(),
             size: Cell::new((W, H)),
             open: RefCell::new(None),
         })
     }
 }
 
-/// Does nothing: the hosts still need an audio processor to instantiate the plugin.
-pub struct Idle;
+/// Plays what the editor picked.
+pub struct Playback<'a> {
+    voice: Voice,
+    _shared: &'a Shared,
+}
 
-impl<'a> PluginAudioProcessor<'a, Shared, Main<'a>> for Idle {
+impl<'a> PluginAudioProcessor<'a, Shared, Main<'a>> for Playback<'a> {
     fn activate(
         _: HostAudioProcessorHandle<'a>,
         _: &Main<'a>,
-        _: &'a Shared,
-        _: PluginAudioConfiguration,
+        shared: &'a Shared,
+        config: PluginAudioConfiguration,
     ) -> Result<Self, PluginError> {
-        Ok(Idle)
+        Ok(Playback {
+            voice: Voice::new(shared.player.clone(), config.sample_rate),
+            _shared: shared,
+        })
     }
 
-    fn process(&mut self, _: Process, _: Audio, _: Events) -> Result<ProcessStatus, PluginError> {
-        Ok(ProcessStatus::Sleep)
+    fn process(
+        &mut self,
+        _: Process,
+        mut audio: Audio,
+        _: Events,
+    ) -> Result<ProcessStatus, PluginError> {
+        if let Some(mut port) = audio.output_port(0)
+            && let Ok(ch) = port.channels()
+            && let Some(mut ch) = ch.into_f32()
+        {
+            let mut it = ch.iter_mut();
+            if let (Some(l), Some(r)) = (it.next(), it.next()) {
+                self.voice.render(l, r);
+            }
+        }
+        // never `Sleep`: a click in the editor is no event, the host would not wake us for it
+        Ok(ProcessStatus::Continue)
+    }
+}
+
+impl PluginAudioPortsImpl for Main<'_> {
+    fn count(&self, is_input: bool) -> u32 {
+        !is_input as u32 // one output, no input
+    }
+
+    fn get(&self, index: u32, is_input: bool, writer: &mut AudioPortInfoWriter) {
+        if index == 0 && !is_input {
+            writer.set(&AudioPortInfo {
+                id: ClapId::new(0),
+                name: b"Out",
+                channel_count: 2,
+                flags: AudioPortFlags::IS_MAIN,
+                port_type: Some(AudioPortType::STEREO),
+                in_place_pair: None,
+            });
+        }
     }
 }
 
@@ -150,6 +201,7 @@ struct Open {
 
 pub struct Main<'a> {
     host: HostMainThreadHandle<'a>,
+    player: Arc<Player>,
     /// The current window size, kept even while there is no window.
     size: Cell<(u32, u32)>,
     open: RefCell<Option<Open>>,
@@ -315,16 +367,25 @@ impl PluginGuiImpl for Main<'_> {
         o.native.show();
         if o.thread.is_none() {
             o.stop.store(false, Relaxed);
-            let (native, stop, size, mouse, events) = (
+            let (native, stop, size, mouse, events, player) = (
                 o.native.clone(),
                 o.stop.clone(),
                 o.size.clone(),
                 o.mouse.clone(),
                 o.events.clone(),
+                self.player.clone(),
             );
             o.thread = Some(std::thread::spawn(move || {
                 // nobody waits for `presented` in a host window
-                run(&*native, &size, &stop, &AtomicU64::new(0), &mouse, &events)
+                run(
+                    &*native,
+                    &size,
+                    &stop,
+                    &AtomicU64::new(0),
+                    &mouse,
+                    &events,
+                    &player,
+                )
             }));
         }
         if o.timer.is_none()

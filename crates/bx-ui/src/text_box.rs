@@ -13,7 +13,7 @@ pub enum Edit {
     /// Ctrl+Backspace / Ctrl+Delete: the word before / after the caret.
     WordBackspace,
     WordDelete,
-    /// Ctrl+A. ponytail: hack, nothing is drawn; the next Backspace / Delete / typing replaces
+    /// Ctrl+A. hack, nothing is drawn; the next Backspace / Delete / typing replaces
     /// everything, any other edit drops it. TODO: real selection.
     SelectAll,
     Left,

@@ -1,5 +1,6 @@
 //! The screen, as a `bx_ui` tree (sample data for now). `view` knows the window size only for the
 //! number of waveform bars; everything else is the layout engine's job.
+use crate::audio::{Clip, Player, decode};
 use crate::icons::{self, GRIP};
 use crate::scan::{Dir, Sample, Tree};
 use crate::search::search;
@@ -18,6 +19,8 @@ pub const TREE: u32 = 2;
 pub const ROWS: u32 = 3;
 /// `Layout::rects` id of the table's scrollbar (the whole track).
 pub const SCROLL: u32 = 4;
+/// `Layout::rects` id of the table row `k` (the k-th shown) is `ROW0 + k`; below `FOLDER0`.
+pub const ROW0: u32 = 10;
 /// Height of everything in the window except the file tree (it cannot scroll, so rows that do not
 /// fit are left out).
 const TREE_RESERVED: f32 = 405.0;
@@ -26,6 +29,9 @@ const TABLE_RESERVED: f32 = 282.0;
 /// A table row and its separator.
 const ROW_H: f32 = 37.0;
 const THUMB_MIN: f32 = 24.0;
+/// Waveform columns drawn at most (a window's width in px, up to this): a column is a quad, 12 of
+/// the 65536 vertices a scene may have.
+const COLS_MAX: usize = 1600;
 
 /// How many table rows fit in a window `h` px tall.
 pub fn visible_rows(h: u32) -> usize {
@@ -34,6 +40,14 @@ pub fn visible_rows(h: u32) -> usize {
 /// The scrollbar thumb: the share of the track that is visible, at least `THUMB_MIN`.
 fn thumb_h(vis: usize, total: usize) -> f32 {
     (vis as f32 * ROW_H * vis as f32 / total as f32).max(THUMB_MIN)
+}
+
+/// The sample in the player.
+pub struct Loaded {
+    pub name: String,
+    pub ext: String,
+    /// `None`: it could not be decoded.
+    pub clip: Option<Arc<Clip>>,
 }
 
 /// What the screen remembers between frames.
@@ -53,9 +67,13 @@ pub struct Ui {
     pub first: usize,
     /// A scrollbar drag: where on the thumb (px from its top) it was grabbed.
     pub drag: Option<f32>,
+    /// The player: empty until a table row is clicked.
+    pub current: Option<Loaded>,
+    /// Where the plugin plays the sample (nothing does in the standalone app).
+    pub player: Arc<Player>,
 }
 impl Ui {
-    pub fn new(tree: Tree) -> Self {
+    pub fn new(tree: Tree, player: Arc<Player>) -> Self {
         Self {
             search: TextBox::new(""),
             rects: vec![],
@@ -66,7 +84,25 @@ impl Ui {
             results: vec![],
             first: 0,
             drag: None,
+            current: None,
+            player,
         }
+    }
+
+    /// A click on the `k`-th shown table row: that sample replaces the one in the player and the
+    /// plugin plays it (one that does not decode silences the old one).
+    pub fn select(&mut self, k: usize) {
+        let Some(&i) = self.results.get(self.first + k) else {
+            return;
+        };
+        let f = &self.files[i];
+        let clip = decode(&f.path).ok().map(Arc::new);
+        self.player.play(clip.clone().unwrap_or_default());
+        self.current = Some(Loaded {
+            name: f.name.clone(),
+            ext: f.ext(),
+            clip,
+        });
     }
 
     /// Searches again if the scan has finished or the search text changed.
@@ -214,7 +250,7 @@ fn sidebar(h: u32, ui: &Ui) -> Node {
             for (n, height) in all {
                 used += height;
                 if used > h as f32 - TREE_RESERVED {
-                    break; // ponytail: no scrolling yet, the rest is cut off
+                    break; // no scrolling yet, the rest is cut off
                 }
                 tree.push(n);
             }
@@ -260,7 +296,7 @@ fn table(h: u32, ui: &Ui) -> Node {
     let head = |s: &str, w: Length| text(s, 10.0, DIM).w(w);
     let (vis, total) = (visible_rows(h), ui.results.len());
     let mut rows = vec![];
-    for &i in ui.results.iter().skip(ui.first).take(vis) {
+    for (k, &i) in ui.results.iter().skip(ui.first).take(vis).enumerate() {
         let f = &ui.files[i];
         rows.push(
             row(vec![
@@ -276,7 +312,10 @@ fn table(h: u32, ui: &Ui) -> Node {
             ])
             .pad_xy(16.0, 0.0)
             .align(Align::Center)
-            .size(Fill(1), Fixed(36.0)),
+            .size(Fill(1), Fixed(36.0))
+            .hover(ROW_HOVER)
+            .cursor(Cursor::Pointer)
+            .id(ROW0 + k as u32),
         );
         rows.push(line());
     }
@@ -314,51 +353,87 @@ fn table(h: u32, ui: &Ui) -> Node {
     ])
     .size(Fill(1), Fill(1))
 }
-fn waveform(w: u32) -> Node {
-    let n = w as usize / 3;
-    let cursor = n * 236 / 1000;
-    let bars = (0..n)
-        .map(|i| {
-            let x = i as f32;
-            let a = 8.0
-                + 52.0
-                    * ((x * 0.37).sin() * (x * 0.11 + 1.0).sin()).abs().max(0.35)
-                    * (0.6 + 0.4 * (x * 1.7).sin().abs());
-            let c = if i < cursor { PINK } else { WAVE_OFF };
+/// The decoded clip, one column per px of the window (up to `COLS_MAX`) as tall as its peak; the
+/// part before the playhead (`pos`, in frames) is pink.
+fn waveform(w: u32, clip: &Clip, pos: usize) -> Node {
+    let n = (w as usize).min(COLS_MAX);
+    let cursor = pos * n / clip.frames.len().max(1);
+    let bars = clip
+        .columns(n)
+        .into_iter()
+        .enumerate()
+        .map(|(i, peak)| {
             if i == cursor {
                 space().size(Fixed(1.0), Fill(1)).bg(PLAYHEAD, 0.0)
             } else {
-                space().size(Fill(1), Fixed(a)).bg(c, 0.0)
+                let c = if i < cursor { PINK } else { WAVE_OFF };
+                space()
+                    .size(Fill(1), Fixed((peak * 78.0).clamp(1.0, 78.0)))
+                    .bg(c, 0.0)
             }
         })
         .collect();
-    row(bars)
-        .spacing(1.0)
-        .align(Align::Center)
-        .size(Fill(1), Fixed(82.0))
+    row(bars).align(Align::Center).size(Fill(1), Fixed(82.0))
 }
-fn player(w: u32) -> Node {
-    col(vec![
-        line(),
-        row(vec![
-            icon(icons::HEART, 14.0, HEART),
-            text("timewarped-01.wav", 13.0, TEXT),
-            chip("sounddesign"),
-            chip("wavetable"),
-        ])
-        .spacing(12.0)
-        .align(Align::Center)
-        .pad_xy(16.0, 0.0)
-        .size(Fill(1), Fixed(32.0)),
-        waveform(w),
+/// `secs` as `00:00`.
+fn clock(secs: f32) -> String {
+    let s = secs as u32;
+    format!("{:02}:{:02}", s / 60, s % 60)
+}
+fn player(w: u32, ui: &Ui) -> Node {
+    let note = |s: &str| {
         row(vec![
             space().w(Fill(1)),
-            text("00:01", 12.0, TEXT),
-            row(vec![icon(icons::PAUSE, 18.0, PINK_TEXT)])
-                .pad_xy(14.0, 8.0)
-                .bg(FIELD, 10.0)
-                .border(LINE, 1.0),
-            text("00:05", 12.0, TEXT),
+            text(s, 12.0, DIM),
+            space().w(Fill(1)),
+        ])
+        .align(Align::Center)
+        .size(Fill(1), Fixed(82.0))
+    };
+    let (head, wave, now, total) = match &ui.current {
+        None => (
+            vec![text("No sample selected", 13.0, DIM)],
+            note("Click a sample to play it"),
+            0.0,
+            0.0,
+        ),
+        Some(l) => {
+            let head = vec![
+                icon(icons::HEART, 14.0, DIM),
+                text(l.name.as_str(), 13.0, TEXT),
+                chip(&l.ext),
+            ];
+            match &l.clip {
+                Some(c) => (
+                    head,
+                    waveform(w, c, ui.player.pos()),
+                    ui.player.pos() as f32 / c.rate as f32,
+                    c.secs(),
+                ),
+                None => (head, note("Cannot decode this file"), 0.0, 0.0),
+            }
+        }
+    };
+    col(vec![
+        line(),
+        row(head)
+            .spacing(12.0)
+            .align(Align::Center)
+            .pad_xy(16.0, 0.0)
+            .size(Fill(1), Fixed(32.0)),
+        wave,
+        row(vec![
+            space().w(Fill(1)),
+            text(clock(now), 12.0, TEXT),
+            row(vec![icon(
+                icons::PAUSE,
+                18.0,
+                if ui.current.is_some() { PINK_TEXT } else { DIM },
+            )])
+            .pad_xy(14.0, 8.0)
+            .bg(FIELD, 10.0)
+            .border(LINE, 1.0),
+            text(clock(total), 12.0, TEXT),
             space().w(Fill(1)),
         ])
         .spacing(16.0)
@@ -428,7 +503,7 @@ pub fn view(w: u32, h: u32, ui: &Ui) -> Node {
         header,
         line(),
         row(vec![sidebar(h, ui), vline(), table(h, ui)]).size(Fill(1), Fill(1)),
-        player(w),
+        player(w, ui),
         line(),
         status(ui),
     ])
@@ -443,7 +518,7 @@ mod tests {
     #[test]
     fn reserved_heights_match_the_layout() {
         let (w, h) = (920, 690);
-        let ui = Ui::new(Tree::default());
+        let ui = Ui::new(Tree::default(), Arc::default());
         let l = layout(
             &view(w, h, &ui),
             [0.0, 0.0, w as f32, h as f32],
@@ -456,10 +531,58 @@ mod tests {
     }
 
     #[test]
+    fn rows_tint_on_hover_and_a_click_loads_them_into_the_player() {
+        let dir = std::env::temp_dir().join(format!("sm-select-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let sample = |name: &str, bytes: &[u8]| {
+            std::fs::write(dir.join(name), bytes).unwrap();
+            Sample {
+                name: name.into(),
+                path: dir.join(name),
+            }
+        };
+        let pcm = crate::audio::tests::wav(8000, &[0, 16384, -32768, 8192]);
+        let mut ui = Ui::new(Tree::default(), Arc::default());
+        ui.files = Arc::new(vec![sample("good.wav", &pcm), sample("bad.wav", b"nope")]);
+        ui.results = vec![0, 1];
+        let (w, h) = (920, 690);
+        let lay = |ui: &Ui, m| {
+            let area = [0.0, 0.0, w as f32, h as f32];
+            layout(&view(w, h, ui), area, &bx_shell::font::width, m)
+        };
+        let tinted = |l: &Layout, r: Rect| {
+            l.base
+                .iter()
+                .any(|p| matches!(p, Prim::Quad(q, c, _) if *q == r && *c == ROW_HOVER))
+        };
+        let l = lay(&ui, [f32::NAN; 2]);
+        let row1 = l.rects.iter().find(|r| r.0 == ROW0 + 1).unwrap().1;
+        assert!(!tinted(&l, row1));
+        assert!(tinted(&lay(&ui, [row1[0] + 5.0, row1[1] + 5.0]), row1));
+
+        assert!(ui.current.is_none()); // the player starts empty
+        let mut voice = crate::audio::Voice::new(ui.player.clone(), 8000.0);
+        let (mut l, mut r) = ([1.0; 4], [1.0; 4]);
+        ui.select(0);
+        let c = ui.current.as_ref().unwrap();
+        assert_eq!((c.name.as_str(), c.ext.as_str()), ("good.wav", "WAV"));
+        assert_eq!(c.clip.as_ref().unwrap().frames.len(), 4);
+        voice.render(&mut l, &mut r);
+        assert_eq!(l, [0.0, 0.5, -1.0, 0.25]); // and the plugin plays it
+        ui.select(1); // a file that does not decode: shown as such, the old sample stops
+        assert!(ui.current.as_ref().unwrap().clip.is_none());
+        voice.render(&mut l, &mut r);
+        assert_eq!(l, [0.0; 4]);
+        ui.select(7); // no such row
+        assert_eq!(ui.current.as_ref().unwrap().name, "bad.wav");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn the_thumb_follows_the_rows_and_the_drag_reaches_both_ends() {
         let h = 690;
         let vis = visible_rows(h);
-        let mut ui = Ui::new(Tree::default());
+        let mut ui = Ui::new(Tree::default(), Arc::default());
         ui.results = (0..100).collect();
         ui.rects = vec![(SCROLL, [0.0, 100.0, 12.0, vis as f32 * ROW_H])];
         assert_eq!(ui.thumb_top(h), 0.0);

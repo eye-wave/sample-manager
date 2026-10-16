@@ -57,6 +57,7 @@ pub(crate) unsafe fn push_key(events: &Events, ev: &mut xlib::XKeyEvent) {
     use x11::keysym::*;
     #[allow(non_upper_case_globals)] // the keysym constants are named like in X11
     let ctrl = ev.state & xlib::ControlMask != 0;
+    #[allow(non_upper_case_globals)]
     let key = match sym as u32 {
         XK_BackSpace if ctrl => Some(Key::CtrlBackspace),
         XK_Delete if ctrl => Some(Key::CtrlDelete),
@@ -74,7 +75,7 @@ pub(crate) unsafe fn push_key(events: &Events, ev: &mut xlib::XKeyEvent) {
     if let Some(k) = key {
         events.push(Event::Key(k));
     } else {
-        // ponytail: Latin-1 only (XLookupString), Xutf8LookupString needs an input method
+        // Latin-1 only (XLookupString), Xutf8LookupString needs an input method
         for &b in &buf[..n.max(0) as usize] {
             if b >= 32 && b != 127 {
                 events.push(Event::Char(b as char));

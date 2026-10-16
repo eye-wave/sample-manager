@@ -18,7 +18,7 @@ pub fn search(files: &[Sample], query: &str) -> Vec<usize> {
         .enumerate()
         .filter_map(|(i, f)| m.fuzzy_match(&f.name, query).map(|s| (s, i)))
         .collect();
-    // ponytail: a full sort, `select_nth_unstable` if a million files ever make it slow
+    // a full sort, `select_nth_unstable` if a million files ever make it slow
     hits.sort_unstable_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
     hits.into_iter().take(MAX).map(|(_, i)| i).collect()
 }

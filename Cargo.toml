@@ -16,7 +16,6 @@ serde = { version = "1", features = ["derive"] }
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-# not `sample-manager`: a bin and a lib of the same name collide on `sample_manager.pdb`
 [[bin]]
 name = "sample-manager-standalone"
 path = "src/main.rs"
@@ -40,9 +39,18 @@ bx_ui = { path = "./crates/bx-ui" }
 dirs = "6"
 fuzzy-matcher = "0.3"
 rayon = "1"
+symphonia = { version = "0.5", default-features = false, features = [
+  "wav",
+  "pcm",
+  "mp3",
+  "flac",
+  "ogg",
+  "vorbis",
+] }
 clack-plugin = { version = "0.2", optional = true }
 clack-extensions = { version = "0.2", features = [
   "clack-plugin",
+  "audio-ports",
   "gui",
   "timer",
   "state",

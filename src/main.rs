@@ -19,6 +19,7 @@ fn main() {
                 win.presented(),
                 win.mouse(),
                 win.events(),
+                &Default::default(),
             )
         });
         win.run();
