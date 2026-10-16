@@ -28,7 +28,7 @@ pub const ICONS: [Mesh; 12] = [
     icon!("node_modules/lucide-static/icons/chevron-right.svg"),
     icon!("node_modules/lucide-static/icons/plus.svg"),
     icon!("node_modules/lucide-static/icons/pause.svg"),
-    icon!("node_modules/lucide-static/icons/move-diagonal-2.svg"),
+    icon!("node_modules/lucide-static/icons/handle-bottom-right.svg"),
     icon!("node_modules/lucide-static/icons/folder-open.svg"),
     icon!("node_modules/lucide-static/icons/chevron-down.svg"),
 ];

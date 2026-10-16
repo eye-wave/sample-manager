@@ -3,6 +3,9 @@
 //! Hover: pass the mouse to [`layout`]; a node can change its background (`hover`) or pop a second
 //! node over everything (`over`). Not here (add when a screen needs it): clipping, scrolling,
 //! clicks, text wrapping.
+mod text_box;
+pub use text_box::{Edit, TextBox};
+
 pub type Color = [f32; 4];
 
 /// `0xRRGGBB` -> opaque colour.
@@ -42,6 +45,10 @@ pub enum Cursor {
     Default,
     /// The hand, for what can be clicked.
     Pointer,
+    /// The I-beam, for text that can be edited.
+    Text,
+    /// The diagonal double arrow of a bottom right corner handle.
+    Resize,
 }
 
 /// What [`layout`] returns.
@@ -52,6 +59,8 @@ pub struct Layout {
     pub over: Vec<Prim>,
     /// What the mouse is on asked for, the last node in draw order wins.
     pub cursor: Cursor,
+    /// Where the nodes with an `id` were put, to find out what a click hit.
+    pub rects: Vec<(u32, Rect)>,
 }
 
 /// Background of a node: a (rounded) fill and an optional border inside it.
@@ -88,6 +97,9 @@ pub struct Node {
     trunc: bool,
     /// Cursor while the mouse is on the node.
     cursor: Cursor,
+    id: Option<u32>,
+    /// Text only: the caret is before this character; the text shows what fits around it.
+    caret: Option<usize>,
     kids: Vec<Node>,
 }
 
@@ -119,6 +131,8 @@ fn node(kind: Kind, kids: Vec<Node>) -> Node {
         over: None,
         trunc: false,
         cursor: Cursor::Default,
+        id: None,
+        caret: None,
         kids,
     }
 }
@@ -193,6 +207,16 @@ impl Node {
         self.cursor = c;
         self
     }
+    /// A name for [`Layout::rects`].
+    pub fn id(mut self, id: u32) -> Self {
+        self.id = Some(id);
+        self
+    }
+    /// Text with a caret before character `c` (see `TextBox`); give it `w(Fill(1))`.
+    pub fn caret(mut self, c: Option<usize>) -> Self {
+        self.caret = c;
+        self
+    }
     /// Text that gets less room than it needs ends in "..." (give it `w(Fill(1))`).
     pub fn truncate(mut self) -> Self {
         self.trunc = true;
@@ -259,6 +283,7 @@ pub fn layout(
         base: vec![],
         over: vec![],
         cursor: Cursor::Default,
+        rects: vec![],
     };
     place(root, rect, measure, mouse, &mut l);
     l
@@ -271,6 +296,29 @@ fn ellipsize(s: &str, size: f32, w: f32, m: &dyn Fn(&str, f32) -> f32) -> String
         t.pop();
     }
     t.iter().collect::<String>() + "..."
+}
+
+/// The part of `s` that fits `w` px and has the caret (before character `c`) in it, and the
+/// caret's x in it.
+fn around_caret(
+    s: &str,
+    c: usize,
+    size: f32,
+    w: f32,
+    m: &dyn Fn(&str, f32) -> f32,
+) -> (String, f32) {
+    let ch: Vec<char> = s.chars().collect();
+    let c = c.min(ch.len());
+    let sub = |a: usize, b: usize| ch[a..b].iter().collect::<String>();
+    let mut a = 0;
+    while a < c && m(&sub(a, c), size) > w - 1.0 {
+        a += 1;
+    }
+    let mut b = ch.len();
+    while b > c && m(&sub(a, b), size) > w {
+        b -= 1;
+    }
+    (sub(a, b), m(&sub(a, c), size))
 }
 
 /// Points along the outline of a rounded rect (clockwise), `step` px apart or so.
@@ -322,6 +370,9 @@ fn place(n: &Node, r: Rect, m: &dyn Fn(&str, f32) -> f32, mouse: [f32; 2], l: &m
     if hot && n.cursor != Cursor::Default {
         l.cursor = n.cursor;
     }
+    if let Some(id) = n.id {
+        l.rects.push((id, r));
+    }
     let bg = match (n.bg, n.hover) {
         (Some(b), Some(c)) if hot => Some(Bg { color: c, ..b }),
         (None, Some(c)) if hot => Some(Bg {
@@ -356,6 +407,7 @@ fn place(n: &Node, r: Rect, m: &dyn Fn(&str, f32) -> f32, mouse: [f32; 2], l: &m
             base: vec![],
             over: vec![],
             cursor: Cursor::Default,
+            rects: vec![],
         };
         place(o, [r[0], r[1], tip_w, r[3]], m, NO_MOUSE, &mut t);
         l.over.extend(t.base);
@@ -368,12 +420,21 @@ fn place(n: &Node, r: Rect, m: &dyn Fn(&str, f32) -> f32, mouse: [f32; 2], l: &m
     ];
     match &n.kind {
         Kind::Text(s, size, color) => {
-            let s = if n.trunc && m(s, *size) > inner[2] {
+            let top = inner[1] + (inner[3] - size * LINE) / 2.0;
+            let y = top + size * BASE;
+            let s = if let Some(c) = n.caret {
+                let (shown, cx) = around_caret(s, c, *size, inner[2], m);
+                l.base.push(Prim::Quad(
+                    [inner[0] + cx, top, 1.0, size * LINE],
+                    *color,
+                    0.0,
+                ));
+                shown
+            } else if n.trunc && m(s, *size) > inner[2] {
                 ellipsize(s, *size, inner[2], m)
             } else {
                 s.clone()
             };
-            let y = inner[1] + (inner[3] - size * LINE) / 2.0 + size * BASE;
             l.base.push(Prim::Text {
                 x: inner[0],
                 y,

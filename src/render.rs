@@ -2,10 +2,12 @@
 //! what [`scene`] returns. Shared by the standalone app and the plugin. The tree is view.rs, the
 //! layout is `bx_ui`; this file only turns the draw list into vertices.
 use crate::icons::ICONS;
-use crate::view::view;
+use crate::view::{SEARCH, Ui, view};
 use bx_shell::font;
 use bx_shell::gpu::{self, Content, Scene, Target, Vert};
-use bx_ui::{Cursor, Prim, layout, quad_tris};
+use bx_shell::input::{Event, Events, Key};
+use bx_ui::{Cursor, Edit, Prim, layout, quad_tris};
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64};
 
 pub use bx_shell::gpu::{NO_MOUSE, pack_mouse, pack_size};
@@ -23,8 +25,33 @@ pub const fn height_for(w: u32) -> u32 {
     w * H / W
 }
 
-/// What is drawn in a `w` x `h` px window with the mouse at `mouse` (px, NaN if it is elsewhere).
-pub fn scene(w: u32, h: u32, mouse: [f32; 2]) -> Scene {
+/// What is drawn in a `w` x `h` px window with the mouse at `mouse` (px, NaN if it is elsewhere),
+/// after the `events` (clicks and typing) went to `ui`.
+pub fn scene(w: u32, h: u32, mouse: [f32; 2], ui: &mut Ui, events: Vec<Event>) -> Scene {
+    for e in events {
+        match e {
+            Event::Click(x, y) => {
+                let at = [x as f32, y as f32];
+                ui.search.focused = ui.rects.iter().any(|&(id, [rx, ry, rw, rh])| {
+                    id == SEARCH && (rx..rx + rw).contains(&at[0]) && (ry..ry + rh).contains(&at[1])
+                });
+            }
+            Event::Char(c) if ui.search.focused => ui.search.edit(Edit::Char(c)),
+            Event::Key(Key::Enter | Key::Escape) => ui.search.focused = false,
+            Event::Key(k) if ui.search.focused => {
+                let edit = match k {
+                    Key::Backspace => Edit::Backspace,
+                    Key::Delete => Edit::Delete,
+                    Key::Left => Edit::Left,
+                    Key::Right => Edit::Right,
+                    Key::Home => Edit::Home,
+                    _ => Edit::End,
+                };
+                ui.search.edit(edit);
+            }
+            _ => {}
+        }
+    }
     let (fw, fh) = (w as f32, h as f32);
     let ndc = |[x, y]: [f32; 2], c: [f32; 4]| -> Vert {
         [
@@ -72,32 +99,41 @@ pub fn scene(w: u32, h: u32, mouse: [f32; 2]) -> Scene {
             }
             (flat, textured)
         };
-    let l = layout(&view(w), [0.0, 0.0, fw, fh], &font::width, mouse);
+    let l = layout(&view(w, ui), [0.0, 0.0, fw, fh], &font::width, mouse);
+    ui.rects = l.rects.clone();
     let ((flat, textured), (over_flat, over_textured)) = (layer(l.base), layer(l.over));
     Scene {
         flat,
         textured,
         over_flat,
         over_textured,
-        pointer: l.cursor == Cursor::Pointer,
+        cursor: match l.cursor {
+            Cursor::Default => gpu::CURSOR_ARROW,
+            Cursor::Pointer => gpu::CURSOR_HAND,
+            Cursor::Text => gpu::CURSOR_TEXT,
+            Cursor::Resize => gpu::CURSOR_RESIZE,
+        },
     }
 }
 
 /// Draws the GUI on `target` until `stop` is set: [`gpu::render`] with this module's scene and
 /// the font atlas, see there for the arguments (`mouse` is `pack_mouse`d, `NO_MOUSE` when off the
-/// window). Run it on a thread of its own.
+/// window; `events` is what the window got, clicks and typing). Run it on a thread of its own.
 pub fn run(
     target: &impl Target,
     size: &AtomicU64,
     stop: &AtomicBool,
     presented: &AtomicU64,
     mouse: &AtomicU64,
+    events: &Events,
 ) {
     let atlas = font::atlas();
+    let ui = Mutex::new(Ui::new());
     let content = Content {
         atlas: &atlas,
-        scene: &scene,
+        scene: &|w, h, m| scene(w, h, m, &mut ui.lock().unwrap(), events.take()),
         mouse,
+        events,
     };
     gpu::render(target, size, stop, presented, &content)
 }

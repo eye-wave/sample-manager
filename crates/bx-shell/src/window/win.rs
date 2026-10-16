@@ -1,6 +1,7 @@
 //! Win32: a top-level window.
 use super::Grip;
 use crate::gpu::{NO_MOUSE, Target, pack_mouse, pack_size};
+use crate::input::{Event, Events, Key};
 use ash::{Entry, Instance, khr, vk};
 use std::ptr::{null, null_mut};
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
@@ -10,7 +11,8 @@ use windows_sys::Win32::Foundation::*;
 use windows_sys::Win32::Graphics::Gdi::ScreenToClient;
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-    ReleaseCapture, SetCapture, TME_LEAVE, TRACKMOUSEEVENT, TrackMouseEvent,
+    ReleaseCapture, SetCapture, TME_LEAVE, TRACKMOUSEEVENT, TrackMouseEvent, VK_DELETE, VK_END,
+    VK_HOME, VK_LEFT, VK_RIGHT,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
@@ -26,6 +28,9 @@ static PRESENTED: AtomicU64 = AtomicU64::new(0);
 
 /// Where the mouse is on the window (`pack_mouse`), `NO_MOUSE` when it is not.
 static MOUSE: AtomicU64 = AtomicU64::new(NO_MOUSE);
+
+/// Clicks and typing, see `Window::events`.
+static EVENTS: Events = Events::new();
 
 /// A resize drag: the mouse x (client coordinates) and the client width when it started.
 static DRAG: Mutex<Option<(i32, u32)>> = Mutex::new(None);
@@ -75,6 +80,7 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT
             // dragging the handle: the width follows the mouse, the height keeps the aspect ratio
             WM_LBUTTONDOWN => {
                 let (x, y) = (l as i16 as i32, (l >> 16) as i16 as i32);
+                EVENTS.push(Event::Click(x, y));
                 let mut r: RECT = std::mem::zeroed();
                 GetClientRect(h, &mut r);
                 if grip(x, y, r.right as u32, r.bottom as u32) {
@@ -111,6 +117,29 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT
                     );
                 }
                 0
+            }
+            // typed text: UTF-16 units (ponytail: characters outside the BMP arrive as two surrogates
+            // and are dropped); Backspace, Enter and Escape are control characters here
+            WM_CHAR => {
+                match char::from_u32(w as u32) {
+                    Some('\u{8}') => EVENTS.push(Event::Key(Key::Backspace)),
+                    Some('\r') => EVENTS.push(Event::Key(Key::Enter)),
+                    Some('\u{1b}') => EVENTS.push(Event::Key(Key::Escape)),
+                    Some(c) if !c.is_control() => EVENTS.push(Event::Char(c)),
+                    _ => {}
+                }
+                0
+            }
+            WM_KEYDOWN => {
+                match w as u16 {
+                    VK_DELETE => EVENTS.push(Event::Key(Key::Delete)),
+                    VK_LEFT => EVENTS.push(Event::Key(Key::Left)),
+                    VK_RIGHT => EVENTS.push(Event::Key(Key::Right)),
+                    VK_HOME => EVENTS.push(Event::Key(Key::Home)),
+                    VK_END => EVENTS.push(Event::Key(Key::End)),
+                    _ => {}
+                }
+                DefWindowProcW(h, m, w, l) // so that WM_CHAR follows
             }
             WM_MOUSELEAVE => {
                 MOUSE.store(NO_MOUSE, Relaxed);
@@ -194,10 +223,16 @@ impl Window {
         &MOUSE
     }
 
+    /// For the renderer (`render`'s events): what is clicked and typed.
+    pub fn events(&self) -> &Events {
+        &EVENTS
+    }
+
     pub fn run(&self) {
         unsafe {
             let mut msg: MSG = std::mem::zeroed();
             while GetMessageW(&mut msg, null_mut(), 0, 0) > 0 {
+                TranslateMessage(&msg); // WM_KEYDOWN -> WM_CHAR
                 DispatchMessageW(&msg);
             }
         }
@@ -218,10 +253,16 @@ unsafe impl Target for Window {
         }
     }
 
-    fn set_cursor(&self, pointer: bool) {
+    fn set_cursor(&self, cursor: u8) {
         // the class cursor, which Windows uses on the next mouse move
         unsafe {
-            let c = LoadCursorW(null_mut(), if pointer { IDC_HAND } else { IDC_ARROW });
+            let id = match cursor {
+                crate::gpu::CURSOR_HAND => IDC_HAND,
+                crate::gpu::CURSOR_TEXT => IDC_IBEAM,
+                crate::gpu::CURSOR_RESIZE => IDC_SIZENWSE,
+                _ => IDC_ARROW,
+            };
+            let c = LoadCursorW(null_mut(), id);
             SetClassLongPtrW(self.hwnd as _, GCLP_HCURSOR, c as isize);
         }
     }

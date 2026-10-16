@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
 use std::thread::JoinHandle;
 
+use bx_shell::input::Events as UiEvents;
 use bx_shell::native::Native;
 use clack_extensions::gui::*;
 use clack_extensions::state::*;
@@ -137,6 +138,8 @@ struct Open {
     size: Arc<AtomicU64>,
     /// Where the mouse is on the window (`pack_mouse`), polled with the timer, for hover effects.
     mouse: Arc<AtomicU64>,
+    /// Nobody pushes here: ponytail, keys in a host's window are the host's, no typing in the plugin yet.
+    events: Arc<UiEvents>,
     /// Running while shown, to poll the mouse.
     timer: Option<TimerId>,
     /// A resize drag: the mouse position on the screen and the window size when it started.
@@ -283,6 +286,7 @@ impl PluginGuiImpl for Main<'_> {
             thread: None,
             size: Arc::new(AtomicU64::new(pack_size(w, h))),
             mouse: Arc::new(AtomicU64::new(NO_MOUSE)),
+            events: Arc::new(UiEvents::new()),
             timer: None,
             drag: None,
             was_down: false,
@@ -302,15 +306,16 @@ impl PluginGuiImpl for Main<'_> {
         o.native.show();
         if o.thread.is_none() {
             o.stop.store(false, Relaxed);
-            let (native, stop, size, mouse) = (
+            let (native, stop, size, mouse, events) = (
                 o.native.clone(),
                 o.stop.clone(),
                 o.size.clone(),
                 o.mouse.clone(),
+                o.events.clone(),
             );
             o.thread = Some(std::thread::spawn(move || {
                 // nobody waits for `presented` in a host window
-                run(&*native, &size, &stop, &AtomicU64::new(0), &mouse)
+                run(&*native, &size, &stop, &AtomicU64::new(0), &mouse, &events)
             }));
         }
         if o.timer.is_none()

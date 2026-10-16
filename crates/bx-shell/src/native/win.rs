@@ -114,10 +114,16 @@ unsafe impl Target for Native {
         }
     }
 
-    fn set_cursor(&self, pointer: bool) {
+    fn set_cursor(&self, cursor: u8) {
         // the class cursor, which Windows uses on the next mouse move
         unsafe {
-            let c = LoadCursorW(null_mut(), if pointer { IDC_HAND } else { IDC_ARROW });
+            let id = match cursor {
+                crate::gpu::CURSOR_HAND => IDC_HAND,
+                crate::gpu::CURSOR_TEXT => IDC_IBEAM,
+                crate::gpu::CURSOR_RESIZE => IDC_SIZENWSE,
+                _ => IDC_ARROW,
+            };
+            let c = LoadCursorW(null_mut(), id);
             SetClassLongPtrW(self.hwnd as _, GCLP_HCURSOR, c as isize);
         }
     }

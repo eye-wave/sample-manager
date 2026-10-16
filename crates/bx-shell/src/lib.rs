@@ -9,5 +9,6 @@ compile_error!("the platform layer exists for Windows and X11 only");
 
 pub mod font;
 pub mod gpu;
+pub mod input;
 pub mod native;
 pub mod window;

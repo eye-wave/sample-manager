@@ -10,7 +10,8 @@ pub struct Native {
     dpy: usize,
     vdpy: usize,
     win: xlib::Window,
-    hand: xlib::Cursor,
+    /// Hand, I-beam and resize corner (the arrow is none).
+    cursors: [xlib::Cursor; 3],
 }
 
 impl Native {
@@ -29,7 +30,11 @@ impl Native {
                 dpy: dpy as usize,
                 vdpy: vdpy as usize,
                 win,
-                hand: xlib::XCreateFontCursor(dpy, 60), // XC_hand2
+                cursors: [
+                    xlib::XCreateFontCursor(dpy, 60),  // XC_hand2
+                    xlib::XCreateFontCursor(dpy, 152), // XC_xterm
+                    xlib::XCreateFontCursor(dpy, 14),  // XC_bottom_right_corner
+                ],
             })
         }
     }
@@ -95,11 +100,17 @@ unsafe impl Target for Native {
         }
     }
 
-    fn set_cursor(&self, pointer: bool) {
+    fn set_cursor(&self, cursor: u8) {
         // the render thread's own connection, the cursor itself is a server object
-        let (dpy, c) = (self.vdpy as *mut xlib::Display, self.hand);
+        let dpy = self.vdpy as *mut xlib::Display;
+        let c = match cursor {
+            crate::gpu::CURSOR_HAND => self.cursors[0],
+            crate::gpu::CURSOR_TEXT => self.cursors[1],
+            crate::gpu::CURSOR_RESIZE => self.cursors[2],
+            _ => 0,
+        };
         unsafe {
-            xlib::XDefineCursor(dpy, self.win, if pointer { c } else { 0 });
+            xlib::XDefineCursor(dpy, self.win, c);
             xlib::XFlush(dpy);
         }
     }

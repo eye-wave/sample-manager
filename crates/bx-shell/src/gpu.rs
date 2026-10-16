@@ -26,10 +26,18 @@ const EXTS: [&CStr; 2] = [khr::surface::NAME, khr::win32_surface::NAME];
 pub unsafe trait Target: Sync {
     /// Called on the render thread, once. The caller owns the surface and destroys it.
     fn surface(&self, entry: &Entry, inst: &Instance) -> vk::SurfaceKHR;
-    /// Called on the render thread when the scene asks for another mouse cursor: the hand
-    /// (`true`, [`Scene::pointer`]) or the usual arrow.
-    fn set_cursor(&self, _pointer: bool) {}
+    /// Called on the render thread when the scene asks for another mouse cursor
+    /// ([`Scene::cursor`]).
+    fn set_cursor(&self, _cursor: u8) {}
 }
+
+/// The mouse cursors of [`Scene::cursor`].
+pub const CURSOR_ARROW: u8 = 0;
+pub const CURSOR_HAND: u8 = 1;
+/// The I-beam over text.
+pub const CURSOR_TEXT: u8 = 2;
+/// The bottom right corner resize arrow.
+pub const CURSOR_RESIZE: u8 = 3;
 
 /// 4 samples is the one MSAA count the Vulkan spec requires every device to support.
 const SAMPLES: vk::SampleCountFlags = vk::SampleCountFlags::TYPE_4;
@@ -71,8 +79,8 @@ pub struct Scene {
     /// Like `flat` and `textured` again, drawn on top of both (a tooltip).
     pub over_flat: Vec<Vert>,
     pub over_textured: Vec<Vert>,
-    /// Show the hand cursor instead of the arrow.
-    pub pointer: bool,
+    /// The mouse cursor: one of `CURSOR_*`.
+    pub cursor: u8,
 }
 
 /// What the app brings to [`render`].
@@ -86,6 +94,9 @@ pub struct Content<'a> {
     pub scene: &'a dyn Fn(u32, u32, [f32; 2]) -> Scene,
     /// Where the mouse is, see [`pack_mouse`] (written by the window, polled every frame).
     pub mouse: &'a AtomicU64,
+    /// Clicks and keys; the scene takes them (`Events::take`), a push makes the next frame draw
+    /// the scene again.
+    pub events: &'a crate::input::Events,
 }
 
 /// Everything that depends on the surface size; rebuilt when the window is resized.
@@ -713,7 +724,7 @@ unsafe fn run(
             [(m >> 32) as u32 as i32 as f32, m as u32 as i32 as f32]
         };
         let s = scene(f.extent.width, f.extent.height, mouse);
-        target.set_cursor(s.pointer);
+        target.set_cursor(s.cursor);
         // flat, textured, over_flat, over_textured, one after the other (uv of the flat ones unused)
         let parts = [&s.flat, &s.textured, &s.over_flat, &s.over_textured];
         let n = parts.map(|p| p.len());
@@ -795,7 +806,7 @@ unsafe fn run(
         }
         // the GPU is idle here (queue_wait_idle below), so the scene can be rewritten
         let m = content.mouse.load(Relaxed);
-        if resized || m != last {
+        if content.events.dirty() || resized || m != last {
             record(&frame, m);
             last = m;
         }

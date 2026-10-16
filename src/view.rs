@@ -4,6 +4,24 @@ use crate::icons::{self, GRIP};
 use crate::theme::*;
 use bx_ui::*;
 
+/// `Layout::rects` id of the search box.
+pub const SEARCH: u32 = 1;
+
+/// What the screen remembers between frames.
+pub struct Ui {
+    pub search: TextBox,
+    /// Where the named nodes were put last frame, to tell what a click hit.
+    pub rects: Vec<(u32, Rect)>,
+}
+impl Ui {
+    pub fn new() -> Self {
+        Self {
+            search: TextBox::new("warped"),
+            rects: vec![],
+        }
+    }
+}
+
 /// folder, number of files, the files shown (a folder with files is open)
 const TREE: [(&str, &str, &[&str]); 4] = [
     ("Other", "61", &[]),
@@ -225,6 +243,7 @@ fn player(w: u32) -> Node {
 }
 fn status() -> Node {
     row(vec![
+        space().w(Fixed(16.0)),
         space().size(Fixed(6.0), Fixed(6.0)).bg(PINK, 3.0),
         text("15", 10.0, TEXT),
         text("samples", 10.0, DIM),
@@ -234,25 +253,29 @@ fn status() -> Node {
         text("Playback mode:", 10.0, DIM),
         text("Loop", 10.0, TEXT),
         space().w(Fill(1)),
-        icon(icons::GRIP_ICON, GRIP, DIM),
+        // flush in the corner: this square is where the window takes the resize drag (`in_grip`)
+        col(vec![space().h(Fill(1)), icon(icons::GRIP_ICON, GRIP, DIM)])
+            .size(Fixed(GRIP), Fill(1))
+            .cursor(Cursor::Resize),
     ])
     .spacing(5.0)
     .align(Align::Center)
-    .pad_xy(16.0, 0.0)
     .size(Fill(1), Fixed(28.0))
 }
 
-pub fn view(w: u32) -> Node {
+pub fn view(w: u32, ui: &Ui) -> Node {
     let search = row(vec![
         icon(icons::SEARCH, 14.0, DIM),
-        text("warped", 13.0, TEXT),
+        ui.search.node("Search samples", 13.0, TEXT, DIM),
     ])
     .spacing(10.0)
     .align(Align::Center)
     .pad_xy(14.0, 0.0)
     .size(Fixed(420.0), Fixed(30.0))
     .bg(FIELD, 15.0)
-    .border(LINE, 1.0);
+    .border(if ui.search.focused { PINK } else { LINE }, 1.0)
+    .id(SEARCH)
+    .cursor(Cursor::Text);
     let settings = row(vec![
         icon(icons::SETTINGS, 14.0, TEXT),
         text("Settings", 12.0, TEXT),

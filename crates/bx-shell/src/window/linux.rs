@@ -1,10 +1,11 @@
 //! X11: a top-level window. Wayland runs through XWayland.
 use super::Grip;
-use crate::gpu::{NO_MOUSE, Target, pack_mouse};
+use crate::gpu::{CURSOR_HAND, CURSOR_RESIZE, CURSOR_TEXT, NO_MOUSE, Target, pack_mouse};
+use crate::input::{Event, Events, Key};
 use ash::{Entry, Instance, khr, vk};
 use std::ffi::CString;
 use std::ptr::null;
-use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
 use x11::xlib;
 
 // Display* stored as usize so `Window` is Sync. Xlib is not thread-safe without XInitThreads, so
@@ -15,13 +16,16 @@ pub struct Window {
     vdpy: usize,
     win: xlib::Window,
     delete: xlib::Atom,
-    grip_cursor: xlib::Cursor,
-    hand_cursor: xlib::Cursor,
+    /// Hand, I-beam and resize corner (the arrow is none).
+    cursors: [xlib::Cursor; 3],
+    /// A resize drag is on: the cursor stays the corner even when the mouse is off the handle.
+    dragging: AtomicBool,
     size: (u32, u32),
     min_w: u32,
     grip: Grip,
     presented: AtomicU64,
     mouse: AtomicU64,
+    events: Events,
 }
 
 /// Makes the window `w` x `h`. The size hints say min = max, so the window manager offers no way
@@ -60,6 +64,7 @@ impl Window {
                 xlib::StructureNotifyMask
                     | xlib::PointerMotionMask
                     | xlib::LeaveWindowMask
+                    | xlib::KeyPressMask
                     | xlib::ButtonPressMask
                     | xlib::ButtonReleaseMask,
             );
@@ -70,13 +75,18 @@ impl Window {
                 vdpy: vdpy as usize,
                 win,
                 delete,
-                grip_cursor: xlib::XCreateFontCursor(dpy, 14), // XC_bottom_right_corner
-                hand_cursor: xlib::XCreateFontCursor(dpy, 60), // XC_hand2
+                cursors: [
+                    xlib::XCreateFontCursor(dpy, 60),  // XC_hand2
+                    xlib::XCreateFontCursor(dpy, 152), // XC_xterm
+                    xlib::XCreateFontCursor(dpy, 14),  // XC_bottom_right_corner
+                ],
+                dragging: AtomicBool::new(false),
                 size,
                 min_w: min.0,
                 grip,
                 presented: AtomicU64::new(0),
                 mouse: AtomicU64::new(NO_MOUSE),
+                events: Events::new(),
             }
         }
     }
@@ -92,13 +102,16 @@ impl Window {
         &self.mouse
     }
 
+    /// For the renderer (`render`'s events): what is clicked and typed.
+    pub fn events(&self) -> &Events {
+        &self.events
+    }
+
     pub fn run(&self) {
         let dpy = self.dpy as *mut xlib::Display;
         let (mut w, mut h) = self.size;
         // a resize drag: the mouse x on the screen and the window width when it started
         let mut drag: Option<(i32, u32)> = None;
-        // the cursor is the renderer's (see `set_cursor`) except on the handle
-        let mut on_grip = false;
         unsafe {
             let mut ev: xlib::XEvent = std::mem::zeroed();
             loop {
@@ -119,24 +132,54 @@ impl Window {
                             if (nw, nh) != (w, h) {
                                 set_size(dpy, self.win, nw, nh);
                             }
+                        }
+                    }
+                    xlib::KeyPress => {
+                        let mut buf = [0u8; 8];
+                        let mut sym = 0;
+                        let n = xlib::XLookupString(
+                            &mut ev.key,
+                            buf.as_mut_ptr() as _,
+                            buf.len() as _,
+                            &mut sym,
+                            std::ptr::null_mut(),
+                        );
+                        use x11::keysym::*;
+                        #[allow(non_upper_case_globals)]
+                        // the keysym constants are named like in X11
+                        let key = match sym as u32 {
+                            XK_BackSpace => Some(Key::Backspace),
+                            XK_Delete => Some(Key::Delete),
+                            XK_Left => Some(Key::Left),
+                            XK_Right => Some(Key::Right),
+                            XK_Home => Some(Key::Home),
+                            XK_End => Some(Key::End),
+                            XK_Return | XK_KP_Enter => Some(Key::Enter),
+                            XK_Escape => Some(Key::Escape),
+                            _ => None,
+                        };
+                        if let Some(k) = key {
+                            self.events.push(Event::Key(k));
                         } else {
-                            let on = (self.grip)(ev.motion.x, ev.motion.y, w, h);
-                            if on != on_grip {
-                                on_grip = on;
-                                xlib::XDefineCursor(
-                                    dpy,
-                                    self.win,
-                                    if on { self.grip_cursor } else { 0 },
-                                );
+                            // ponytail: Latin-1 only (XLookupString), Xutf8LookupString needs an input method
+                            for &b in &buf[..n.max(0) as usize] {
+                                if b >= 32 && b != 127 {
+                                    self.events.push(Event::Char(b as char));
+                                }
                             }
                         }
                     }
-                    xlib::ButtonPress
-                        if ev.button.button == 1 && (self.grip)(ev.button.x, ev.button.y, w, h) =>
-                    {
-                        drag = Some((ev.button.x_root, w));
+                    xlib::ButtonPress if ev.button.button == 1 => {
+                        self.events.push(Event::Click(ev.button.x, ev.button.y));
+                        if (self.grip)(ev.button.x, ev.button.y, w, h) {
+                            drag = Some((ev.button.x_root, w));
+                            self.dragging.store(true, Relaxed);
+                        }
                     }
-                    xlib::ButtonRelease => drag = None,
+                    xlib::ButtonRelease => {
+                        drag = None;
+                        self.dragging.store(false, Relaxed);
+                    }
                     xlib::ClientMessage
                         if ev.client_message.data.get_long(0) as xlib::Atom == self.delete =>
                     {
@@ -163,11 +206,22 @@ unsafe impl Target for Window {
         }
     }
 
-    fn set_cursor(&self, pointer: bool) {
+    fn set_cursor(&self, cursor: u8) {
         // the render thread's own connection, the cursor itself is a server object
-        let (dpy, c) = (self.vdpy as *mut xlib::Display, self.hand_cursor);
+        let dpy = self.vdpy as *mut xlib::Display;
+        let cursor = if self.dragging.load(Relaxed) {
+            CURSOR_RESIZE
+        } else {
+            cursor
+        };
+        let c = match cursor {
+            CURSOR_HAND => self.cursors[0],
+            CURSOR_TEXT => self.cursors[1],
+            CURSOR_RESIZE => self.cursors[2],
+            _ => 0,
+        };
         unsafe {
-            xlib::XDefineCursor(dpy, self.win, if pointer { c } else { 0 });
+            xlib::XDefineCursor(dpy, self.win, c);
             xlib::XFlush(dpy);
         }
     }
