@@ -2,20 +2,24 @@
 //! parent, rendered by render.rs and shell on its own thread). The window is resizable: the resize handle
 //! drawn in the corner is dragged with the mouse, which is polled on a host timer (the host owns
 //! the event loop), and the new size is requested from the host.
-use crate::icons::in_grip;
-use crate::render::{H, MIN_W, W, height_for, pack_size, run};
-use clack_extensions::gui::*;
-use clack_extensions::state::*;
-use clack_extensions::timer::*;
-use clack_plugin::plugin::features::UTILITY;
-use clack_plugin::prelude::*;
-use serde::{Deserialize, Serialize};
-use shell::native::Native;
+
 use std::cell::{Cell, RefCell};
 use std::io::{Read, Write};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
 use std::thread::JoinHandle;
+
+use bx_shell::native::Native;
+use clack_extensions::gui::*;
+use clack_extensions::state::*;
+use clack_extensions::timer::*;
+use clack_plugin::plugin::features::UTILITY;
+use clack_plugin::prelude::*;
+use clack_plugin::stream::{InputStream, OutputStream};
+use serde::{Deserialize, Serialize};
+
+use crate::icons::in_grip;
+use crate::render::{H, MIN_W, W, height_for, pack_size, run};
 
 #[cfg(unix)]
 const API: GuiApiType<'static> = GuiApiType::X11;
