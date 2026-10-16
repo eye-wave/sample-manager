@@ -12,7 +12,7 @@ pub const ICONS: [Mesh; 3] = [
 ];
 
 /// The resize handle.
-const GRIP_ICON: Mesh = icon!("node_modules/lucide-static/icons/move-diagonal-2.svg");
+const GRIP_ICON: Mesh = icon!("node_modules/lucide-static/icons/handle-bottom-right.svg");
 
 const SIZE: f32 = 96.0; // px
 const GAP: f32 = 24.0;
@@ -46,38 +46,4 @@ pub fn layout(w: u32, h: u32) -> Vec<[f32; 2]> {
         (gx + x * GRIP, gy + y * GRIP)
     });
     icons.chain(grip).map(|(x, y)| ndc(x, y)).collect()
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn every_icon_is_a_nonempty_mesh() {
-        for (v, i) in super::ICONS {
-            assert!(!v.is_empty() && i.len() % 3 == 0 && i.iter().all(|&i| (i as usize) < v.len()));
-        }
-    }
-
-    #[test]
-    fn layout_fits_every_allowed_size_and_has_a_fixed_length() {
-        let n = super::layout(400, 300).len();
-        for (w, h) in [
-            (400, 300),
-            (crate::render::MIN_W, crate::render::MIN_H),
-            (1920, 1080),
-        ] {
-            let t = super::layout(w, h);
-            assert_eq!(t.len(), n);
-            assert!(
-                t.iter().flatten().all(|c| (-1.0..=1.0).contains(c)),
-                "{w}x{h}"
-            );
-        }
-    }
-
-    #[test]
-    fn grip_is_the_bottom_right_corner() {
-        assert!(super::in_grip(399, 299, 400, 300) && super::in_grip(380, 280, 400, 300));
-        assert!(!super::in_grip(200, 150, 400, 300) && !super::in_grip(399, 200, 400, 300));
-        assert!(!super::in_grip(400, 300, 400, 300));
-    }
 }

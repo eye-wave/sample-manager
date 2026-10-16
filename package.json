@@ -1,5 +1,6 @@
 {
   "dependencies": {
-    "lucide-static": "^1.45.0"
+    "@fontsource/varela-round": "5",
+    "lucide-static": "1.55"
   }
 }
