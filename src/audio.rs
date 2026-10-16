@@ -130,6 +130,11 @@ pub struct Player {
     fresh: AtomicBool,
     /// The play position in frames of the clip, for the playhead.
     pos: AtomicUsize,
+    /// The voice holds its position and plays silence.
+    paused: AtomicBool,
+    /// A pending jump (frame), taken by the voice at its next block.
+    seek: AtomicUsize,
+    seeking: AtomicBool,
 }
 
 impl Player {
@@ -137,7 +142,29 @@ impl Player {
     pub fn play(&self, c: Arc<Clip>) {
         *self.mailbox.lock().unwrap() = Some(c);
         self.pos.store(0, Relaxed);
+        self.paused.store(false, Relaxed);
+        self.seeking.store(false, Relaxed);
         self.fresh.store(true, Release);
+    }
+
+    /// Silence: the editor was closed.
+    pub fn stop(&self) {
+        self.play(Arc::default());
+    }
+
+    pub fn toggle_pause(&self) {
+        self.paused.fetch_xor(true, Relaxed);
+    }
+
+    pub fn paused(&self) -> bool {
+        self.paused.load(Relaxed)
+    }
+
+    /// Jumps to `frame` (the voice keeps it inside the clip); the playhead moves at once.
+    pub fn seek(&self, frame: usize) {
+        self.pos.store(frame, Relaxed);
+        self.seek.store(frame, Relaxed);
+        self.seeking.store(true, Release);
     }
 
     pub fn pos(&self) -> usize {
@@ -181,6 +208,14 @@ impl Voice {
             return;
         };
         let (n, step) = (c.frames.len(), c.rate as f64 / self.rate);
+        if self.player.seeking.swap(false, Acquire) {
+            self.at = self.player.seek.load(Relaxed).min(n - 1) as f64;
+        }
+        if self.player.paused() {
+            left.fill(0.0);
+            right.fill(0.0);
+            return;
+        }
         for (l, r) in left.iter_mut().zip(right) {
             // linear interpolation between neighbours (also for another sample rate)
             let i = self.at as usize;
@@ -261,5 +296,37 @@ pub(crate) mod tests {
         p.play(Arc::default()); // an empty clip stops it
         v.render(&mut l, &mut r);
         assert_eq!(l, [0.0; 4]);
+    }
+
+    #[test]
+    fn pause_holds_the_position_and_seek_jumps() {
+        let p = Arc::new(Player::default());
+        let mut v = Voice::new(p.clone(), 1.0);
+        let (mut l, mut r) = ([9.0; 2], [9.0; 2]);
+        p.play(Arc::new(Clip::new(
+            1,
+            (0..4).map(|i| [i as f32; 2]).collect(),
+        )));
+        v.render(&mut l, &mut r);
+        assert_eq!((l, p.pos()), ([0.0, 1.0], 2));
+        p.toggle_pause();
+        v.render(&mut l, &mut r);
+        assert_eq!((l, r, p.pos()), ([0.0; 2], [0.0; 2], 2)); // silent, still at 2
+        p.seek(3); // while paused: the playhead moves, nothing plays
+        assert_eq!(p.pos(), 3);
+        v.render(&mut l, &mut r);
+        assert_eq!(l, [0.0; 2]);
+        p.toggle_pause();
+        v.render(&mut l, &mut r);
+        assert_eq!((l, p.pos()), ([3.0, 0.0], 1)); // from frame 3, then it loops
+        p.seek(100); // past the end: the last frame
+        v.render(&mut l[..1], &mut r[..1]);
+        assert_eq!(l[0], 3.0);
+        p.toggle_pause();
+        p.play(Arc::default()); // a new clip plays, whatever the pause was
+        assert!(!p.paused());
+        p.stop();
+        v.render(&mut l, &mut r);
+        assert_eq!(l, [0.0; 2]);
     }
 }

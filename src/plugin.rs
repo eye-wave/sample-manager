@@ -211,6 +211,7 @@ impl<'a> PluginMainThread<'a, Shared> for Main<'a> {}
 
 impl Main<'_> {
     fn stop_render(&self) {
+        self.player.stop(); // closing (or hiding) the editor ends the sound at once
         if let Some(o) = self.open.borrow_mut().as_mut() {
             o.stop.store(true, Relaxed);
             if let Some(t) = o.thread.take() {

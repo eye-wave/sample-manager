@@ -23,7 +23,7 @@ required-features = ["standalone"]
 
 [features]
 default = ["standalone"]
-standalone = []
+standalone = ["dep:cpal"]
 plugin = [
   "dep:clack-plugin",
   "dep:clack-extensions",
@@ -36,6 +36,7 @@ bx_shader = { path = "./crates/bx-shader" }
 bx_shell = { path = "./crates/bx-shell" }
 bx_svg = { path = "./crates/bx-svg" }
 bx_ui = { path = "./crates/bx-ui" }
+cpal = { version = "0.16", optional = true }
 dirs = "6"
 fuzzy-matcher = "0.3"
 rayon = "1"

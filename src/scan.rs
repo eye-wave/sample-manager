@@ -15,6 +15,7 @@ pub struct Scan {
     pub files: Arc<Vec<Sample>>,
 }
 
+#[derive(Clone)]
 pub struct Sample {
     pub name: String,
     pub path: PathBuf,
@@ -33,6 +34,8 @@ pub struct Dir {
     /// Unique in a scan (depth first order): what a click on the folder names.
     pub id: u32,
     pub name: String,
+    /// Where it is on disk (a file in `files` is `path.join(name)`).
+    pub path: PathBuf,
     pub dirs: Vec<Dir>,
     /// Audio files directly in here.
     pub files: Vec<String>,
@@ -69,6 +72,7 @@ fn walk(path: &Path, name: String, stop: &AtomicBool, all: &mut Vec<Sample>) -> 
     Dir {
         id: 0,
         name,
+        path: path.to_path_buf(),
         dirs,
         files,
         count,

@@ -17,8 +17,9 @@ pub const PAUSE: usize = 8;
 pub const GRIP_ICON: usize = 9;
 pub const FOLDER_OPEN: usize = 10;
 pub const CHEVRON_DOWN: usize = 11;
+pub const PLAY: usize = 12;
 
-pub const ICONS: [Mesh; 12] = [
+pub const ICONS: [Mesh; 13] = [
     icon!("node_modules/lucide-static/icons/search.svg"),
     icon!("node_modules/lucide-static/icons/settings.svg"),
     icon!("node_modules/lucide-static/icons/house.svg"),
@@ -31,6 +32,7 @@ pub const ICONS: [Mesh; 12] = [
     icon!("node_modules/lucide-static/icons/handle-bottom-right.svg"),
     icon!("node_modules/lucide-static/icons/folder-open.svg"),
     icon!("node_modules/lucide-static/icons/chevron-down.svg"),
+    icon!("node_modules/lucide-static/icons/play.svg"),
 ];
 
 /// The resize handle is the bottom-right `GRIP` x `GRIP` px square of the window (the view draws

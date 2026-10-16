@@ -5,11 +5,11 @@ use crate::audio::Player;
 use crate::icons::ICONS;
 use crate::scan::{Tree, scan};
 use crate::state::tracked_dirs;
-use crate::view::{FOLDER0, ROW0, SCROLL, SEARCH, Ui, view};
+use crate::view::{FOLDER0, PLAY, ROW0, SCROLL, SEARCH, TRACK0, TREE, TREE_SCROLL, Ui, WAVE, view};
 use bx_shell::font;
 use bx_shell::gpu::{self, Content, Scene, Target, Vert};
 use bx_shell::input::{Event, Events, Key};
-use bx_ui::{Cursor, Edit, Prim, layout, quad_tris};
+use bx_ui::{Cursor, Edit, Prim, Rect, layout, quad_tris};
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex};
 
@@ -28,6 +28,10 @@ pub const fn height_for(w: u32) -> u32 {
     w * H / W
 }
 
+fn within([x, y, w, h]: Rect, p: [f32; 2]) -> bool {
+    (x..x + w).contains(&p[0]) && (y..y + h).contains(&p[1])
+}
+
 /// What is drawn in a `w` x `h` px window with the mouse at `mouse` (px, NaN if it is elsewhere),
 /// after the `events` (clicks and typing) went to `ui`.
 pub fn scene(w: u32, h: u32, mouse: [f32; 2], ui: &mut Ui, events: Vec<Event>) -> Scene {
@@ -38,27 +42,49 @@ pub fn scene(w: u32, h: u32, mouse: [f32; 2], ui: &mut Ui, events: Vec<Event>) -
                 let hit: Vec<u32> = ui
                     .rects
                     .iter()
-                    .filter(|&&(_, [rx, ry, rw, rh])| {
-                        (rx..rx + rw).contains(&at[0]) && (ry..ry + rh).contains(&at[1])
-                    })
+                    .filter(|&&(_, r)| within(r, at))
                     .map(|&(id, _)| id)
                     .collect();
                 ui.search.focused = hit.contains(&SEARCH);
                 if let Some(&id) = hit.iter().find(|&&id| (ROW0..FOLDER0).contains(&id)) {
                     ui.select((id - ROW0) as usize);
                 }
+                if let Some(&id) = hit.iter().find(|&&id| id >= TRACK0) {
+                    ui.select_track((id - TRACK0) as usize);
+                }
                 if hit.contains(&SCROLL) {
                     ui.grab(at[1], h);
                 }
-                if let Some(&id) = hit.iter().find(|&&id| id >= FOLDER0) {
+                if hit.contains(&TREE_SCROLL) {
+                    ui.grab_tree(at[1], h);
+                }
+                if hit.contains(&PLAY) {
+                    ui.player.toggle_pause();
+                }
+                if hit.contains(&WAVE) {
+                    ui.seek(at[0]);
+                }
+                if let Some(&id) = hit.iter().find(|&&id| (FOLDER0..TRACK0).contains(&id)) {
                     let id = id - FOLDER0;
                     if !ui.toggled.remove(&id) {
                         ui.toggled.insert(id);
                     }
                 }
             }
-            Event::Scroll(n) => ui.first = ui.first.saturating_add_signed(n as isize * 3),
-            Event::Release => ui.drag = None,
+            // the wheel scrolls what the mouse is over: the tree, else the table
+            Event::Scroll(n) => {
+                let n = n as isize * 3;
+                if ui
+                    .rects
+                    .iter()
+                    .any(|&(id, r)| id == TREE && within(r, mouse))
+                {
+                    ui.tree_first = ui.tree_first.saturating_add_signed(n);
+                } else {
+                    ui.first = ui.first.saturating_add_signed(n);
+                }
+            }
+            Event::Release => (ui.drag, ui.tree_drag) = (None, None),
             Event::Char(c) if ui.search.focused => ui.search.edit(Edit::Char(c)),
             Event::Key(Key::Enter | Key::Escape) => ui.search.focused = false,
             Event::Key(k) if ui.search.focused => {
@@ -80,8 +106,10 @@ pub fn scene(w: u32, h: u32, mouse: [f32; 2], ui: &mut Ui, events: Vec<Event>) -
     }
     ui.refresh();
     ui.clamp(h);
-    if ui.drag.is_some() && !mouse[1].is_nan() {
-        ui.drag_to(mouse[1], h); // the thumb follows the mouse
+    if !mouse[1].is_nan() {
+        // the thumb follows the mouse
+        ui.drag_to(mouse[1], h);
+        ui.drag_tree(mouse[1], h);
     }
     let (fw, fh) = (w as f32, h as f32);
     let ndc = |[x, y]: [f32; 2], c: [f32; 4]| -> Vert {
@@ -168,19 +196,21 @@ pub fn run(
             *tree.lock().unwrap() = Some(scan(&tracked_dirs(), stop));
             events.wake();
         });
-        // the playhead moves without any input: draw again when the position changed
-        s.spawn(|| {
-            let mut last = 0;
+        let ui = Mutex::new(Ui::new(tree.clone(), player.clone()));
+        let busy = ui.lock().unwrap().busy.clone();
+        // the playhead moves and decodes finish without any input: draw again when the position
+        // changed, while a file decodes and once more when that ends
+        s.spawn(move || {
+            let (mut last, mut was_busy) = (0, 0);
             while !stop.load(std::sync::atomic::Ordering::Relaxed) {
                 std::thread::sleep(std::time::Duration::from_millis(33));
-                let p = player.pos();
-                if p != last {
-                    last = p;
+                let (p, b) = (player.pos(), busy.load(std::sync::atomic::Ordering::SeqCst));
+                if p != last || b != 0 || b != was_busy {
+                    (last, was_busy) = (p, b);
                     events.wake();
                 }
             }
         });
-        let ui = Mutex::new(Ui::new(tree.clone(), player.clone()));
         let content = Content {
             atlas: &atlas,
             scene: &|w, h, m| scene(w, h, m, &mut ui.lock().unwrap(), events.take()),
@@ -211,6 +241,7 @@ mod tests {
         }]);
         ui.results = vec![0];
         ui.select(0);
+        ui.settle(); // the decode thread reads the file
         std::fs::remove_file(&path).unwrap();
         ui
     }
@@ -224,6 +255,45 @@ mod tests {
             let n = s.flat.len() + s.textured.len() + s.over_flat.len() + s.over_textured.len();
             assert!(n <= 65536, "{w}: {n}");
         }
+    }
+
+    #[test]
+    fn the_wheel_scrolls_the_tree_under_the_mouse_and_clicks_start_and_pause() {
+        let dir = std::env::temp_dir().join(format!("sm-wheel-{}", std::process::id()));
+        let player = Arc::<Player>::default();
+        let mut ui = Ui::new(crate::view::tests::tree_of(&dir, 30), player.clone());
+        let none = [f32::NAN; 2];
+        scene(W, H, none, &mut ui, vec![]); // a frame first: it records where things are
+        let rect = |ui: &Ui, id| ui.rects.iter().find(|r| r.0 == id).unwrap().1;
+        let t = rect(&ui, TREE);
+        let on_tree = [t[0] + 20.0, t[1] + 20.0];
+        scene(W, H, on_tree, &mut ui, vec![Event::Scroll(2)]);
+        assert_eq!((ui.tree_first, ui.first), (6, 0));
+        scene(W, H, none, &mut ui, vec![Event::Scroll(1)]); // elsewhere: the table's
+        assert_eq!(ui.tree_first, 6);
+
+        // a click in the middle-left of the node `id`
+        let at = |ui: &Ui, id| {
+            let r = rect(ui, id);
+            Event::Click((r[0] + 40.0) as i32, (r[1] + 5.0) as i32)
+        };
+        ui.tree_first = 0;
+        scene(W, H, none, &mut ui, vec![]);
+        let click = at(&ui, crate::view::TRACK0 + 1); // good.wav, the folder is row 0
+        scene(W, H, none, &mut ui, vec![click]);
+        assert_eq!(ui.current.as_ref().unwrap().name, "good.wav");
+        ui.settle();
+        assert!(!player.paused());
+
+        scene(W, H, none, &mut ui, vec![]); // the player now has a play button and a waveform
+        let click = at(&ui, PLAY);
+        scene(W, H, none, &mut ui, vec![click]);
+        assert!(player.paused());
+        let w = rect(&ui, WAVE);
+        let click = Event::Click((w[0] + w[2] / 2.0) as i32, (w[1] + 5.0) as i32);
+        scene(W, H, none, &mut ui, vec![click]);
+        assert_eq!(player.pos(), 2); // the middle of 4 frames
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
