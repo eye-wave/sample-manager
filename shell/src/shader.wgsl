@@ -16,7 +16,7 @@ fn vs(@location(0) p: vec2<f32>, @location(1) uv: vec2<f32>) -> V {
 @group(0) @binding(1) var samp: sampler;
 
 const COLOR: vec3<f32> = vec3(0.9, 0.9, 0.95);
-// distance range of the atlas in atlas px; keep equal to PX_RANGE in tools/msdf.py
+// distance range of the atlas in atlas px; keep equal to PX_RANGE in tools/msdf
 const PX_RANGE: f32 = 4.0;
 
 @fragment

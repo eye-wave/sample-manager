@@ -7,9 +7,6 @@ use windows_sys::Win32::System::LibraryLoader::*;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
-pub const API: GuiApiType<'static> = GuiApiType::WIN32;
-pub const EXTS: [&CStr; 2] = [khr::surface::NAME, khr::win32_surface::NAME];
-
 // Raw handles stored as usize so `Native` is Send + Sync (the render thread only needs the HWND).
 pub struct Native {
     hwnd: usize,
@@ -17,10 +14,7 @@ pub struct Native {
 }
 
 impl Native {
-    pub fn new(parent: &Window, w: u32, h: u32) -> Result<Self, PluginError> {
-        let parent = parent
-            .as_win32_hwnd()
-            .ok_or(PluginError::Message("not a Win32 parent"))?;
+    pub fn new(parent: usize, w: u32, h: u32) -> Result<Self, &'static str> {
         unsafe {
             // Our own DLL's handle (not the host exe's), found from the address of this function.
             let mut hinst: HMODULE = null_mut();
@@ -56,7 +50,7 @@ impl Native {
                 null(),
             );
             if hwnd.is_null() {
-                return Err(PluginError::Message("CreateWindowExW failed"));
+                return Err("CreateWindowExW failed");
             }
             Ok(Self {
                 hwnd: hwnd as usize,
@@ -65,14 +59,12 @@ impl Native {
         }
     }
 
-    pub fn show(&self) -> Result<(), PluginError> {
+    pub fn show(&self) {
         unsafe { ShowWindow(self.hwnd as _, SW_SHOW) };
-        Ok(())
     }
 
-    pub fn hide(&self) -> Result<(), PluginError> {
+    pub fn hide(&self) {
         unsafe { ShowWindow(self.hwnd as _, SW_HIDE) };
-        Ok(())
     }
 
     pub fn resize(&self, w: u32, h: u32) {
@@ -106,8 +98,10 @@ impl Native {
             }
         }
     }
+}
 
-    pub unsafe fn surface(&self, entry: &Entry, inst: &Instance) -> vk::SurfaceKHR {
+unsafe impl Target for Native {
+    fn surface(&self, entry: &Entry, inst: &Instance) -> vk::SurfaceKHR {
         unsafe {
             khr::win32_surface::Instance::new(entry, inst)
                 .create_win32_surface(

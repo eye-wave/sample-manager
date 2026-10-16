@@ -1,7 +1,9 @@
-//! MSDF text: glyph quads for the atlas made by tools/msdf.py (DejaVu Sans, printable ASCII).
+//! MSDF text: glyph quads for the atlas made by tools/msdf (printable ASCII).
 //! No layouting: `text` puts one glyph after the other on a single line, no kerning, no wrapping.
-//! No Vulkan here, the quads go to gpu.rs as `[x, y, u, v]` vertices.
+//! The quads go to gpu.rs as `[x, y, u, v]` vertices.
 #![allow(dead_code)] // PX_RANGE is only checked by a test (the shader has its own copy)
+
+use crate::gpu::Atlas;
 
 pub struct Glyph {
     /// Advance in em.
@@ -15,12 +17,17 @@ pub struct Glyph {
 
 include!("../assets/font.rs"); // ATLAS_W, ATLAS_H, PX_RANGE, GLYPHS
 
-/// The atlas as RGBA (alpha unused). It holds distances, so it must be sampled as UNORM, not sRGB.
-pub fn atlas_rgba() -> Vec<u8> {
-    include_bytes!("../assets/font.rgb")
+/// The atlas for `gpu::render`. It holds distances, so it is sampled as UNORM, not sRGB.
+pub fn atlas() -> Atlas {
+    let rgba = include_bytes!("../assets/font.rgb")
         .chunks(3)
         .flat_map(|c| [c[0], c[1], c[2], 255])
-        .collect()
+        .collect();
+    Atlas {
+        w: ATLAS_W,
+        h: ATLAS_H,
+        rgba,
+    }
 }
 
 /// Appends 6 vertices per char of `s`: it starts at `origin` (px from the top left of the `w` x `h`

@@ -1,15 +1,7 @@
-//! Two front ends over one renderer: the `standalone` feature builds the app (main.rs, window/),
-//! the `plugin` feature builds the CLAP plugin (plugin.rs, native.rs). The renderer is split into
-//! the GUI (render.rs, font.rs, icons.rs: what is drawn) and raw Vulkan (gpu.rs: how).
-mod font;
-mod gpu;
+//! The app: what is drawn (icons.rs, render.rs) and its two front ends, the standalone window
+//! (main.rs) and the CLAP plugin (plugin.rs). Windows, Vulkan and text are the `shell` crate.
 pub mod icons;
 pub mod render;
 
-#[cfg(feature = "standalone")]
-pub mod window;
-
-#[cfg(feature = "plugin")]
-mod native;
 #[cfg(feature = "plugin")]
 mod plugin;

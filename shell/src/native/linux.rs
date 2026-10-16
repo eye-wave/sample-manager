@@ -3,9 +3,6 @@ use super::*;
 use std::ptr::null;
 use x11::xlib;
 
-pub const API: GuiApiType<'static> = GuiApiType::X11;
-pub const EXTS: [&CStr; 2] = [khr::surface::NAME, khr::xlib_surface::NAME];
-
 // Display* stored as usize so `Native` is Send + Sync. Xlib is not thread-safe without
 // XInitThreads, so each thread gets its own connection: `dpy` is for the main thread (create,
 // map, resize, query, destroy), `vdpy` is only handed to Vulkan on the render thread.
@@ -16,18 +13,16 @@ pub struct Native {
 }
 
 impl Native {
-    pub fn new(parent: &Window, w: u32, h: u32) -> Result<Self, PluginError> {
-        let parent = parent
-            .as_x11_handle()
-            .ok_or(PluginError::Message("not an X11 parent"))?;
+    pub fn new(parent: usize, w: u32, h: u32) -> Result<Self, &'static str> {
         unsafe {
             // Own connections, so we never share the host's Display.
             let dpy = xlib::XOpenDisplay(null());
             let vdpy = xlib::XOpenDisplay(null());
             if dpy.is_null() || vdpy.is_null() {
-                return Err(PluginError::Message("XOpenDisplay failed"));
+                return Err("XOpenDisplay failed");
             }
-            let win = xlib::XCreateSimpleWindow(dpy, parent, 0, 0, w, h, 0, 0, 0);
+            let win = xlib::XCreateSimpleWindow(dpy, parent as xlib::Window, 0, 0, w, h, 0, 0, 0);
+            xlib::XSetWindowBackgroundPixmap(dpy, win, 0); // None: the server must not clear on resize
             xlib::XFlush(dpy); // so `vdpy` can see the window
             Ok(Self {
                 dpy: dpy as usize,
@@ -37,20 +32,18 @@ impl Native {
         }
     }
 
-    pub fn show(&self) -> Result<(), PluginError> {
+    pub fn show(&self) {
         unsafe {
             xlib::XMapWindow(self.dpy as _, self.win);
             xlib::XFlush(self.dpy as _);
         }
-        Ok(())
     }
 
-    pub fn hide(&self) -> Result<(), PluginError> {
+    pub fn hide(&self) {
         unsafe {
             xlib::XUnmapWindow(self.dpy as _, self.win);
             xlib::XFlush(self.dpy as _);
         }
-        Ok(())
     }
 
     pub fn resize(&self, w: u32, h: u32) {
@@ -84,8 +77,10 @@ impl Native {
             down: mask & xlib::Button1Mask != 0,
         }
     }
+}
 
-    pub unsafe fn surface(&self, entry: &Entry, inst: &Instance) -> vk::SurfaceKHR {
+unsafe impl Target for Native {
+    fn surface(&self, entry: &Entry, inst: &Instance) -> vk::SurfaceKHR {
         unsafe {
             khr::xlib_surface::Instance::new(entry, inst)
                 .create_xlib_surface(

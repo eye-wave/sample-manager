@@ -1,0 +1,13 @@
+[package]
+name = "msdf-atlas"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# A dev tool, not part of the build: it makes shell/assets/font.rgb and font.rs (committed).
+# msdfgen builds the C++ msdfgen library, so it needs a C++ compiler. ttf-parser must be the
+# version msdfgen is built against (0.18), or `glyph_shape` does not exist for our `Face`.
+[dependencies]
+msdfgen = { version = "0.2.1", default-features = false, features = ["ttf-parser"] }
+ttf-parser = "0.18"
+flate2 = "1" # for .woff, what npm font packages (@fontsource) ship

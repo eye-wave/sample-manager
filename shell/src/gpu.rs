@@ -1,13 +1,30 @@
 //! Raw Vulkan (ash). Knows nothing about icons, fonts or layout: it draws a [`Scene`] (two lists of
-//! vertices, see below) with an [`Atlas`] texture on whatever surface it is given. The GUI side
-//! lives in render.rs, platform code only supplies the surface.
+//! vertices, see below) with an [`Atlas`] texture on a [`Target`] (a window of this crate). What
+//! to draw is up to the app.
 // no HiDPI, 4x MSAA is the only antialiasing, unwrap() instead of error handling (a
 // panic only kills the render thread, never the host).
 #![allow(unsafe_op_in_unsafe_fn)] // the whole renderer is one unsafe block
 use ash::{Entry, Instance, khr, vk};
-use std::ffi::{CStr, c_char};
+use std::ffi::CStr;
 use std::io::Cursor;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
+
+#[cfg(all(unix, not(target_os = "macos")))]
+const EXTS: [&CStr; 2] = [khr::surface::NAME, khr::xlib_surface::NAME];
+#[cfg(windows)]
+const EXTS: [&CStr; 2] = [khr::surface::NAME, khr::win32_surface::NAME];
+
+/// A native window that Vulkan can draw on: [`crate::window::Window`], [`crate::native::Native`].
+///
+/// # Safety
+///
+/// `surface` must return a valid surface for a window that stays alive as long as `self` is
+/// borrowed, and nothing but the thread that calls it may touch the connection (X11 `Display`)
+/// the surface was made from.
+pub unsafe trait Target: Sync {
+    /// Called on the render thread, once. The caller owns the surface and destroys it.
+    fn surface(&self, entry: &Entry, inst: &Instance) -> vk::SurfaceKHR;
+}
 
 /// 4 samples is the one MSAA count the Vulkan spec requires every device to support.
 const SAMPLES: vk::SampleCountFlags = vk::SampleCountFlags::TYPE_4;
@@ -23,10 +40,10 @@ pub const fn pack_size(w: u32, h: u32) -> u64 {
 }
 
 /// The texture the `textured` vertices sample (R8G8B8A8_UNORM, i.e. no sRGB decoding).
-pub struct Atlas<'a> {
+pub struct Atlas {
     pub w: u32,
     pub h: u32,
-    pub rgba: &'a [u8],
+    pub rgba: Vec<u8>,
 }
 
 /// What to draw for one window size, as triangle lists in NDC with y down (see shader.wgsl).
@@ -54,52 +71,57 @@ fn color_range() -> vk::ImageSubresourceRange {
         .layer_count(1)
 }
 
-/// Creates a Vulkan instance, device and swapchain for the surface that `surface` returns, then
-/// draws at 4x MSAA until `stop` is set. The swapchain follows the size of the surface, so the
-/// caller only has to resize the window. Everything is destroyed again before this returns.
+/// Creates a Vulkan instance, device and swapchain for `target`, then draws at 4x MSAA until
+/// `stop` is set. The swapchain follows the size of the window, so the caller only has to resize
+/// the window. Everything is destroyed again before this returns. Meant for a thread of its own.
 ///
-/// `scene` is called with the surface size (on this thread) at the start and after every resize;
+/// `scene` is called with the window size (on this thread) at the start and after every resize;
 /// it may return a different number of vertices each time, up to [`MAX_VERTS`] in total.
 ///
-/// `exts` are the instance extensions the surface needs. `size` (see [`pack_size`]) is the
-/// current window size; it is only read where the surface does not report its own size
-/// (Wayland), and must then be kept up to date by the caller.
+/// `size` (see [`pack_size`]) is the current window size; it is only read where the surface does
+/// not report its own size (Wayland), and must then be kept up to date by the caller. After every
+/// presented frame its size (see [`pack_size`]) is stored in `presented`, so a window can wait for
+/// a frame that fits before it lets go of a resize (no stale, stretched frame).
 ///
-/// Each frame is acquire -> submit -> present -> `queue_wait_idle`.
-///
-/// # Safety
-///
-/// - A Vulkan loader must be installed, and `exts` must contain every instance extension that the
-///   surface returned by `surface` needs.
-/// - `surface` must return a valid surface for a native window, created from the `Entry` and
-///   `Instance` it is given. The window must stay alive until this function returns. This
-///   function takes ownership of the surface and destroys it, so the caller must not.
-/// - The surface must not be used by anything else meanwhile, and on X11 the `Display` behind it
-///   must not be used by other threads (Xlib is not thread-safe here).
+/// Each frame is acquire -> submit -> present -> `queue_wait_idle`. Frames are paced by a 16 ms
+/// sleep while the size is steady, and by the presentation queue alone while it changes.
 ///
 /// # Panics
 ///
-/// Panics on any Vulkan error (there is no error handling), if no device can present to the
-/// surface, or if a scene has more than `MAX_VERTS` vertices. Resources are leaked in that
-/// case, which only matters if the process continues.
-// queue_wait_idle + a 16 ms sleep per frame instead of frames-in-flight / redraw on demand.
-pub unsafe fn render(
-    exts: &[*const c_char],
-    surface: impl FnOnce(&Entry, &Instance) -> vk::SurfaceKHR,
+/// On any Vulkan error (there is no error handling), without a Vulkan loader, if no device can
+/// present to the window, or if a scene has more than `MAX_VERTS` vertices. Resources are leaked
+/// then, which only matters if the process continues.
+// queue_wait_idle instead of frames-in-flight, constant redraw instead of redraw on demand.
+pub fn render(
+    target: &impl Target,
     size: &AtomicU64,
     stop: &AtomicBool,
+    presented: &AtomicU64,
+    atlas: &Atlas,
+    scene: impl Fn(u32, u32) -> Scene,
+) {
+    // sound because of the contract of `Target`
+    unsafe { run(target, size, stop, presented, atlas, scene) }
+}
+
+unsafe fn run(
+    target: &impl Target,
+    size: &AtomicU64,
+    stop: &AtomicBool,
+    presented: &AtomicU64,
     atlas: &Atlas,
     scene: impl Fn(u32, u32) -> Scene,
 ) {
     let entry = Entry::load().unwrap();
+    let exts = EXTS.map(|e| e.as_ptr());
     let inst = entry
         .create_instance(
-            &vk::InstanceCreateInfo::default().enabled_extension_names(exts),
+            &vk::InstanceCreateInfo::default().enabled_extension_names(&exts),
             None,
         )
         .unwrap();
     let surf_i = khr::surface::Instance::new(&entry, &inst);
-    let surf = surface(&entry, &inst);
+    let surf = target.surface(&entry, &inst);
 
     let (pd, qf) = inst
         .enumerate_physical_devices()
@@ -686,12 +708,13 @@ pub unsafe fn render(
         .create_semaphore(&vk::SemaphoreCreateInfo::default(), None)
         .unwrap();
     while !stop.load(Relaxed) {
-        std::thread::sleep(std::time::Duration::from_millis(16));
         let now = extent_of();
         if now.width == 0 || now.height == 0 {
-            continue; // minimized
+            std::thread::sleep(std::time::Duration::from_millis(16)); // minimized
+            continue;
         }
-        if now != frame.extent {
+        let resized = now != frame.extent;
+        if resized {
             dev.device_wait_idle().unwrap();
             let new = build(frame.sc, now);
             free(std::mem::replace(&mut frame, new));
@@ -709,7 +732,7 @@ pub unsafe fn render(
                 vk::Fence::null(),
             )
             .unwrap();
-            let _ = sc_d.queue_present(
+            let r = sc_d.queue_present(
                 queue,
                 &vk::PresentInfoKHR::default()
                     .wait_semaphores(&[done])
@@ -717,6 +740,12 @@ pub unsafe fn render(
                     .image_indices(&[i]),
             );
             dev.queue_wait_idle(queue).unwrap();
+            if r.is_ok() {
+                presented.store(pack_size(frame.extent.width, frame.extent.height), Relaxed);
+            }
+        }
+        if !resized {
+            std::thread::sleep(std::time::Duration::from_millis(16));
         }
     }
 

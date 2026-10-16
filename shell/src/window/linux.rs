@@ -1,11 +1,11 @@
 //! X11: a top-level window. Wayland runs through XWayland.
 use super::Grip;
+use crate::gpu::Target;
 use ash::{Entry, Instance, khr, vk};
-use std::ffi::{CStr, CString, c_long};
+use std::ffi::CString;
 use std::ptr::null;
+use std::sync::atomic::AtomicU64;
 use x11::xlib;
-
-pub const EXTS: [&CStr; 2] = [khr::surface::NAME, khr::xlib_surface::NAME];
 
 // Display* stored as usize so `Window` is Sync. Xlib is not thread-safe without XInitThreads, so
 // each thread gets its own connection: `dpy` is for the thread of `new` / `run` / `drop`, `vdpy`
@@ -14,12 +14,25 @@ pub struct Window {
     dpy: usize,
     vdpy: usize,
     win: xlib::Window,
-    root: xlib::Window,
     delete: xlib::Atom,
-    moveresize: xlib::Atom,
     grip_cursor: xlib::Cursor,
     size: (u32, u32),
+    min_w: u32,
     grip: Grip,
+    presented: AtomicU64,
+}
+
+/// Makes the window `w` x `h`. The size hints say min = max, so the window manager offers no way
+/// to resize by the edges, and they are updated first so that it accepts the new size.
+unsafe fn set_size(dpy: *mut xlib::Display, win: xlib::Window, w: u32, h: u32) {
+    unsafe {
+        let mut hints: xlib::XSizeHints = std::mem::zeroed();
+        hints.flags = xlib::PMinSize | xlib::PMaxSize;
+        (hints.min_width, hints.min_height) = (w as _, h as _);
+        (hints.max_width, hints.max_height) = (w as _, h as _);
+        xlib::XSetWMNormalHints(dpy, win, &mut hints);
+        xlib::XResizeWindow(dpy, win, w, h);
+    }
 }
 
 impl Window {
@@ -27,20 +40,25 @@ impl Window {
         unsafe {
             let (dpy, vdpy) = (xlib::XOpenDisplay(null()), xlib::XOpenDisplay(null()));
             assert!(!dpy.is_null() && !vdpy.is_null(), "XOpenDisplay failed");
-            let atom = |name: &CStr| xlib::XInternAtom(dpy, name.as_ptr(), 0);
             let root = xlib::XDefaultRootWindow(dpy);
             let win = xlib::XCreateSimpleWindow(dpy, root, 0, 0, size.0, size.1, 0, 0, 0);
             xlib::XStoreName(dpy, win, CString::new(title).unwrap().as_ptr());
-            let mut hints: xlib::XSizeHints = std::mem::zeroed();
-            hints.flags = xlib::PMinSize;
-            (hints.min_width, hints.min_height) = (min.0 as _, min.1 as _);
-            xlib::XSetWMNormalHints(dpy, win, &mut hints);
-            let mut delete = atom(c"WM_DELETE_WINDOW");
+            // flicker: no background (the server would paint it over our frame on every resize),
+            // and the old contents stay put until the next frame replaces them
+            xlib::XSetWindowBackgroundPixmap(dpy, win, 0);
+            let mut attrs: xlib::XSetWindowAttributes = std::mem::zeroed();
+            attrs.bit_gravity = xlib::NorthWestGravity;
+            xlib::XChangeWindowAttributes(dpy, win, xlib::CWBitGravity, &mut attrs);
+            set_size(dpy, win, size.0, size.1);
+            let mut delete = xlib::XInternAtom(dpy, c"WM_DELETE_WINDOW".as_ptr(), 0);
             xlib::XSetWMProtocols(dpy, win, &mut delete, 1);
             xlib::XSelectInput(
                 dpy,
                 win,
-                xlib::StructureNotifyMask | xlib::PointerMotionMask | xlib::ButtonPressMask,
+                xlib::StructureNotifyMask
+                    | xlib::PointerMotionMask
+                    | xlib::ButtonPressMask
+                    | xlib::ButtonReleaseMask,
             );
             xlib::XMapWindow(dpy, win);
             xlib::XFlush(dpy); // so `vdpy` can see the window
@@ -48,19 +66,27 @@ impl Window {
                 dpy: dpy as usize,
                 vdpy: vdpy as usize,
                 win,
-                root,
                 delete,
-                moveresize: atom(c"_NET_WM_MOVERESIZE"),
                 grip_cursor: xlib::XCreateFontCursor(dpy, 14), // XC_bottom_right_corner
                 size,
+                min_w: min.0,
                 grip,
+                presented: AtomicU64::new(0),
             }
         }
+    }
+
+    /// For the renderer (`render`'s `presented`). X11 does not wait for it: the missing
+    /// background is what keeps the resize calm.
+    pub fn presented(&self) -> &AtomicU64 {
+        &self.presented
     }
 
     pub fn run(&self) {
         let dpy = self.dpy as *mut xlib::Display;
         let (mut w, mut h) = self.size;
+        // a resize drag: the mouse x on the screen and the window width when it started
+        let mut drag: Option<(i32, u32)> = None;
         unsafe {
             let mut ev: xlib::XEvent = std::mem::zeroed();
             loop {
@@ -69,41 +95,30 @@ impl Window {
                     xlib::ConfigureNotify => {
                         (w, h) = (ev.configure.width as u32, ev.configure.height as u32)
                     }
+                    // the button is held, so these keep coming to this window even outside of it
                     xlib::MotionNotify => {
-                        let on = (self.grip)(ev.motion.x, ev.motion.y, w, h);
-                        xlib::XDefineCursor(dpy, self.win, if on { self.grip_cursor } else { 0 });
+                        if let Some((x0, w0)) = drag {
+                            let nw =
+                                (w0 as i32 + ev.motion.x_root - x0).max(self.min_w as i32) as u32;
+                            let nh = nw * self.size.1 / self.size.0;
+                            if (nw, nh) != (w, h) {
+                                set_size(dpy, self.win, nw, nh);
+                            }
+                        } else {
+                            let on = (self.grip)(ev.motion.x, ev.motion.y, w, h);
+                            xlib::XDefineCursor(
+                                dpy,
+                                self.win,
+                                if on { self.grip_cursor } else { 0 },
+                            );
+                        }
                     }
                     xlib::ButtonPress
                         if ev.button.button == 1 && (self.grip)(ev.button.x, ev.button.y, w, h) =>
                     {
-                        // the window manager takes over the drag: the mouse position on the
-                        // screen, direction 4 (bottom right), button 1, "sent by an application"
-                        xlib::XUngrabPointer(dpy, xlib::CurrentTime);
-                        let mut data = xlib::ClientMessageData::new();
-                        let args = [
-                            ev.button.x_root as c_long,
-                            ev.button.y_root as c_long,
-                            4,
-                            1,
-                            1,
-                        ];
-                        for (i, a) in args.into_iter().enumerate() {
-                            data.set_long(i, a);
-                        }
-                        let mut msg: xlib::XEvent = xlib::XClientMessageEvent {
-                            type_: xlib::ClientMessage,
-                            serial: 0,
-                            send_event: 0,
-                            display: dpy,
-                            window: self.win,
-                            message_type: self.moveresize,
-                            format: 32,
-                            data,
-                        }
-                        .into();
-                        let mask = xlib::SubstructureRedirectMask | xlib::SubstructureNotifyMask;
-                        xlib::XSendEvent(dpy, self.root, 0, mask, &mut msg);
+                        drag = Some((ev.button.x_root, w));
                     }
+                    xlib::ButtonRelease => drag = None,
                     xlib::ClientMessage
                         if ev.client_message.data.get_long(0) as xlib::Atom == self.delete =>
                     {
@@ -114,8 +129,10 @@ impl Window {
             }
         }
     }
+}
 
-    pub unsafe fn surface(&self, entry: &Entry, inst: &Instance) -> vk::SurfaceKHR {
+unsafe impl Target for Window {
+    fn surface(&self, entry: &Entry, inst: &Instance) -> vk::SurfaceKHR {
         unsafe {
             khr::xlib_surface::Instance::new(entry, inst)
                 .create_xlib_surface(

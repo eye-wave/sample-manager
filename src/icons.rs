@@ -1,5 +1,6 @@
-//! The example icons, tessellated at compile time by `lucide_macro::icon!` (needs `npm install`).
-use lucide_macro::icon;
+//! The example icons (lucide, from `npm install`), tessellated at compile time by
+//! `icon_macro::icon!`, which takes any SVG file.
+use icon_macro::icon;
 
 /// Vertices (0..1, y down) and triangle indices.
 pub type Mesh = (&'static [[f32; 2]], &'static [u32]);
@@ -9,6 +10,9 @@ pub const ICONS: [Mesh; 3] = [
     icon!("node_modules/lucide-static/icons/lightbulb.svg"),
     icon!("node_modules/lucide-static/icons/cpu.svg"),
 ];
+
+/// The resize handle.
+const GRIP_ICON: Mesh = icon!("node_modules/lucide-static/icons/move-diagonal-2.svg");
 
 const SIZE: f32 = 96.0; // px
 const GAP: f32 = 24.0;
@@ -23,7 +27,7 @@ pub fn in_grip(x: i32, y: i32, w: u32, h: u32) -> bool {
 }
 
 /// Everything drawn, as one NDC triangle list for a `w` x `h` px surface: the icons in a centered
-/// row, and the resize handle (a triangle of six dots) in the bottom-right corner. The length does
+/// row, and the resize handle (a lucide icon) in the bottom-right corner. The length does
 /// not depend on `w` and `h`.
 pub fn layout(w: u32, h: u32) -> Vec<[f32; 2]> {
     let (w, h) = (w as f32, h as f32);
@@ -36,15 +40,12 @@ pub fn layout(w: u32, h: u32) -> Vec<[f32; 2]> {
             (x0 + n as f32 * (SIZE + GAP) + x * SIZE, y0 + y * SIZE)
         })
     });
-    // 3 px dots, 6 px apart, 5 px from the corner; (i, j) counts from the right / from the bottom
-    let dots = [(0, 0), (1, 0), (2, 0), (0, 1), (1, 1), (0, 2)]
-        .into_iter()
-        .flat_map(|(i, j): (u8, u8)| {
-            let (r, b) = (w - 5.0 - i as f32 * 6.0, h - 5.0 - j as f32 * 6.0);
-            let (l, t) = (r - 3.0, b - 3.0);
-            [(l, t), (r, t), (l, b), (r, t), (r, b), (l, b)]
-        });
-    icons.chain(dots).map(|(x, y)| ndc(x, y)).collect()
+    let (gx, gy) = (w - GRIP, h - GRIP);
+    let grip = GRIP_ICON.1.iter().map(|&i| {
+        let [x, y] = GRIP_ICON.0[i as usize];
+        (gx + x * GRIP, gy + y * GRIP)
+    });
+    icons.chain(grip).map(|(x, y)| ndc(x, y)).collect()
 }
 
 #[cfg(test)]

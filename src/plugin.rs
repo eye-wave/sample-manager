@@ -1,18 +1,37 @@
 //! The CLAP plugin: no audio, no params, just the editor window (a child window under the host's
-//! parent, rendered by render.rs on its own thread). The window is resizable: the resize handle
+//! parent, rendered by render.rs and shell on its own thread). The window is resizable: the resize handle
 //! drawn in the corner is dragged with the mouse, which is polled on a host timer (the host owns
 //! the event loop), and the new size is requested from the host.
 use crate::icons::in_grip;
-use crate::native::{API, EXTS, Native};
-use crate::render::{H, MIN_H, MIN_W, W, pack_size, render};
+use crate::render::{H, MIN_W, W, height_for, pack_size, run};
 use clack_extensions::gui::*;
+use clack_extensions::state::*;
 use clack_extensions::timer::*;
 use clack_plugin::plugin::features::UTILITY;
 use clack_plugin::prelude::*;
+use clack_plugin::stream::{InputStream, OutputStream};
+use serde::{Deserialize, Serialize};
+use shell::native::Native;
 use std::cell::{Cell, RefCell};
+use std::io::{Read, Write};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
 use std::thread::JoinHandle;
+
+#[cfg(unix)]
+const API: GuiApiType<'static> = GuiApiType::X11;
+#[cfg(windows)]
+const API: GuiApiType<'static> = GuiApiType::WIN32;
+
+/// The host's parent window as the native handle `Native::new` wants.
+#[cfg(unix)]
+fn parent_handle(w: &Window) -> Option<usize> {
+    w.as_x11_handle().map(|h| h as usize)
+}
+#[cfg(windows)]
+fn parent_handle(w: &Window) -> Option<usize> {
+    w.as_win32_hwnd().map(|h| h as usize)
+}
 
 pub struct Editor;
 pub struct Shared;
@@ -24,7 +43,9 @@ impl Plugin for Editor {
     type MainThread<'a> = Main<'a>;
 
     fn declare_extensions(b: &mut PluginExtensions<Self>, _: Option<&Shared>) {
-        b.register::<PluginGui>().register::<PluginTimer>();
+        b.register::<PluginGui>()
+            .register::<PluginTimer>()
+            .register::<PluginState>();
     }
 }
 
@@ -68,12 +89,48 @@ impl<'a> PluginAudioProcessor<'a, Shared, Main<'a>> for Idle {
     }
 }
 
+/// What the host keeps for us (postcard): the window size as a multiple of the default one. The
+/// aspect ratio is fixed, so that one number is the whole state.
+#[derive(Serialize, Deserialize)]
+struct State {
+    scale: f32,
+}
+
+/// The window size for a saved `scale`; garbage (NaN, huge) ends up inside the allowed range.
+fn size_from(scale: f32) -> (u32, u32) {
+    let w = ((W as f32 * scale).round() as u32).clamp(MIN_W, 8192);
+    (w, height_for(w))
+}
+
+impl PluginStateImpl for Main<'_> {
+    fn save(&self, output: &mut OutputStream) -> Result<(), PluginError> {
+        let scale = self.size.get().0 as f32 / W as f32;
+        let bytes = postcard::to_stdvec(&State { scale })
+            .map_err(|_| PluginError::Message("cannot serialize the state"))?;
+        output
+            .write_all(&bytes)
+            .map_err(|_| PluginError::Message("cannot write the state"))
+    }
+
+    fn load(&self, input: &mut InputStream) -> Result<(), PluginError> {
+        let mut bytes = vec![];
+        input
+            .read_to_end(&mut bytes)
+            .map_err(|_| PluginError::Message("cannot read the state"))?;
+        let s: State = postcard::from_bytes(&bytes)
+            .map_err(|_| PluginError::Message("cannot parse the state"))?;
+        let (w, h) = size_from(s.scale);
+        self.apply_size(w, h); // also resizes the window if it is already open
+        Ok(())
+    }
+}
+
 /// The open editor: exists between `set_parent` and `destroy`.
 struct Open {
     native: Arc<Native>,
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
-    /// Only here because `render` wants it; X11 and Win32 report the window size themselves.
+    /// Only here because `run` wants it; X11 and Win32 report the window size themselves.
     size: Arc<AtomicU64>,
     /// Running while shown, to poll the mouse.
     timer: Option<TimerId>,
@@ -135,11 +192,10 @@ impl PluginTimerImpl for Main<'_> {
                 o.drag = None;
             }
             o.was_down = p.down;
-            o.drag.map(|(sx, sy, w0, h0)| {
-                (
-                    (w0 as i32 + p.sx - sx).max(MIN_W as i32) as u32,
-                    (h0 as i32 + p.sy - sy).max(MIN_H as i32) as u32,
-                )
+            // the width follows the mouse, the height keeps the aspect ratio
+            o.drag.map(|(sx, _, w0, _)| {
+                let nw = (w0 as i32 + p.sx - sx).max(MIN_W as i32) as u32;
+                (nw, height_for(nw))
             })
         };
         if let Some((nw, nh)) = target
@@ -190,9 +246,10 @@ impl PluginGuiImpl for Main<'_> {
     }
 
     fn adjust_size(&self, s: GuiSize) -> Option<GuiSize> {
+        let width = s.width.max(MIN_W);
         Some(GuiSize {
-            width: s.width.max(MIN_W),
-            height: s.height.max(MIN_H),
+            width,
+            height: height_for(width),
         })
     }
 
@@ -205,7 +262,15 @@ impl PluginGuiImpl for Main<'_> {
         self.destroy();
         let (w, h) = self.size.get();
         *self.open.borrow_mut() = Some(Open {
-            native: Arc::new(Native::new(&window, w, h)?),
+            native: Arc::new(
+                Native::new(
+                    parent_handle(&window)
+                        .ok_or(PluginError::Message("unsupported parent window"))?,
+                    w,
+                    h,
+                )
+                .map_err(PluginError::Message)?,
+            ),
             stop: Arc::new(AtomicBool::new(false)),
             thread: None,
             size: Arc::new(AtomicU64::new(pack_size(w, h))),
@@ -225,17 +290,13 @@ impl PluginGuiImpl for Main<'_> {
         let o = g
             .as_mut()
             .ok_or(PluginError::Message("set_parent not called"))?;
-        o.native.show()?;
+        o.native.show();
         if o.thread.is_none() {
             o.stop.store(false, Relaxed);
             let (native, stop, size) = (o.native.clone(), o.stop.clone(), o.size.clone());
-            o.thread = Some(std::thread::spawn(move || unsafe {
-                render(
-                    &EXTS.map(|e| e.as_ptr()),
-                    |e, i| native.surface(e, i),
-                    &size,
-                    &stop,
-                )
+            o.thread = Some(std::thread::spawn(move || {
+                // nobody waits for `presented` in a host window
+                run(&*native, &size, &stop, &AtomicU64::new(0))
             }));
         }
         if o.timer.is_none()
@@ -252,10 +313,26 @@ impl PluginGuiImpl for Main<'_> {
         self.stop_render();
         if let Some(o) = self.open.borrow_mut().as_mut() {
             o.drag = None;
-            o.native.hide()?;
+            o.native.hide();
         }
         Ok(())
     }
 }
 
 clack_export_entry!(SinglePluginEntry<Editor>);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn state_round_trips_and_garbage_stays_in_range() {
+        let bytes = postcard::to_stdvec(&State { scale: 1.5 }).unwrap();
+        assert_eq!(postcard::from_bytes::<State>(&bytes).unwrap().scale, 1.5);
+        assert_eq!(size_from(1.0), (W, H));
+        for bad in [f32::NAN, -3.0, 0.0, f32::INFINITY, 1e12] {
+            let (w, h) = size_from(bad);
+            assert!((MIN_W..=8192).contains(&w) && h == height_for(w), "{bad}");
+        }
+    }
+}
