@@ -1,71 +1,17 @@
-
 cargo-features = ["profile-rustflags"]
-
-[package]
-name = "sample-manager"
-version = "0.1.0"
-edition = "2024"
 
 [workspace]
 resolver = "3"
-members = ["crates/bx-*"]
+members = ["crates/bx-*", "plugins/*"]
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
-
-[lib]
-crate-type = ["cdylib", "rlib"]
-
-[[bin]]
-name = "sample-manager-standalone"
-path = "src/main.rs"
-required-features = ["standalone"]
-
-[features]
-default = ["standalone"]
-standalone = ["dep:cpal"]
-plugin = [
-  "dep:clack-plugin",
-  "dep:clack-extensions",
-  "dep:postcard",
-  "dep:serde",
-]
-
-[dependencies]
-bx_shader = { path = "./crates/bx-shader" }
-bx_shell = { path = "./crates/bx-shell" }
-bx_svg = { path = "./crates/bx-svg" }
-bx_ui = { path = "./crates/bx-ui" }
-cpal = { version = "0.16", optional = true }
-dirs = "6"
-fuzzy-matcher = "0.3"
-rayon = "1"
-symphonia = { version = "0.5", default-features = false, features = [
-  "wav",
-  "pcm",
-  "mp3",
-  "flac",
-  "ogg",
-  "vorbis",
-] }
-clack-plugin = { version = "0.2", optional = true }
-clack-extensions = { version = "0.2", features = [
-  "clack-plugin",
-  "audio-ports",
-  "gui",
-  "timer",
-  "state",
-], optional = true }
-postcard = { version = "1", features = ["use-std"], optional = true }
-serde = { workspace = true, optional = true }
-
-[build-dependencies]
-bx_shader = { path = "./crates/bx-shader", features = ["build"] }
 
 [profile.release]
 opt-level = 3
 codegen-units = 1
 lto = "fat"
+# no panic = "abort": the renderer unwraps Vulkan errors and relies on unwinding to die alone
 strip = true
 debug = false
 overflow-checks = false

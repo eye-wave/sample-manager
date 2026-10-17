@@ -164,9 +164,9 @@ mod tests {
         t.edit(Edit::WordBackspace);
         assert_eq!(t.text, "héllo d");
         t.edit(Edit::SelectAll);
-        t.edit(Edit::End); // any other edit drops the hack
-        t.edit(Edit::Delete);
-        assert_eq!(t.text, "héllo ");
+        t.edit(Edit::Home); // any other edit drops the hack
+        t.edit(Edit::Delete); // so this removes one char, not everything
+        assert_eq!(t.text, "éllo d");
         t.edit(Edit::SelectAll);
         t.edit(Edit::Backspace);
         assert_eq!(t.text, "");

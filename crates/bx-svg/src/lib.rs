@@ -14,7 +14,20 @@ use usvg::tiny_skia_path::PathSegment::*;
 #[proc_macro]
 pub fn icon(input: TokenStream) -> TokenStream {
     let rel = parse_macro_input!(input as LitStr).value();
-    let path = std::path::Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()).join(rel);
+    // a bare name ("heart") is a lucide icon from `npm install lucide-static`
+    let rel = if rel.contains('/') {
+        rel
+    } else {
+        format!("node_modules/lucide-static/icons/{rel}.svg")
+    };
+    // relative to the calling crate or any directory above it (node_modules sits at the workspace
+    // root, shared by every app)
+    let manifest = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let path = manifest
+        .ancestors()
+        .map(|d| d.join(&rel))
+        .find(|p| p.exists())
+        .unwrap_or_else(|| manifest.join(&rel));
     let svg = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     let tree = usvg::Tree::from_str(&svg, &usvg::Options::default())
         .unwrap_or_else(|e| panic!("{}: {e}", path.display()));

@@ -1,5 +1,5 @@
 //! Every colour of the GUI. Tweak them here, `0xRRGGBB`.
-use bx_ui::{Color, rgb};
+use bx_app::bx_ui::{Color, rgb};
 
 // surfaces
 /// Window and table background.

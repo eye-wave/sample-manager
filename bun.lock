@@ -4,11 +4,11 @@
   "workspaces": {
     "": {
       "dependencies": {
-        "lucide-static": "^1.45.0",
+        "lucide-static": "^1.59.0",
       },
     },
   },
   "packages": {
-    "lucide-static": ["lucide-static@1.55.0", "", {}, "sha512-h18lunTFsIJWnY0FMRPjXeO9KcAtNi7fDqtqgWHOFbssfgUWsctn/pA7bpiyrd4g1DuBOJ24CsRnPfkYblwm/A=="],
+    "lucide-static": ["lucide-static@1.59.0", "", {}, "sha512-MuHZYaXbHgzN2QO6D3OM19bj09A+8GJiFSdXIMlbnLLEGQQ9+NRH2KaCxuivevD3Y23vM74kV17XBifgtqhfEg=="],
   }
 }

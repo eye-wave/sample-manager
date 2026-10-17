@@ -1,0 +1,51 @@
+[package]
+name = "sample-manager"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "sample-manager-standalone"
+path = "src/main.rs"
+required-features = ["standalone"]
+
+[features]
+default = ["standalone"]
+standalone = ["dep:cpal"]
+plugin = [
+  "dep:clack-plugin",
+  "dep:clack-extensions",
+  "dep:postcard",
+  "dep:serde",
+]
+
+[dependencies]
+bx_shader = { path = "../../crates/bx-shader" }
+bx_app = { path = "../../crates/bx-app" }
+cpal = { version = "0.18", optional = true }
+dirs = "7"
+fuzzy-matcher = "0.3"
+rayon = "1"
+symphonia = { version = "0.6", default-features = false, features = [
+  "wav",
+  "pcm",
+  "mp3",
+  "flac",
+  "ogg",
+  "vorbis",
+] }
+clack-plugin = { version = "0.2", optional = true }
+clack-extensions = { version = "0.2", features = [
+  "clack-plugin",
+  "audio-ports",
+  "gui",
+  "timer",
+  "state",
+], optional = true }
+postcard = { version = "1", features = ["use-std"], optional = true }
+serde = { workspace = true, optional = true }
+
+[build-dependencies]
+bx_shader = { path = "../../crates/bx-shader", features = ["build"] }

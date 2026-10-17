@@ -3,13 +3,12 @@
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::*};
 use std::sync::{Arc, Mutex};
-use symphonia::core::audio::SampleBuffer;
-use symphonia::core::codecs::DecoderOptions;
+use symphonia::core::codecs::audio::AudioDecoderOptions;
 use symphonia::core::errors::Error;
-use symphonia::core::formats::FormatOptions;
+use symphonia::core::formats::probe::Hint;
+use symphonia::core::formats::{FormatOptions, TrackType};
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
-use symphonia::core::probe::Hint;
 
 /// How many peaks a clip keeps for its waveform: enough for the widest window, `Clip::columns`
 /// merges them down to the columns actually drawn.
@@ -69,49 +68,39 @@ pub fn decode(path: &Path) -> Result<Clip, Box<dyn std::error::Error>> {
     if let Some(x) = path.extension().and_then(|x| x.to_str()) {
         hint.with_extension(x);
     }
-    let mut format = symphonia::default::get_probe()
-        .format(
-            &hint,
-            mss,
-            &FormatOptions::default(),
-            &MetadataOptions::default(),
-        )?
-        .format;
-    let track = format.default_track().ok_or("no audio in the file")?;
-    let (id, rate) = (
-        track.id,
-        track
-            .codec_params
-            .sample_rate
-            .ok_or("unknown sample rate")?,
-    );
-    let mut decoder =
-        symphonia::default::get_codecs().make(&track.codec_params, &DecoderOptions::default())?;
-    let (mut frames, mut buf) = (vec![], None::<SampleBuffer<f32>>);
+    let mut format = symphonia::default::get_probe().probe(
+        &hint,
+        mss,
+        FormatOptions::default(),
+        MetadataOptions::default(),
+    )?;
+    let track = format
+        .default_track(TrackType::Audio)
+        .ok_or("no audio in the file")?;
+    let params = track
+        .codec_params
+        .as_ref()
+        .and_then(|p| p.audio())
+        .ok_or("no audio in the file")?;
+    let (id, rate) = (track.id, params.sample_rate.ok_or("unknown sample rate")?);
+    let mut decoder = symphonia::default::get_codecs()
+        .make_audio_decoder(params, &AudioDecoderOptions::default())?;
+    let (mut frames, mut buf) = (vec![], Vec::<f32>::new());
     loop {
         let packet = match format.next_packet() {
-            Ok(p) => p,
-            // the end of the stream is an I/O error in symphonia (also for a cut off file)
-            Err(Error::IoError(_) | Error::ResetRequired) => break,
+            Ok(Some(p)) => p,
+            // the end of the stream (a cut off file is an I/O error)
+            Ok(None) | Err(Error::IoError(_) | Error::ResetRequired) => break,
             Err(e) => return Err(e.into()),
         };
-        if packet.track_id() != id {
+        if packet.track_id != id {
             continue;
         }
         match decoder.decode(&packet) {
             Ok(d) => {
-                let ch = d.spec().channels.count().max(1);
-                // a later packet can be bigger than the first: copy_interleaved_ref would panic
-                let b = match &mut buf {
-                    Some(b) if b.capacity() >= d.frames() * ch => b,
-                    _ => buf.insert(SampleBuffer::new(d.capacity() as u64, *d.spec())),
-                };
-                b.copy_interleaved_ref(d);
-                frames.extend(
-                    b.samples()
-                        .chunks_exact(ch)
-                        .map(|f| [f[0], f[ch.min(2) - 1]]),
-                );
+                let ch = d.spec().channels().count().max(1);
+                d.copy_to_vec_interleaved(&mut buf);
+                frames.extend(buf.chunks_exact(ch).map(|f| [f[0], f[ch.min(2) - 1]]));
             }
             Err(Error::DecodeError(_)) => {} // a broken packet: skip it
             Err(e) => return Err(e.into()),

@@ -8,14 +8,15 @@ use crate::state::tracked_dirs;
 use crate::view::{
     FOLDER0, PLAY, PLAYMODE, ROW0, SCROLL, SEARCH, TRACK0, TREE, TREE_SCROLL, Ui, WAVE, view,
 };
-use bx_shell::font;
-use bx_shell::gpu::{self, Content, Scene, Target, Vert};
-use bx_shell::input::{Event, Events, Key};
-use bx_ui::{Cursor, Edit, Prim, Rect, layout, quad_tris};
+use bx_app::bx_shell::font;
+use bx_app::bx_shell::gpu::{self, Content, Scene, Target};
+use bx_app::bx_shell::input::{Event, Events};
+use bx_app::bx_ui::{Layout, Node, RectExt, Rects};
+use bx_app::{App, Mesh, Typing, frame};
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex};
 
-pub use bx_shell::gpu::{NO_MOUSE, pack_mouse, pack_size};
+pub use bx_app::bx_shell::gpu::{NO_MOUSE, pack_mouse, pack_size};
 
 /// Initial window size in px.
 pub const W: u32 = 920;
@@ -30,161 +31,93 @@ pub const fn height_for(w: u32) -> u32 {
     w * H / W
 }
 
-fn within([x, y, w, h]: Rect, p: [f32; 2]) -> bool {
-    (x..x + w).contains(&p[0]) && (y..y + h).contains(&p[1])
-}
+impl App for Ui {
+    const ICONS: &'static [Mesh] = &ICONS;
 
-/// What is drawn in a `w` x `h` px window with the mouse at `mouse` (px, NaN if it is elsewhere),
-/// after the `events` (clicks and typing) went to `ui`.
-pub fn scene(w: u32, h: u32, mouse: [f32; 2], ui: &mut Ui, events: Vec<Event>) -> Scene {
-    for e in events {
+    fn view(&self, (w, h): (u32, u32)) -> Node {
+        view(w, h, self)
+    }
+
+    fn rects_mut(&mut self) -> &mut Rects {
+        &mut self.rects
+    }
+
+    fn event(&mut self, e: Event, (_, h): (u32, u32), mouse: [f32; 2]) {
+        if self.search.feed(&e) {
+            return;
+        }
         match e {
             Event::Click(x, y) => {
                 let at = [x as f32, y as f32];
-                let hit: Vec<u32> = ui
-                    .rects
-                    .iter()
-                    .filter(|&&(_, r)| within(r, at))
-                    .map(|&(id, _)| id)
-                    .collect();
-                ui.search.focused = hit.contains(&SEARCH);
+                let hit: Vec<u32> = self.rects.at(at).collect();
+                self.search.focused = hit.contains(&SEARCH);
                 if let Some(&id) = hit.iter().find(|&&id| (ROW0..FOLDER0).contains(&id)) {
-                    ui.select((id - ROW0) as usize);
+                    self.select((id - ROW0) as usize);
                 }
                 if let Some(&id) = hit.iter().find(|&&id| id >= TRACK0) {
-                    ui.select_track((id - TRACK0) as usize);
+                    self.select_track((id - TRACK0) as usize);
                 }
                 if hit.contains(&SCROLL) {
-                    ui.grab(at[1], h);
+                    self.grab(at[1], h);
                 }
                 if hit.contains(&TREE_SCROLL) {
-                    ui.grab_tree(at[1], h);
+                    self.grab_tree(at[1], h);
                 }
                 if hit.contains(&PLAY) {
-                    ui.player.toggle_pause();
+                    self.player.toggle_pause();
                 }
                 if hit.contains(&PLAYMODE) {
-                    ui.player.toggle_loop();
+                    self.player.toggle_loop();
                 }
                 if hit.contains(&WAVE) {
-                    ui.seek(at[0]);
+                    self.seek(at[0]);
                 }
                 if let Some(&id) = hit.iter().find(|&&id| (FOLDER0..TRACK0).contains(&id)) {
                     let id = id - FOLDER0;
-                    if !ui.toggled.remove(&id) {
-                        ui.toggled.insert(id);
+                    if !self.toggled.remove(&id) {
+                        self.toggled.insert(id);
                     }
                 }
             }
             // the wheel scrolls what the mouse is over: the tree, else the table
             Event::Scroll(n) => {
                 let n = n as isize * 3;
-                if ui
-                    .rects
-                    .iter()
-                    .any(|&(id, r)| id == TREE && within(r, mouse))
-                {
-                    ui.tree_first = ui.tree_first.saturating_add_signed(n);
+                if self.rects.hit(TREE, mouse) {
+                    self.tree_first = self.tree_first.saturating_add_signed(n);
                 } else {
-                    ui.first = ui.first.saturating_add_signed(n);
+                    self.first = self.first.saturating_add_signed(n);
                 }
             }
-            Event::Release => (ui.drag, ui.tree_drag) = (None, None),
-            Event::Char(c) if ui.search.focused => ui.search.edit(Edit::Char(c)),
-            Event::Key(Key::Enter | Key::Escape) => ui.search.focused = false,
-            Event::Key(k) if ui.search.focused => {
-                let edit = match k {
-                    Key::Backspace => Edit::Backspace,
-                    Key::Delete => Edit::Delete,
-                    Key::CtrlBackspace => Edit::WordBackspace,
-                    Key::CtrlDelete => Edit::WordDelete,
-                    Key::CtrlA => Edit::SelectAll,
-                    Key::Left => Edit::Left,
-                    Key::Right => Edit::Right,
-                    Key::Home => Edit::Home,
-                    _ => Edit::End,
-                };
-                ui.search.edit(edit);
-            }
+            Event::Release => (self.drag, self.tree_drag) = (None, None),
             _ => {}
         }
     }
-    ui.refresh();
-    ui.clamp(h);
-    if !mouse[1].is_nan() {
-        // the thumb follows the mouse
-        ui.drag_to(mouse[1], h);
-        ui.drag_tree(mouse[1], h);
+
+    fn before_view(&mut self, (_, h): (u32, u32), mouse: [f32; 2]) {
+        self.refresh();
+        self.clamp(h);
+        if !mouse[1].is_nan() {
+            // the thumb follows the mouse
+            self.drag_to(mouse[1], h);
+            self.drag_tree(mouse[1], h);
+        }
     }
-    let (fw, fh) = (w as f32, h as f32);
-    let ndc = |[x, y]: [f32; 2], c: [f32; 4]| -> Vert {
-        [
-            x / fw * 2.0 - 1.0,
-            y / fh * 2.0 - 1.0,
-            0.0,
-            0.0,
-            c[0],
-            c[1],
-            c[2],
-            c[3],
-        ]
-    };
-    // the prims of one layer, as flat and textured vertices
-    let layer =
-        |prims: Vec<Prim>| {
-            let (mut flat, mut textured) = (vec![], vec![]);
-            for p in prims {
-                match p {
-                    Prim::Quad(r, c, radius) => {
-                        let mut t = vec![];
-                        quad_tris(&mut t, r, radius);
-                        flat.extend(t.into_iter().map(|v| ndc(v, c)));
-                    }
-                    Prim::Icon(id, [x, y, iw, ih], c) => {
-                        let (v, idx) = ICONS[id];
-                        flat.extend(idx.iter().map(|&i| {
-                            ndc([x + v[i as usize][0] * iw, y + v[i as usize][1] * ih], c)
-                        }));
-                    }
-                    Prim::Text {
-                        x,
-                        y,
-                        size,
-                        color,
-                        s,
-                    } => {
-                        let mut t = vec![];
-                        font::text(&mut t, &s, (x, y), size, (w, h));
-                        textured.extend(t.into_iter().map(|[x, y, u, v]| {
-                            [x, y, u, v, color[0], color[1], color[2], color[3]]
-                        }));
-                    }
-                }
-            }
-            (flat, textured)
-        };
-    let l = layout(&view(w, h, ui), [0.0, 0.0, fw, fh], &font::width, mouse);
-    // a press on a row or a file in the tree would pick that file up
-    ui.hover_src = l
-        .rects
-        .iter()
-        .rev()
-        .find(|&&(id, r)| ((ROW0..FOLDER0).contains(&id) || id >= TRACK0) && within(r, mouse))
-        .and_then(|&(id, _)| ui.source_of(id));
-    ui.rects = l.rects.clone();
-    let ((flat, textured), (over_flat, over_textured)) = (layer(l.base), layer(l.over));
-    Scene {
-        flat,
-        textured,
-        over_flat,
-        over_textured,
-        cursor: match l.cursor {
-            Cursor::Default => gpu::CURSOR_ARROW,
-            Cursor::Pointer => gpu::CURSOR_HAND,
-            Cursor::Text => gpu::CURSOR_TEXT,
-            Cursor::Resize => gpu::CURSOR_RESIZE,
-        },
+
+    fn after_layout(&mut self, l: &Layout, mouse: [f32; 2]) {
+        // a press on a row or a file in the tree would pick that file up
+        self.hover_src = l
+            .rects
+            .iter()
+            .rev()
+            .find(|&&(id, r)| ((ROW0..FOLDER0).contains(&id) || id >= TRACK0) && r.hit(mouse))
+            .and_then(|&(id, _)| self.source_of(id));
     }
+}
+
+/// What is drawn in a `w` x `h` px window with the mouse at `mouse` (px, NaN if it is elsewhere),
+/// after the `events` (clicks and typing) went to `ui`.
+pub fn scene(w: u32, h: u32, mouse: [f32; 2], ui: &mut Ui, events: Vec<Event>) -> Scene {
+    frame(ui, (w, h), mouse, 0.0, events)
 }
 
 /// Draws the GUI on `target` until `stop` is set: [`gpu::render`] with this module's scene and
@@ -245,7 +178,10 @@ mod tests {
 
     /// A `Ui` with one table row, a.wav (4 frames), the file already gone from disk.
     fn ui_with_a_row() -> Ui {
-        let path = std::env::temp_dir().join(format!("sm-render-{}.wav", std::process::id()));
+        // one file per call: the tests run in parallel and each removes its own
+        static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!("sm-render-{}-{n}.wav", std::process::id()));
         std::fs::write(
             &path,
             crate::audio::tests::wav(8000, &[0, 16384, -32768, 8192]),

@@ -1,6 +1,6 @@
 //! Standalone app: a window (see shell::window) with the renderer on its own thread (same as the
 //! plugin).
-use bx_shell::window::Window;
+use bx_app::bx_shell::window::Window;
 use sample_manager::audio::{Player, Voice};
 use sample_manager::icons::in_grip;
 use sample_manager::render::{H, MIN_H, MIN_W, W, pack_size, run};
@@ -19,11 +19,11 @@ fn audio(player: Arc<Player>) -> Option<cpal::Stream> {
         return None;
     }
     let ch = cfg.channels() as usize;
-    let mut voice = Voice::new(player, cfg.sample_rate().0 as f64);
+    let mut voice = Voice::new(player, cfg.sample_rate() as f64);
     let (mut l, mut r) = ([0.0f32; 1024], [0.0f32; 1024]);
     let stream = dev
         .build_output_stream(
-            &cfg.config(),
+            cfg.config(),
             move |out: &mut [f32], _| {
                 for chunk in out.chunks_mut(1024 * ch) {
                     let n = chunk.len() / ch;

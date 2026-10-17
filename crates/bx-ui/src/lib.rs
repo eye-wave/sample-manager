@@ -21,6 +21,53 @@ pub const fn rgb(c: u32) -> Color {
 /// x, y, w, h in px, y down.
 pub type Rect = [f32; 4];
 
+/// What a `Rect` can tell about a point.
+pub trait RectExt {
+    /// Whether the point (px, same space as the rect) is inside; NaN (no mouse) never is.
+    fn hit(&self, p: [f32; 2]) -> bool;
+}
+impl RectExt for Rect {
+    fn hit(&self, p: [f32; 2]) -> bool {
+        let [x, y, w, h] = *self;
+        (x..x + w).contains(&p[0]) && (y..y + h).contains(&p[1])
+    }
+}
+
+/// Where the nodes with an `id` were put by [`layout`] (a `Vec` of `(id, rect)`, in draw order),
+/// to find out what a click hit.
+#[derive(Clone, Default, Debug)]
+pub struct Rects(pub Vec<(u32, Rect)>);
+impl std::ops::Deref for Rects {
+    type Target = Vec<(u32, Rect)>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl std::ops::DerefMut for Rects {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+impl From<Vec<(u32, Rect)>> for Rects {
+    fn from(v: Vec<(u32, Rect)>) -> Self {
+        Self(v)
+    }
+}
+impl Rects {
+    /// Where node `id` is (the last one with that id).
+    pub fn rect(&self, id: u32) -> Option<Rect> {
+        self.0.iter().rev().find(|r| r.0 == id).map(|r| r.1)
+    }
+    /// The ids of the nodes under `p`, first drawn first.
+    pub fn at(&self, p: [f32; 2]) -> impl Iterator<Item = u32> + '_ {
+        self.0.iter().filter(move |r| r.1.hit(p)).map(|r| r.0)
+    }
+    /// Whether node `id` is under `p`.
+    pub fn hit(&self, id: u32, p: [f32; 2]) -> bool {
+        self.0.iter().any(|r| r.0 == id && r.1.hit(p))
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Length {
     /// Share of what the siblings leave over, by weight (iced's `FillPortion`).
@@ -60,7 +107,7 @@ pub struct Layout {
     /// What the mouse is on asked for, the last node in draw order wins.
     pub cursor: Cursor,
     /// Where the nodes with an `id` were put, to find out what a click hit.
-    pub rects: Vec<(u32, Rect)>,
+    pub rects: Rects,
 }
 
 /// Background of a node: a (rounded) fill and an optional border inside it.
@@ -267,10 +314,6 @@ const BASE: f32 = 0.95;
 /// The mouse is nowhere (NaN never compares inside anything).
 pub const NO_MOUSE: [f32; 2] = [f32::NAN; 2];
 
-fn inside([x, y, w, h]: Rect, m: [f32; 2]) -> bool {
-    (x..x + w).contains(&m[0]) && (y..y + h).contains(&m[1])
-}
-
 /// Lays `root` out in `rect`, `measure(text, size)` giving a string's width in px, `mouse` the
 /// pointer in the same px (or [`NO_MOUSE`]).
 pub fn layout(
@@ -283,7 +326,7 @@ pub fn layout(
         base: vec![],
         over: vec![],
         cursor: Cursor::Default,
-        rects: vec![],
+        rects: Rects::default(),
     };
     place(root, rect, measure, mouse, &mut l);
     l
@@ -366,7 +409,7 @@ fn dashes(out: &mut Vec<Prim>, r: Rect, radius: f32, bw: f32, c: Color) {
 fn place(n: &Node, r: Rect, m: &dyn Fn(&str, f32) -> f32, mouse: [f32; 2], l: &mut Layout) {
     let tip_w = n.over.as_ref().map_or(0.0, |o| o.resolved(m)[0]);
     let tip = tip_w > r[2];
-    let hot = inside(r, mouse); // only the node itself, not the tooltip that reaches past it
+    let hot = r.hit(mouse); // only the node itself, not the tooltip that reaches past it
     if hot && n.cursor != Cursor::Default {
         l.cursor = n.cursor;
     }
@@ -407,7 +450,7 @@ fn place(n: &Node, r: Rect, m: &dyn Fn(&str, f32) -> f32, mouse: [f32; 2], l: &m
             base: vec![],
             over: vec![],
             cursor: Cursor::Default,
-            rects: vec![],
+            rects: Rects::default(),
         };
         place(o, [r[0], r[1], tip_w, r[3]], m, NO_MOUSE, &mut t);
         l.over.extend(t.base);

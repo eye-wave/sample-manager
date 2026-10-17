@@ -1,9 +1,6 @@
 //! The icons (lucide, from `npm install`), tessellated at compile time by `icon!`, which takes any
 //! SVG file. The ids are indices into [`ICONS`]; the layout engine only knows the number.
-use bx_svg::icon;
-
-/// Vertices (0..1, y down) and triangle indices.
-pub type Mesh = (&'static [[f32; 2]], &'static [u32]);
+use bx_app::{Mesh, icons};
 
 pub const SEARCH: usize = 0;
 pub const SETTINGS: usize = 1;
@@ -19,20 +16,20 @@ pub const FOLDER_OPEN: usize = 10;
 pub const CHEVRON_DOWN: usize = 11;
 pub const PLAY: usize = 12;
 
-pub const ICONS: [Mesh; 13] = [
-    icon!("node_modules/lucide-static/icons/search.svg"),
-    icon!("node_modules/lucide-static/icons/settings.svg"),
-    icon!("node_modules/lucide-static/icons/house.svg"),
-    icon!("node_modules/lucide-static/icons/heart.svg"),
-    icon!("node_modules/lucide-static/icons/music.svg"),
-    icon!("node_modules/lucide-static/icons/folder.svg"),
-    icon!("node_modules/lucide-static/icons/chevron-right.svg"),
-    icon!("node_modules/lucide-static/icons/plus.svg"),
-    icon!("node_modules/lucide-static/icons/pause.svg"),
-    icon!("node_modules/lucide-static/icons/handle-bottom-right.svg"),
-    icon!("node_modules/lucide-static/icons/folder-open.svg"),
-    icon!("node_modules/lucide-static/icons/chevron-down.svg"),
-    icon!("node_modules/lucide-static/icons/play.svg"),
+pub const ICONS: [Mesh; 13] = icons![
+    "search",
+    "settings",
+    "house",
+    "heart",
+    "music",
+    "folder",
+    "chevron-right",
+    "plus",
+    "pause",
+    "handle-bottom-right",
+    "folder-open",
+    "chevron-down",
+    "play",
 ];
 
 /// The resize handle is the bottom-right `GRIP` x `GRIP` px square of the window (the view draws

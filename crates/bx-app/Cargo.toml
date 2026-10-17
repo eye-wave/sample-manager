@@ -1,0 +1,9 @@
+[package]
+name = "bx_app"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bx_shell = { path = "../bx-shell" }
+bx_svg = { path = "../bx-svg" }
+bx_ui = { path = "../bx-ui" }

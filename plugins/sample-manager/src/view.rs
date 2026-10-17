@@ -5,7 +5,7 @@ use crate::icons::{self, GRIP};
 use crate::scan::{Dir, Sample, Tree};
 use crate::search::search;
 use crate::theme::*;
-use bx_ui::*;
+use bx_app::bx_ui::*;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
 use std::sync::{Arc, Mutex};
@@ -131,7 +131,7 @@ type Decoded = Option<(u64, Option<Arc<Clip>>)>;
 pub struct Ui {
     pub search: TextBox,
     /// Where the named nodes were put last frame, to tell what a click hit.
-    pub rects: Vec<(u32, Rect)>,
+    pub rects: Rects,
     /// The tracked folders, filled in by the scan thread.
     pub tree: Tree,
     /// Folders (`Dir::id`) flipped from their default: roots start open, everything else closed.
@@ -164,7 +164,7 @@ impl Ui {
     pub fn new(tree: Tree, player: Arc<Player>) -> Self {
         Self {
             search: TextBox::new(""),
-            rects: vec![],
+            rects: Rects::default(),
             tree,
             toggled: HashSet::new(),
             files: Arc::default(),
@@ -360,7 +360,7 @@ impl Ui {
 
     /// Where the node `id` was put last frame.
     fn rect_of(&self, id: u32) -> Option<Rect> {
-        self.rects.iter().find(|r| r.0 == id).map(|r| r.1)
+        self.rects.rect(id)
     }
 
     /// A click at `y` on the scrollbar: the thumb is grabbed where it is, or the track click
@@ -804,7 +804,7 @@ pub(crate) mod tests {
         let l = layout(
             &view(w, h, &ui),
             [0.0, 0.0, w as f32, h as f32],
-            &bx_shell::font::width,
+            &bx_app::bx_shell::font::width,
             [f32::NAN; 2],
         );
         let area = |id| l.rects.iter().find(|r| r.0 == id).unwrap().1[3];
@@ -830,7 +830,7 @@ pub(crate) mod tests {
         let (w, h) = (920, 690);
         let lay = |ui: &Ui, m| {
             let area = [0.0, 0.0, w as f32, h as f32];
-            layout(&view(w, h, ui), area, &bx_shell::font::width, m)
+            layout(&view(w, h, ui), area, &bx_app::bx_shell::font::width, m)
         };
         let tinted = |l: &Layout, r: Rect| {
             l.base
@@ -879,7 +879,7 @@ pub(crate) mod tests {
         let (last, th) = ui.tree_bar(h).unwrap();
         assert_eq!(last, 15);
         assert!(th < 285.0 && th >= THUMB_MIN);
-        ui.rects = vec![(TREE_SCROLL, [200.0, 100.0, 12.0, 285.0])];
+        ui.rects = vec![(TREE_SCROLL, [200.0, 100.0, 12.0, 285.0])].into();
         ui.grab_tree(100.0 + 285.0, h); // on the track below the thumb: the end
         assert_eq!(ui.tree_first, 15);
         ui.drag_tree(-10_000.0, h);
@@ -910,7 +910,7 @@ pub(crate) mod tests {
         assert_eq!(c.clip.as_ref().unwrap().frames.len(), 4);
 
         // the pause button state and a click on the waveform
-        ui.rects = vec![(WAVE, [100.0, 0.0, 200.0, 82.0])];
+        ui.rects = vec![(WAVE, [100.0, 0.0, 200.0, 82.0])].into();
         ui.seek(250.0); // 3/4 of the way
         assert_eq!(player.pos(), 3);
         ui.seek(-50.0);
@@ -926,7 +926,7 @@ pub(crate) mod tests {
         let vis = visible_rows(h);
         let mut ui = Ui::new(Tree::default(), Arc::default());
         ui.results = (0..100).collect();
-        ui.rects = vec![(SCROLL, [0.0, 100.0, 12.0, vis as f32 * ROW_H])];
+        ui.rects = vec![(SCROLL, [0.0, 100.0, 12.0, vis as f32 * ROW_H])].into();
         assert_eq!(ui.thumb_top(h), 0.0);
         ui.grab(100.0 + thumb_h(vis, 100) / 2.0, h); // on the thumb
         assert_eq!(ui.first, 0);

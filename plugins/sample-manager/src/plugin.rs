@@ -10,8 +10,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
 use std::thread::JoinHandle;
 
-use bx_shell::input::Events as UiEvents;
-use bx_shell::native::Native;
+use bx_app::bx_shell::input::Events as UiEvents;
+use bx_app::bx_shell::native::Native;
 use clack_extensions::audio_ports::*;
 use clack_extensions::gui::*;
 use clack_extensions::state::*;
