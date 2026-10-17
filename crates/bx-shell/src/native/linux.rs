@@ -12,6 +12,8 @@ pub struct Native {
     win: xlib::Window,
     /// Hand, I-beam and resize corner (the arrow is none).
     cursors: [xlib::Cursor; 3],
+    /// A press on a file: where, and the file; a drag out of the window once the mouse moves.
+    press: std::sync::Mutex<Option<(i32, i32, std::path::PathBuf)>>,
 }
 
 impl Native {
@@ -41,6 +43,7 @@ impl Native {
                     xlib::XCreateFontCursor(dpy, 152), // XC_xterm
                     xlib::XCreateFontCursor(dpy, 14),  // XC_bottom_right_corner
                 ],
+                press: Default::default(),
             })
         }
     }
@@ -83,6 +86,8 @@ impl Native {
                             xlib::CurrentTime,
                         );
                         events.push(crate::input::Event::Click(ev.button.x, ev.button.y));
+                        *self.press.lock().unwrap() =
+                            events.drag_source().map(|p| (ev.button.x, ev.button.y, p));
                     }
                     xlib::ButtonPress if matches!(ev.button.button, 4 | 5) => {
                         events.push(crate::input::Event::Scroll(if ev.button.button == 4 {
@@ -91,11 +96,32 @@ impl Native {
                             1
                         }));
                     }
-                    xlib::ButtonRelease => events.push(crate::input::Event::Release),
+                    xlib::ButtonRelease => {
+                        events.push(crate::input::Event::Release);
+                        *self.press.lock().unwrap() = None;
+                    }
                     xlib::KeyPress => crate::window::push_key(events, &mut ev.key),
                     _ => {}
                 }
             }
+        }
+        // the button held and the mouse moved on from a press on a file: drag it out (the
+        // events of this window only reach us here, on the host's timer, so look for it now)
+        let p = self.pointer();
+        let start = {
+            let mut g = self.press.lock().unwrap();
+            if p.down
+                && g.as_ref()
+                    .is_some_and(|&(x0, y0, _)| crate::input::moved(x0, y0, p.x, p.y))
+            {
+                g.take()
+            } else {
+                None
+            }
+        };
+        if let Some((_, _, path)) = start {
+            crate::dnd::drag(dpy, self.win, &path); // returns when it is dropped
+            events.push(crate::input::Event::Release);
         }
     }
 

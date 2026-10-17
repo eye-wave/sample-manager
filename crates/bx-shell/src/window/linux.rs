@@ -1,7 +1,7 @@
 //! X11: a top-level window. Wayland runs through XWayland.
 use super::Grip;
 use crate::gpu::{CURSOR_HAND, CURSOR_RESIZE, CURSOR_TEXT, NO_MOUSE, Target, pack_mouse};
-use crate::input::{Event, Events, Key};
+use crate::input::{Event, Events, Key, moved};
 use ash::{Entry, Instance, khr, vk};
 use std::ffi::CString;
 use std::ptr::null;
@@ -155,6 +155,8 @@ impl Window {
         let (mut w, mut h) = self.size;
         // a resize drag: the mouse x on the screen and the window width when it started
         let mut drag: Option<(i32, u32)> = None;
+        // a press on a file: where, and the file; a drag out of the window once the mouse moves
+        let mut press: Option<(i32, i32, std::path::PathBuf)> = None;
         unsafe {
             let mut ev: xlib::XEvent = std::mem::zeroed();
             loop {
@@ -176,6 +178,14 @@ impl Window {
                                 set_size(dpy, self.win, nw, nh);
                             }
                         }
+                        if press
+                            .as_ref()
+                            .is_some_and(|&(x0, y0, _)| moved(x0, y0, ev.motion.x, ev.motion.y))
+                            && let Some((_, _, path)) = press.take()
+                        {
+                            crate::dnd::drag(dpy, self.win, &path); // returns when it is dropped
+                            self.events.push(Event::Release);
+                        }
                     }
                     xlib::KeyPress => push_key(&self.events, &mut ev.key),
                     xlib::ButtonPress if ev.button.button == 1 => {
@@ -183,6 +193,11 @@ impl Window {
                         if (self.grip)(ev.button.x, ev.button.y, w, h) {
                             drag = Some((ev.button.x_root, w));
                             self.dragging.store(true, Relaxed);
+                        } else {
+                            press = self
+                                .events
+                                .drag_source()
+                                .map(|p| (ev.button.x, ev.button.y, p));
                         }
                     }
                     xlib::ButtonPress if matches!(ev.button.button, 4 | 5) => {
@@ -191,7 +206,7 @@ impl Window {
                     }
                     xlib::ButtonRelease => {
                         self.events.push(Event::Release);
-                        drag = None;
+                        (drag, press) = (None, None);
                         self.dragging.store(false, Relaxed);
                     }
                     xlib::ClientMessage

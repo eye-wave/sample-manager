@@ -1,7 +1,7 @@
 //! Win32: a child window.
 use super::*;
 use crate::gpu::{NO_MOUSE, pack_mouse};
-use crate::input::{Event, Events, Key};
+use crate::input::{Event, Events, Key, moved};
 use std::ptr::{null, null_mut};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
 use std::sync::{Arc, Mutex};
@@ -27,6 +27,8 @@ struct Hooks {
     mouse: Arc<AtomicU64>,
     /// A WM_MOUSELEAVE is pending.
     tracking: AtomicBool,
+    /// A press on a file: where, and the file; a drag out of the window once the mouse moves.
+    press: Mutex<Option<(i32, i32, std::path::PathBuf)>>,
 }
 
 unsafe extern "system" fn proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT {
@@ -50,6 +52,19 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT
                     };
                     TrackMouseEvent(&mut t);
                 }
+                let start = {
+                    let mut g = hooks.press.lock().unwrap();
+                    if g.as_ref().is_some_and(|&(x0, y0, _)| moved(x0, y0, x, y)) {
+                        g.take()
+                    } else {
+                        None
+                    }
+                };
+                if let Some((_, _, path)) = start {
+                    ReleaseCapture(); // DoDragDrop takes the mouse itself
+                    push(Event::Release);
+                    crate::dnd::drag(&path); // returns when it is dropped
+                }
                 0
             }
             WM_MOUSELEAVE => {
@@ -61,11 +76,14 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT
             WM_LBUTTONDOWN => {
                 SetFocus(h);
                 SetCapture(h); // so that the release arrives wherever the mouse is
-                push(Event::Click(l as i16 as i32, (l >> 16) as i16 as i32));
+                let (x, y) = (l as i16 as i32, (l >> 16) as i16 as i32);
+                push(Event::Click(x, y));
+                *hooks.press.lock().unwrap() = hooks.events.drag_source().map(|p| (x, y, p));
                 0
             }
             WM_LBUTTONUP | WM_CAPTURECHANGED => {
                 push(Event::Release);
+                *hooks.press.lock().unwrap() = None;
                 if m == WM_LBUTTONUP {
                     ReleaseCapture();
                 }
@@ -194,6 +212,7 @@ impl Native {
             events,
             mouse,
             tracking: AtomicBool::new(false),
+            press: Mutex::new(None),
         });
         // the window's count, given back in `Drop`
         let raw = Arc::into_raw(hooks.clone()) as isize;

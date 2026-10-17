@@ -1,7 +1,7 @@
 //! Win32: a top-level window.
 use super::Grip;
 use crate::gpu::{NO_MOUSE, Target, pack_mouse, pack_size};
-use crate::input::{Event, Events, Key};
+use crate::input::{Event, Events, Key, moved};
 use ash::{Entry, Instance, khr, vk};
 use std::ptr::{null, null_mut};
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
@@ -38,6 +38,9 @@ static EVENTS: Events = Events::new();
 
 /// A resize drag: the mouse x (client coordinates) and the client width when it started.
 static DRAG: Mutex<Option<(i32, u32)>> = Mutex::new(None);
+
+/// A press on a file: where, and the file; a drag out of the window once the mouse moves.
+static PRESS: Mutex<Option<(i32, i32, std::path::PathBuf)>> = Mutex::new(None);
 
 // Raw handles stored as usize so `Window` is Sync (the render thread only needs the HWND).
 pub struct Window {
@@ -90,6 +93,8 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT
                 GetClientRect(h, &mut r);
                 if grip(x, y, r.right as u32, r.bottom as u32) {
                     *DRAG.lock().unwrap() = Some((x, r.right as u32));
+                } else {
+                    *PRESS.lock().unwrap() = EVENTS.drag_source().map(|p| (x, y, p));
                 }
                 0
             }
@@ -104,6 +109,20 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT
                         dwHoverTime: 0,
                     };
                     TrackMouseEvent(&mut t);
+                }
+                let start = {
+                    let mut g = PRESS.lock().unwrap();
+                    if g.as_ref().is_some_and(|&(x0, y0, _)| moved(x0, y0, mx, my)) {
+                        g.take()
+                    } else {
+                        None
+                    }
+                };
+                if let Some((_, _, path)) = start {
+                    ReleaseCapture(); // DoDragDrop takes the mouse itself
+                    EVENTS.push(Event::Release);
+                    crate::dnd::drag(&path); // returns when it is dropped
+                    return 0;
                 }
                 let drag = *DRAG.lock().unwrap(); // copied: SetWindowPos re-enters this procedure
                 if let Some((x0, w0)) = drag {
@@ -162,6 +181,7 @@ unsafe extern "system" fn proc(h: HWND, m: u32, w: WPARAM, l: LPARAM) -> LRESULT
             WM_LBUTTONUP | WM_CAPTURECHANGED => {
                 EVENTS.push(Event::Release);
                 *DRAG.lock().unwrap() = None;
+                *PRESS.lock().unwrap() = None;
                 if m == WM_LBUTTONUP {
                     ReleaseCapture();
                 }

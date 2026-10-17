@@ -149,6 +149,9 @@ pub struct Ui {
     pub current: Option<Loaded>,
     /// Where the sample is played.
     pub player: Arc<Player>,
+    /// The file under the mouse that a press picks up to drag out of the window (set each frame
+    /// by `scene`, handed to the window by `render::run`).
+    pub hover_src: Option<std::path::PathBuf>,
     /// Decoding runs on a thread of its own (a long file would freeze the window): the number of
     /// those running, what the last finished one made, and which load is the current one.
     pub busy: Arc<AtomicUsize>,
@@ -171,6 +174,7 @@ impl Ui {
             tree_drag: None,
             current: None,
             player,
+            hover_src: None,
             busy: Arc::default(),
             incoming: Arc::default(),
             load_id: 0,
@@ -189,18 +193,34 @@ impl Ui {
 
     /// A click on the tree's row `i` (see `TRACK0`): a file plays like a table row does.
     pub fn select_track(&mut self, i: usize) {
-        let f = {
-            let g = self.tree.lock().unwrap();
-            let Some(scan) = g.as_ref() else { return };
-            match tree_rows(&scan.roots, &self.toggled).get(i) {
-                Some(&Row::Track(d, k, _)) => Sample {
-                    name: d.files[k].clone(),
-                    path: d.path.join(&d.files[k]),
-                },
-                _ => return,
-            }
-        };
-        self.load(&f);
+        if let Some(f) = self.track_sample(i) {
+            self.load(&f);
+        }
+    }
+
+    /// The file at row `i` of the tree (`None` for a folder or no such row).
+    fn track_sample(&self, i: usize) -> Option<Sample> {
+        let g = self.tree.lock().unwrap();
+        match tree_rows(&g.as_ref()?.roots, &self.toggled).get(i) {
+            Some(&Row::Track(d, k, _)) => Some(Sample {
+                name: d.files[k].clone(),
+                path: d.path.join(&d.files[k]),
+            }),
+            _ => None,
+        }
+    }
+
+    /// The file a press on the node `id` picks up to drag out of the window: a table row or a
+    /// file in the tree (see `ROW0`, `TRACK0`).
+    pub fn source_of(&self, id: u32) -> Option<std::path::PathBuf> {
+        if (ROW0..FOLDER0).contains(&id) {
+            let i = *self.results.get(self.first + (id - ROW0) as usize)?;
+            Some(self.files[i].path.clone())
+        } else if id >= TRACK0 {
+            self.track_sample((id - TRACK0) as usize).map(|f| f.path)
+        } else {
+            None
+        }
     }
 
     /// Starts decoding `f`; the old sample goes quiet now and the new one plays once it is ready
@@ -798,6 +818,12 @@ pub(crate) mod tests {
         assert!(!tinted(&l, row1));
         assert!(tinted(&lay(&ui, [row1[0] + 5.0, row1[1] + 5.0]), row1));
 
+        // what a press on a row picks up to drag out
+        assert_eq!(ui.source_of(ROW0), Some(dir.join("good.wav")));
+        assert_eq!(ui.source_of(ROW0 + 1), Some(dir.join("bad.wav")));
+        assert_eq!((ui.source_of(ROW0 + 2), ui.source_of(SEARCH)), (None, None));
+        assert_eq!((ui.source_of(FOLDER0), ui.source_of(TRACK0)), (None, None)); // no tree yet
+
         assert!(ui.current.is_none()); // the player starts empty
         let mut voice = crate::audio::Voice::new(ui.player.clone(), 8000.0);
         let (mut l, mut r) = ([1.0; 4], [1.0; 4]);
@@ -845,6 +871,11 @@ pub(crate) mod tests {
         ui.select_track(0); // a folder: nothing
         ui.select_track(99); // no such row
         assert!(ui.current.is_none());
+        assert_eq!(ui.source_of(TRACK0 + 1), Some(dir.join("good.wav")));
+        assert_eq!(
+            (ui.source_of(TRACK0), ui.source_of(TRACK0 + 99)),
+            (None, None)
+        ); // a folder, none
         ui.select_track(2); // f01.wav is not on disk: shown as such
         ui.settle();
         assert!(ui.current.as_ref().unwrap().clip.is_none());

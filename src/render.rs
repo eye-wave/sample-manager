@@ -159,6 +159,13 @@ pub fn scene(w: u32, h: u32, mouse: [f32; 2], ui: &mut Ui, events: Vec<Event>) -
             (flat, textured)
         };
     let l = layout(&view(w, h, ui), [0.0, 0.0, fw, fh], &font::width, mouse);
+    // a press on a row or a file in the tree would pick that file up
+    ui.hover_src = l
+        .rects
+        .iter()
+        .rev()
+        .find(|&&(id, r)| ((ROW0..FOLDER0).contains(&id) || id >= TRACK0) && within(r, mouse))
+        .and_then(|&(id, _)| ui.source_of(id));
     ui.rects = l.rects.clone();
     let ((flat, textured), (over_flat, over_textured)) = (layer(l.base), layer(l.over));
     Scene {
@@ -213,7 +220,12 @@ pub fn run(
         });
         let content = Content {
             atlas: &atlas,
-            scene: &|w, h, m| scene(w, h, m, &mut ui.lock().unwrap(), events.take()),
+            scene: &|w, h, m| {
+                let mut ui = ui.lock().unwrap();
+                let s = scene(w, h, m, &mut ui, events.take());
+                events.set_drag_source(ui.hover_src.take()); // for the window to drag out
+                s
+            },
             mouse,
             events,
         };
