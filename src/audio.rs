@@ -132,6 +132,9 @@ pub struct Player {
     pos: AtomicUsize,
     /// The voice holds its position and plays silence.
     paused: AtomicBool,
+    /// Playback mode: loop, else one shot (plays once, then waits paused at the start). One shot
+    /// is the default.
+    looping: AtomicBool,
     /// A pending jump (frame), taken by the voice at its next block.
     seek: AtomicUsize,
     seeking: AtomicBool,
@@ -158,6 +161,15 @@ impl Player {
 
     pub fn paused(&self) -> bool {
         self.paused.load(Relaxed)
+    }
+
+    pub fn looping(&self) -> bool {
+        self.looping.load(Relaxed)
+    }
+
+    /// Switches between loop and one shot.
+    pub fn toggle_loop(&self) {
+        self.looping.fetch_xor(true, Relaxed);
     }
 
     /// Jumps to `frame` (the voice keeps it inside the clip); the playhead moves at once.
@@ -216,16 +228,26 @@ impl Voice {
             right.fill(0.0);
             return;
         }
-        for (l, r) in left.iter_mut().zip(right) {
+        let looping = self.player.looping();
+        for k in 0..left.len() {
             // linear interpolation between neighbours (also for another sample rate)
             let i = self.at as usize;
             let t = (self.at - i as f64) as f32;
             let (a, b) = (c.frames[i], c.frames[(i + 1) % n]);
-            *l = a[0] + (b[0] - a[0]) * t;
-            *r = a[1] + (b[1] - a[1]) * t;
+            left[k] = a[0] + (b[0] - a[0]) * t;
+            right[k] = a[1] + (b[1] - a[1]) * t;
             self.at += step;
             if self.at >= n as f64 {
-                self.at %= n as f64;
+                if looping {
+                    self.at %= n as f64;
+                } else {
+                    // one shot, done: silence, and wait at the start for the play button
+                    left[k + 1..].fill(0.0);
+                    right[k + 1..].fill(0.0);
+                    self.at = 0.0;
+                    self.player.paused.store(true, Relaxed);
+                    break;
+                }
             }
         }
         self.player.pos.store(self.at as usize, Relaxed);
@@ -275,6 +297,7 @@ pub(crate) mod tests {
     #[test]
     fn the_voice_loops_resamples_and_swaps_clips() {
         let p = Arc::new(Player::default());
+        p.toggle_loop();
         let mut v = Voice::new(p.clone(), 4.0);
         let (mut l, mut r) = ([1.0; 4], [1.0; 4]);
         v.render(&mut l, &mut r);
@@ -299,8 +322,36 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn one_shot_plays_once_then_waits_at_the_start() {
+        let p = Arc::new(Player::default());
+        assert!(!p.looping()); // one shot is the default
+        let mut v = Voice::new(p.clone(), 1.0);
+        let (mut l, mut r) = ([9.0; 5], [9.0; 5]);
+        p.play(Arc::new(Clip::new(
+            1,
+            vec![[1.0, -1.0], [2.0, -2.0], [3.0, -3.0]],
+        )));
+        v.render(&mut l, &mut r);
+        assert_eq!(
+            (l, r),
+            ([1.0, 2.0, 3.0, 0.0, 0.0], [-1.0, -2.0, -3.0, 0.0, 0.0])
+        );
+        assert!(p.paused() && p.pos() == 0); // done: the play button shows
+        v.render(&mut l, &mut r);
+        assert_eq!(l, [0.0; 5]); // stays silent
+        p.toggle_pause(); // play again, from the start
+        v.render(&mut l[..2], &mut r[..2]);
+        assert_eq!(l[..2], [1.0, 2.0]);
+        p.toggle_loop(); // looping: wraps instead
+        v.render(&mut l, &mut r);
+        assert_eq!(l, [3.0, 1.0, 2.0, 3.0, 1.0]);
+        assert!(!p.paused());
+    }
+
+    #[test]
     fn pause_holds_the_position_and_seek_jumps() {
         let p = Arc::new(Player::default());
+        p.toggle_loop();
         let mut v = Voice::new(p.clone(), 1.0);
         let (mut l, mut r) = ([9.0; 2], [9.0; 2]);
         p.play(Arc::new(Clip::new(

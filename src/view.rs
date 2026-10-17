@@ -21,6 +21,8 @@ pub const TRACK0: u32 = 1 << 20;
 pub const TREE_SCROLL: u32 = 5;
 pub const PLAY: u32 = 6;
 pub const WAVE: u32 = 7;
+/// `Layout::rects` id of the "Playback mode" label in the status bar.
+pub const PLAYMODE: u32 = 8;
 /// `Layout::rects` id of the file tree's area and of the table rows' area (`TREE_RESERVED` and
 /// `TABLE_RESERVED` are checked against them in the tests).
 pub const TREE: u32 = 2;
@@ -681,8 +683,26 @@ fn status(ui: &Ui) -> Node {
         space().size(Fixed(8.0), Fixed(1.0)),
         vline().h(Fixed(12.0)),
         space().size(Fixed(8.0), Fixed(1.0)),
-        text("Playback mode:", 10.0, DIM),
-        text("Loop", 10.0, TEXT),
+        // a click switches between one shot and loop
+        row(vec![
+            text("Playback mode:", 10.0, DIM),
+            text(
+                if ui.player.looping() {
+                    "Loop"
+                } else {
+                    "One shot"
+                },
+                10.0,
+                TEXT,
+            ),
+        ])
+        .spacing(5.0)
+        .align(Align::Center)
+        .pad_xy(6.0, 3.0)
+        .bg(BG, 5.0)
+        .hover(FIELD)
+        .cursor(Cursor::Pointer)
+        .id(PLAYMODE),
         space().w(Fill(1)),
         // flush in the corner: this square is where the window takes the resize drag (`in_grip`)
         col(vec![space().h(Fill(1)), icon(icons::GRIP_ICON, GRIP, DIM)])

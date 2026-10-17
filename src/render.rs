@@ -5,7 +5,9 @@ use crate::audio::Player;
 use crate::icons::ICONS;
 use crate::scan::{Tree, scan};
 use crate::state::tracked_dirs;
-use crate::view::{FOLDER0, PLAY, ROW0, SCROLL, SEARCH, TRACK0, TREE, TREE_SCROLL, Ui, WAVE, view};
+use crate::view::{
+    FOLDER0, PLAY, PLAYMODE, ROW0, SCROLL, SEARCH, TRACK0, TREE, TREE_SCROLL, Ui, WAVE, view,
+};
 use bx_shell::font;
 use bx_shell::gpu::{self, Content, Scene, Target, Vert};
 use bx_shell::input::{Event, Events, Key};
@@ -60,6 +62,9 @@ pub fn scene(w: u32, h: u32, mouse: [f32; 2], ui: &mut Ui, events: Vec<Event>) -
                 }
                 if hit.contains(&PLAY) {
                     ui.player.toggle_pause();
+                }
+                if hit.contains(&PLAYMODE) {
+                    ui.player.toggle_loop();
                 }
                 if hit.contains(&WAVE) {
                     ui.seek(at[0]);
@@ -306,6 +311,20 @@ mod tests {
         scene(W, H, none, &mut ui, vec![click]);
         assert_eq!(player.pos(), 2); // the middle of 4 frames
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn clicking_the_playback_mode_switches_between_one_shot_and_loop() {
+        let mut ui = ui_with_a_row();
+        let none = [f32::NAN; 2];
+        scene(W, H, none, &mut ui, vec![]); // a frame first: it records where things are
+        let r = ui.rects.iter().find(|r| r.0 == PLAYMODE).unwrap().1;
+        let click = Event::Click((r[0] + 10.0) as i32, (r[1] + 5.0) as i32);
+        assert!(!ui.player.looping()); // one shot by default
+        scene(W, H, none, &mut ui, vec![click]);
+        assert!(ui.player.looping());
+        scene(W, H, none, &mut ui, vec![click]);
+        assert!(!ui.player.looping());
     }
 
     #[test]
