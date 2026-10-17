@@ -231,6 +231,7 @@ impl Main<'_> {
 
     /// Makes the window `w` x `h`; the renderer follows by itself.
     fn apply_size(&self, w: u32, h: u32) {
+        let (w, h) = (w.clamp(1, 8192), h.clamp(1, 8192)); // the host may pass anything
         self.size.set((w, h));
         if let Some(o) = self.open.borrow().as_ref() {
             o.native.resize(w, h);
@@ -313,7 +314,7 @@ impl PluginGuiImpl for Main<'_> {
     }
 
     fn adjust_size(&self, s: GuiSize) -> Option<GuiSize> {
-        let width = s.width.max(MIN_W);
+        let width = s.width.clamp(MIN_W, 8192);
         Some(GuiSize {
             width,
             height: height_for(width),

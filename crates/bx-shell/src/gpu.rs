@@ -727,15 +727,18 @@ unsafe fn run(
         target.set_cursor(s.cursor);
         // flat, textured, over_flat, over_textured, one after the other (uv of the flat ones unused)
         let parts = [&s.flat, &s.textured, &s.over_flat, &s.over_textured];
-        let n = parts.map(|p| p.len());
-        assert!(
-            n.iter().sum::<usize>() <= MAX_VERTS,
-            "scene has too many vertices"
-        );
+        // a scene past the buffer (a huge window) loses its tail, whole triangles only; the
+        // alternative was a panic
+        let mut room = MAX_VERTS;
+        let n = parts.map(|p| {
+            let k = p.len().min(room) / 3 * 3;
+            room -= k;
+            k
+        });
         let mut at = 0;
-        for p in parts {
-            verts.add(at).copy_from_nonoverlapping(p.as_ptr(), p.len());
-            at += p.len();
+        for (p, &k) in parts.iter().zip(&n) {
+            verts.add(at).copy_from_nonoverlapping(p.as_ptr(), k);
+            at += k;
         }
         let area = vk::Rect2D {
             offset: vk::Offset2D::default(),

@@ -101,8 +101,11 @@ pub fn decode(path: &Path) -> Result<Clip, Box<dyn std::error::Error>> {
         match decoder.decode(&packet) {
             Ok(d) => {
                 let ch = d.spec().channels.count().max(1);
-                let b =
-                    buf.get_or_insert_with(|| SampleBuffer::new(d.capacity() as u64, *d.spec()));
+                // a later packet can be bigger than the first: copy_interleaved_ref would panic
+                let b = match &mut buf {
+                    Some(b) if b.capacity() >= d.frames() * ch => b,
+                    _ => buf.insert(SampleBuffer::new(d.capacity() as u64, *d.spec())),
+                };
                 b.copy_interleaved_ref(d);
                 frames.extend(
                     b.samples()
@@ -199,7 +202,7 @@ impl Voice {
         Self {
             player,
             clip: None,
-            rate,
+            rate: if rate > 0.0 { rate } else { 44100.0 }, // 0 or NaN would make NaN samples
             at: 0.0,
         }
     }
@@ -319,6 +322,17 @@ pub(crate) mod tests {
         p.play(Arc::default()); // an empty clip stops it
         v.render(&mut l, &mut r);
         assert_eq!(l, [0.0; 4]);
+    }
+
+    #[test]
+    fn a_zero_host_rate_does_not_make_nan() {
+        let p = Arc::new(Player::default());
+        p.toggle_loop();
+        let mut v = Voice::new(p.clone(), 0.0);
+        p.play(Arc::new(Clip::new(2, vec![[1.0, 1.0], [1.0, 1.0]])));
+        let (mut l, mut r) = ([0.0; 8], [0.0; 8]);
+        v.render(&mut l, &mut r);
+        assert!(l.iter().chain(&r).all(|x| x.is_finite()));
     }
 
     #[test]

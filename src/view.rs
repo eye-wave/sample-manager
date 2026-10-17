@@ -240,7 +240,11 @@ impl Ui {
         let (busy, slot) = (self.busy.clone(), self.incoming.clone());
         busy.fetch_add(1, SeqCst);
         std::thread::spawn(move || {
-            let clip = decode(&path).ok().map(Arc::new);
+            // a malformed file can panic inside a decoder: that is "cannot decode", not a stuck `busy`
+            let clip = std::panic::catch_unwind(|| decode(&path))
+                .ok()
+                .and_then(Result::ok)
+                .map(Arc::new);
             // a slower, older load must not replace the newer result that is waiting
             let mut s = slot.lock().unwrap();
             if s.as_ref().is_none_or(|(i, _)| *i < id) {
@@ -577,7 +581,7 @@ fn table(h: u32, ui: &Ui) -> Node {
 /// part before the playhead (`pos`, in frames) is pink.
 fn waveform(w: u32, clip: &Clip, pos: usize) -> Node {
     let n = (w as usize).min(COLS_MAX);
-    let cursor = pos * n / clip.frames.len().max(1);
+    let cursor = (pos as u64 * n as u64 / clip.frames.len().max(1) as u64) as usize;
     let bars = clip
         .columns(n)
         .into_iter()

@@ -294,6 +294,9 @@ unsafe extern "system" fn data_get(this: *mut Data, f: *const FormatEtc, m: *mut
         return E_OUTOFMEMORY;
     }
     let p = GlobalLock(h) as *mut u8;
+    if p.is_null() {
+        return E_OUTOFMEMORY;
+    }
     let head: [u32; 5] = [20, 0, 0, 0, 1];
     std::ptr::copy_nonoverlapping(head.as_ptr() as *const u8, p, 20);
     std::ptr::copy_nonoverlapping(w.as_ptr() as *const u8, p.add(20), w.len() * 2);

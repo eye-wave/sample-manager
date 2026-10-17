@@ -66,7 +66,6 @@ bx_shader = { path = "./crates/bx-shader", features = ["build"] }
 opt-level = 3
 codegen-units = 1
 lto = "fat"
-panic = "abort"
 strip = true
 debug = false
 overflow-checks = false

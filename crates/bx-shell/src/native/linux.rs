@@ -23,6 +23,9 @@ impl Native {
             let dpy = xlib::XOpenDisplay(null());
             let vdpy = xlib::XOpenDisplay(null());
             if dpy.is_null() || vdpy.is_null() {
+                for d in [dpy, vdpy].into_iter().filter(|d| !d.is_null()) {
+                    xlib::XCloseDisplay(d);
+                }
                 return Err("XOpenDisplay failed");
             }
             let win = xlib::XCreateSimpleWindow(dpy, parent as xlib::Window, 0, 0, w, h, 0, 0, 0);
