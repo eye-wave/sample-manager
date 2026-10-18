@@ -40,6 +40,16 @@ pub trait App {
     /// A click, key or wheel turn, oldest first; `mouse` is where the pointer is now (NaN: off
     /// the window).
     fn event(&mut self, _e: Event, _size: (u32, u32), _mouse: [f32; 2]) {}
+    /// UI scale: the app lives in `size / scale` logical px (view, events, rects), the frame
+    /// scales what is drawn up to the window.
+    fn scale(&self) -> f32 {
+        1.0
+    }
+    /// A modal layer over the view (a dialog): while it is `Some` the view gets no mouse and
+    /// `rects_mut` holds the rects of this tree alone, so clicks reach nothing under it.
+    fn overlay(&self, _size: (u32, u32)) -> Option<Node> {
+        None
+    }
     /// After the events, before the view: keep state valid for `size`, follow the mouse.
     fn before_view(&mut self, _size: (u32, u32), _mouse: [f32; 2]) {}
     /// After the layout: what the mouse is over now (`layout.rects` is the new set).
@@ -50,6 +60,7 @@ pub trait App {
 }
 
 /// One frame of `app`: the `events` happen, then the view is laid out and turned into a [`Scene`].
+/// `size` and `mouse` are window px; the app sees them divided by `App::scale`.
 pub fn frame<A: App>(
     app: &mut A,
     size @ (w, h): (u32, u32),
@@ -57,18 +68,42 @@ pub fn frame<A: App>(
     t: f32,
     events: Vec<Event>,
 ) -> Scene {
-    for e in events {
-        app.event(e, size, mouse);
-    }
-    app.before_view(size, mouse);
-    let l = layout(
-        &app.view(size),
-        [0.0, 0.0, w as f32, h as f32],
-        &font::width,
-        mouse,
+    let s = app.scale().clamp(0.25, 4.0);
+    let (lsize, mouse) = (
+        ((w as f32 / s) as u32, (h as f32 / s) as u32),
+        mouse.map(|m| m / s),
     );
-    app.after_layout(&l, mouse);
+    for e in events {
+        let e = match e {
+            Event::Click(x, y) => Event::Click((x as f32 / s) as i32, (y as f32 / s) as i32),
+            e => e,
+        };
+        app.event(e, lsize, mouse);
+    }
+    app.before_view(lsize, mouse);
+    let area = [0.0, 0.0, lsize.0 as f32, lsize.1 as f32];
+    let overlay = app.overlay(lsize);
+    let main_mouse = if overlay.is_some() {
+        [f32::NAN; 2]
+    } else {
+        mouse
+    };
+    let mut l = layout(&app.view(lsize), area, &font::width, main_mouse);
+    app.after_layout(&l, main_mouse);
+    if let Some(o) = overlay {
+        let ol = layout(&o, area, &font::width, mouse);
+        l.over.extend(ol.base);
+        l.over.extend(ol.over);
+        (l.rects, l.cursor) = (ol.rects, ol.cursor);
+    }
     *app.rects_mut() = l.rects.clone();
+    for p in l.base.iter_mut().chain(&mut l.over) {
+        match p {
+            Prim::Quad(r, _, radius) => (*r, *radius) = (r.map(|v| v * s), *radius * s),
+            Prim::Icon(_, r, _) => *r = r.map(|v| v * s),
+            Prim::Text { x, y, size, .. } => (*x, *y, *size) = (*x * s, *y * s, *size * s),
+        }
+    }
     let mut scene = to_scene(l, size, A::ICONS);
     app.paint(&mut scene, size, t);
     scene

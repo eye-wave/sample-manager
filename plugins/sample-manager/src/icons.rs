@@ -15,8 +15,9 @@ pub const GRIP_ICON: usize = 9;
 pub const FOLDER_OPEN: usize = 10;
 pub const CHEVRON_DOWN: usize = 11;
 pub const PLAY: usize = 12;
+pub const X: usize = 13;
 
-pub const ICONS: [Mesh; 13] = icons![
+pub const ICONS: [Mesh; 14] = icons![
     "search",
     "settings",
     "house",
@@ -30,6 +31,7 @@ pub const ICONS: [Mesh; 13] = icons![
     "folder-open",
     "chevron-down",
     "play",
+    "x",
 ];
 
 /// The resize handle is the bottom-right `GRIP` x `GRIP` px square of the window (the view draws

@@ -5,6 +5,7 @@ pub mod icons;
 pub mod render;
 mod scan;
 mod search;
+mod settings;
 mod state;
 mod theme;
 mod view;

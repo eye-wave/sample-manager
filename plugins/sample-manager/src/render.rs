@@ -4,16 +4,17 @@
 use crate::audio::Player;
 use crate::icons::ICONS;
 use crate::scan::{Tree, scan};
-use crate::state::tracked_dirs;
+use crate::state::{add_dir, remove_dir, save_settings, settings, tracked_dirs};
 use crate::view::{
-    FOLDER0, PLAY, PLAYMODE, ROW0, SCROLL, SEARCH, TRACK0, TREE, TREE_SCROLL, Ui, WAVE, view,
+    ADD, FOLDER0, Job, PLAY, PLAYMODE, ROW0, SCROLL, SEARCH, SETTINGS_BTN, TRACK0, TREE,
+    TREE_SCROLL, Ui, WAVE, view,
 };
 use bx_app::bx_shell::font;
 use bx_app::bx_shell::gpu::{self, Content, Scene, Target};
 use bx_app::bx_shell::input::{Event, Events};
 use bx_app::bx_ui::{Layout, Node, RectExt, Rects};
 use bx_app::{App, Mesh, Typing, frame};
-use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
 use std::sync::{Arc, Mutex};
 
 pub use bx_app::bx_shell::gpu::{NO_MOUSE, pack_mouse, pack_size};
@@ -42,7 +43,18 @@ impl App for Ui {
         &mut self.rects
     }
 
+    fn scale(&self) -> f32 {
+        Ui::scale(self)
+    }
+
+    fn overlay(&self, _: (u32, u32)) -> Option<Node> {
+        self.settings_open.then(|| crate::settings::dialog(self))
+    }
+
     fn event(&mut self, e: Event, (_, h): (u32, u32), mouse: [f32; 2]) {
+        if self.settings_open {
+            return self.dialog_event(e);
+        }
         if self.search.feed(&e) {
             return;
         }
@@ -50,6 +62,9 @@ impl App for Ui {
             Event::Click(x, y) => {
                 let at = [x as f32, y as f32];
                 let hit: Vec<u32> = self.rects.at(at).collect();
+                if hit.contains(&SETTINGS_BTN) {
+                    return self.open_settings();
+                }
                 self.search.focused = hit.contains(&SEARCH);
                 if let Some(&id) = hit.iter().find(|&&id| (ROW0..FOLDER0).contains(&id)) {
                     self.select((id - ROW0) as usize);
@@ -65,6 +80,9 @@ impl App for Ui {
                 }
                 if hit.contains(&PLAY) {
                     self.player.toggle_pause();
+                }
+                if hit.contains(&ADD) {
+                    self.jobs.lock().unwrap().push(Job::AddFolder);
                 }
                 if hit.contains(&PLAYMODE) {
                     self.player.toggle_loop();
@@ -96,6 +114,7 @@ impl App for Ui {
     fn before_view(&mut self, (_, h): (u32, u32), mouse: [f32; 2]) {
         self.refresh();
         self.clamp(h);
+        self.clamp_dialog();
         if !mouse[1].is_nan() {
             // the thumb follows the mouse
             self.drag_to(mouse[1], h);
@@ -135,13 +154,48 @@ pub fn run(
 ) {
     let atlas = font::atlas();
     let tree = Tree::default();
-    // the scan runs beside the renderer and wakes it when done; `stop` cuts it short
+    let ui = Mutex::new(Ui::new(tree.clone(), player.clone()));
+    ui.lock().unwrap().settings = settings();
+    let jobs = ui.lock().unwrap().jobs.clone();
+    let (tree, ui) = (&tree, &ui); // so the `move` closure below copies the references
     std::thread::scope(|s| {
-        s.spawn(|| {
-            *tree.lock().unwrap() = Some(scan(&tracked_dirs(), stop));
-            events.wake();
+        // the scan runs beside the renderer and wakes it when done; `stop` cuts it short. Then it
+        // does what the clicks ask (`Job`) and saves the settings: the folder picker blocks, so it
+        // lives here and not in the renderer
+        s.spawn(move || {
+            let rescan = || {
+                *tree.lock().unwrap() = Some(scan(&tracked_dirs(), stop));
+                events.wake();
+            };
+            rescan();
+            while !stop.load(Relaxed) {
+                std::thread::sleep(std::time::Duration::from_millis(33));
+                let mut changed = false;
+                for job in std::mem::take(&mut *jobs.lock().unwrap()) {
+                    match job {
+                        Job::AddFolder => {
+                            if let Some(dir) = bx_app::bx_shell::dialog::pick_folder(stop) {
+                                add_dir(&dir);
+                                changed = true;
+                            }
+                        }
+                        Job::Remove(dir) => {
+                            remove_dir(&dir);
+                            changed = true;
+                        }
+                    }
+                }
+                if changed {
+                    *tree.lock().unwrap() = None; // "Scanning..." until it is done
+                    events.wake();
+                    rescan();
+                }
+                let save = ui.lock().unwrap().settings_to_save.take();
+                if let Some(s) = save {
+                    save_settings(&s);
+                }
+            }
         });
-        let ui = Mutex::new(Ui::new(tree.clone(), player.clone()));
         let busy = ui.lock().unwrap().busy.clone();
         // the playhead moves and decodes finish without any input: draw again when the position
         // changed, while a file decodes and once more when that ends
@@ -273,5 +327,56 @@ mod tests {
         let click = Event::Click((r[0] + 40.0) as i32, (r[1] + 10.0) as i32);
         scene(w, h, [f32::NAN; 2], &mut ui, vec![click]);
         assert_eq!(ui.current.as_ref().unwrap().name, "a.wav");
+    }
+
+    #[test]
+    fn clicking_add_folder_asks_for_the_picker() {
+        let mut ui = Ui::new(Tree::default(), Arc::default());
+        let none = [f32::NAN; 2];
+        scene(W, H, none, &mut ui, vec![]); // a frame first: it records where things are
+        let r = ui.rects.rect(ADD).unwrap();
+        let click = Event::Click((r[0] + 10.0) as i32, (r[1] + 5.0) as i32);
+        assert!(ui.jobs.lock().unwrap().is_empty());
+        scene(W, H, none, &mut ui, vec![click]);
+        assert!(matches!(ui.jobs.lock().unwrap()[..], [Job::AddFolder]));
+    }
+
+    #[test]
+    fn the_settings_dialog_changes_scheme_and_scale_and_closes() {
+        use crate::settings::{CARD, CLOSE, SCALE0, SCHEME0};
+        let mut ui = Ui::new(Tree::default(), Arc::default());
+        let none = [f32::NAN; 2];
+        // a click on node `id`; the window px are the logical ones times the scale
+        let click = |ui: &Ui, id| {
+            let r = ui.rects.rect(id).unwrap().map(|v| v * ui.scale());
+            Event::Click((r[0] + 5.0) as i32, (r[1] + 5.0) as i32)
+        };
+        scene(W, H, none, &mut ui, vec![]);
+        let open = click(&ui, SETTINGS_BTN);
+        scene(W, H, none, &mut ui, vec![open]);
+        assert!(ui.settings_open);
+        scene(W, H, none, &mut ui, vec![]);
+        assert!(ui.rects.rect(CARD).is_some() && ui.rects.rect(ROW0).is_none()); // modal
+        let [x, y, w, h] = ui.rects.rect(CARD).unwrap();
+        let (cx, cy) = (x + w / 2.0, y + h / 2.0); // centred in the window
+        assert!(
+            (cx - W as f32 / 2.0).abs() < 1.0 && (cy - H as f32 / 2.0).abs() < 1.0,
+            "{cx} {cy}"
+        );
+        let (scheme, scale) = (click(&ui, SCHEME0 + 1), click(&ui, SCALE0 + 2));
+        scene(W, H, none, &mut ui, vec![scheme, scale]);
+        assert_eq!((ui.settings.scheme, ui.settings.scale), (1, 125));
+        assert_eq!(ui.settings_to_save, Some(ui.settings.clone()));
+        let s = scene(W, H, none, &mut ui, vec![]); // laid out at 125 %
+        assert!(
+            s.flat.len() + s.textured.len() + s.over_flat.len() + s.over_textured.len() <= 65536
+        );
+        let close = click(&ui, CLOSE);
+        scene(W, H, none, &mut ui, vec![close]);
+        assert!(!ui.settings_open);
+        ui.open_settings();
+        scene(W, H, none, &mut ui, vec![]);
+        scene(W, H, none, &mut ui, vec![Event::Click(1, 1)]); // outside the card
+        assert!(!ui.settings_open);
     }
 }

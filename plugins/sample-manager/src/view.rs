@@ -4,9 +4,11 @@ use crate::audio::{Clip, Player, decode};
 use crate::icons::{self, GRIP};
 use crate::scan::{Dir, Sample, Tree};
 use crate::search::search;
-use crate::theme::*;
+use crate::state::Settings;
+use crate::theme::{t, use_scheme};
 use bx_app::bx_ui::*;
 use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
 use std::sync::{Arc, Mutex};
 
@@ -23,6 +25,11 @@ pub const PLAY: u32 = 6;
 pub const WAVE: u32 = 7;
 /// `Layout::rects` id of the "Playback mode" label in the status bar.
 pub const PLAYMODE: u32 = 8;
+/// `Layout::rects` ids of the settings button (it is above `TRACK0`, so `Ui::event` looks for it
+/// first) and, in `settings.rs`, of what the dialog holds.
+pub const SETTINGS_BTN: u32 = 1 << 24;
+/// `Layout::rects` id of the "Add Folder" button.
+pub const ADD: u32 = 9;
 /// `Layout::rects` id of the file tree's area and of the table rows' area (`TREE_RESERVED` and
 /// `TABLE_RESERVED` are checked against them in the tests).
 pub const TREE: u32 = 2;
@@ -124,6 +131,12 @@ pub struct Loaded {
     pub loading: bool,
 }
 
+/// Work for the worker thread: both block (a dialog, a scan).
+pub enum Job {
+    AddFolder,
+    Remove(PathBuf),
+}
+
 /// What a decode thread hands over: the load it was for, and the clip (`None`: it failed).
 type Decoded = Option<(u64, Option<Arc<Clip>>)>;
 
@@ -157,6 +170,15 @@ pub struct Ui {
     /// Decoding runs on a thread of its own (a long file would freeze the window): the number of
     /// those running, what the last finished one made, and which load is the current one.
     pub busy: Arc<AtomicUsize>,
+    /// What the click handlers ask of the worker thread (`render::run`): it picks folders and
+    /// rescans, which block.
+    pub jobs: Arc<Mutex<Vec<Job>>>,
+    /// The settings and whether their dialog is open; `settings_to_save` is taken by the worker.
+    pub settings: Settings,
+    pub settings_open: bool,
+    pub settings_to_save: Option<Settings>,
+    /// The first folder shown in the dialog's list.
+    pub dlg_first: usize,
     incoming: Arc<Mutex<Decoded>>,
     load_id: u64,
 }
@@ -178,6 +200,11 @@ impl Ui {
             player,
             hover_src: None,
             busy: Arc::default(),
+            jobs: Arc::default(),
+            settings: Settings::default(),
+            settings_open: false,
+            settings_to_save: None,
+            dlg_first: 0,
             incoming: Arc::default(),
             load_id: 0,
         }
@@ -284,6 +311,11 @@ impl Ui {
         let f = ((x - r[0]) / r[2]).clamp(0.0, 1.0);
         self.player
             .seek(((f * c.frames.len() as f32) as usize).min(c.frames.len() - 1));
+    }
+
+    /// The UI scale as a factor (1.0 = 100 %).
+    pub fn scale(&self) -> f32 {
+        self.settings.scale as f32 / 100.0
     }
 
     /// Searches again if the scan has finished or the search text changed.
@@ -395,28 +427,30 @@ impl Ui {
 }
 
 fn line() -> Node {
-    space().size(Fill(1), Fixed(1.0)).bg(LINE, 0.0)
+    space().size(Fill(1), Fixed(1.0)).bg(t().line, 0.0)
 }
 fn vline() -> Node {
-    space().size(Fixed(1.0), Fill(1)).bg(LINE, 0.0)
+    space().size(Fixed(1.0), Fill(1)).bg(t().line, 0.0)
 }
 fn chip(s: &str) -> Node {
-    text(s, 10.0, CHIP_TEXT).pad_xy(7.0, 3.0).bg(PINK, 4.0)
+    text(s, 10.0, t().chip_text)
+        .pad_xy(7.0, 3.0)
+        .bg(t().pink, 4.0)
 }
 fn nav(icon_id: usize, label: &str, selected: bool) -> Node {
-    let c = if selected { PINK_TEXT } else { DIM };
+    let c = if selected { t().pink_text } else { t().dim };
     let n = row(vec![icon(icon_id, 16.0, c), text(label, 13.0, c)])
         .spacing(10.0)
         .align(Align::Center)
         .pad_xy(12.0, 0.0)
         .size(Fill(1), Fixed(34.0));
-    if selected { n.bg(NAV_SEL, 10.0) } else { n }
+    if selected { n.bg(t().nav_sel, 10.0) } else { n }
 }
 /// A file in the tree: in the sidebar it ends in "...", on hover the whole name is a bar that
 /// reaches over the sidebar's edge.
 fn track(name: &str, depth: f32, i: usize) -> Node {
-    let bar = |t: Node, w: Length, bg: Color| {
-        row(vec![icon(icons::MUSIC, 10.0, TEXT), t])
+    let bar = |label: Node, w: Length, bg: Color| {
+        row(vec![icon(icons::MUSIC, 10.0, t().text), label])
             .spacing(5.0)
             .align(Align::Center)
             .pad_xy(6.0, 0.0)
@@ -425,11 +459,15 @@ fn track(name: &str, depth: f32, i: usize) -> Node {
     };
     row(vec![
         space().size(Fixed(37.0 + 14.0 * depth), Fixed(17.0)),
-        bar(text(name, 12.5, TEXT).w(Fill(1)).truncate(), Fill(1), TRACK)
-            .hover(HOVER)
-            .cursor(Cursor::Pointer)
-            .id(TRACK0 + i as u32)
-            .over(bar(text(name, 12.5, TEXT), Shrink, HOVER)),
+        bar(
+            text(name, 12.5, t().text).w(Fill(1)).truncate(),
+            Fill(1),
+            t().track,
+        )
+        .hover(t().hover)
+        .cursor(Cursor::Pointer)
+        .id(TRACK0 + i as u32)
+        .over(bar(text(name, 12.5, t().text), Shrink, t().hover)),
     ])
     .size(Fill(1), Fixed(17.0))
 }
@@ -441,12 +479,12 @@ fn folder(d: &Dir, depth: f32, open: bool) -> Node {
     };
     row(vec![
         space().w(Fixed(20.0 + 14.0 * depth)),
-        icon(chevron, 10.0, DIM),
-        icon(icon_id, 16.0, DIM),
-        text(d.name.as_str(), 13.0, TEXT).w(Fill(1)).truncate(),
-        text(d.count.to_string(), 10.0, DIM)
+        icon(chevron, 10.0, t().dim),
+        icon(icon_id, 16.0, t().dim),
+        text(d.name.as_str(), 13.0, t().text).w(Fill(1)).truncate(),
+        text(d.count.to_string(), 10.0, t().dim)
             .pad_xy(6.0, 2.0)
-            .bg(FIELD, 9.0),
+            .bg(t().field, 9.0),
         space().w(Fixed(4.0)),
     ])
     .spacing(6.0)
@@ -458,7 +496,7 @@ fn folder(d: &Dir, depth: f32, open: bool) -> Node {
 fn sidebar(h: u32, ui: &Ui) -> Node {
     let (mut tree, mut bar) = (vec![], space().w(Fixed(0.0)));
     match &*ui.tree.lock().unwrap() {
-        None => tree.push(text("Scanning...", 11.0, DIM).pad_xy(14.0, 4.0)),
+        None => tree.push(text("Scanning...", 11.0, t().dim).pad_xy(14.0, 4.0)),
         Some(scan) => {
             let (avail, rows) = (tree_avail(h), tree_rows(&scan.roots, &ui.toggled));
             let n = fit(&rows, ui.tree_first, avail);
@@ -472,11 +510,11 @@ fn sidebar(h: u32, ui: &Ui) -> Node {
                 let top = (avail - th) * ui.tree_first as f32 / last as f32;
                 bar = col(vec![
                     space().h(Fixed(top)),
-                    space().size(Fixed(6.0), Fixed(th)).bg(DIM, 3.0),
+                    space().size(Fixed(6.0), Fixed(th)).bg(t().dim, 3.0),
                 ])
                 .align(Align::Center)
                 .size(Fixed(12.0), Fixed(avail))
-                .bg(FIELD, 0.0)
+                .bg(t().field, 0.0)
                 .id(TREE_SCROLL)
                 .cursor(Cursor::Pointer);
             }
@@ -490,7 +528,7 @@ fn sidebar(h: u32, ui: &Ui) -> Node {
         .spacing(2.0)
         .pad(8.0)
         .w(Fill(1)),
-        text("FILE TREE", 10.0, DIM).pad_xy(14.0, 8.0),
+        text("FILE TREE", 10.0, t().dim).pad_xy(14.0, 8.0),
         row(vec![col(tree).spacing(0.0).size(Fill(1), Fill(1)), bar])
             .size(Fill(1), Fill(1))
             .id(TREE),
@@ -498,26 +536,29 @@ fn sidebar(h: u32, ui: &Ui) -> Node {
             row(vec![
                 space().w(Fill(1)),
                 row(vec![
-                    icon(icons::PLUS, 11.0, DIM),
-                    text("Add Folder", 11.0, DIM),
+                    icon(icons::PLUS, 11.0, t().dim),
+                    text("Add Folder", 11.0, t().dim),
                 ])
                 .spacing(4.0),
                 space().w(Fill(1)),
             ])
             .align(Align::Center)
             .size(Fill(1), Fixed(28.0))
-            .bg(FIELD, 8.0)
-            .border(DASH, 1.0)
-            .dashed(),
+            .bg(t().field, 8.0)
+            .border(t().dash, 1.0)
+            .dashed()
+            .hover(t().hover)
+            .cursor(Cursor::Pointer)
+            .id(ADD),
         ])
         .pad_xy(9.0, 8.0)
         .w(Fill(1)),
     ])
     .size(Fixed(220.0), Fill(1))
-    .bg(PANEL, 0.0)
+    .bg(t().panel, 0.0)
 }
 fn table(h: u32, ui: &Ui) -> Node {
-    let head = |s: &str, w: Length| text(s, 10.0, DIM).w(w);
+    let head = |s: &str, w: Length| text(s, 10.0, t().dim).w(w);
     let (vis, total) = (visible_rows(h), ui.results.len());
     let mut rows = vec![];
     for (k, &i) in ui.results.iter().skip(ui.first).take(vis).enumerate() {
@@ -525,37 +566,37 @@ fn table(h: u32, ui: &Ui) -> Node {
         rows.push(
             row(vec![
                 row(vec![
-                    icon(icons::HEART, 14.0, DIM),
-                    text(f.name.as_str(), 13.0, TEXT).w(Fill(1)).truncate(),
+                    icon(icons::HEART, 14.0, t().dim),
+                    text(f.name.as_str(), 13.0, t().text).w(Fill(1)).truncate(),
                 ])
                 .spacing(12.0)
                 .align(Align::Center)
                 .w(Fill(1)),
-                text(f.ext(), 10.0, DIM).w(Fixed(70.0)),
-                text("-", 10.0, DIM).w(Fixed(50.0)),
+                text(f.ext(), 10.0, t().dim).w(Fixed(70.0)),
+                text("-", 10.0, t().dim).w(Fixed(50.0)),
             ])
             .pad_xy(16.0, 0.0)
             .align(Align::Center)
             .size(Fill(1), Fixed(36.0))
-            .hover(ROW_HOVER)
+            .hover(t().row_hover)
             .cursor(Cursor::Pointer)
             .id(ROW0 + k as u32),
         );
         rows.push(line());
     }
     if total == 0 {
-        rows.push(text("No samples", 12.0, DIM).pad(16.0));
+        rows.push(text("No samples", 12.0, t().dim).pad(16.0));
     }
     let bar = if total > vis {
         col(vec![
             space().h(Fixed(ui.thumb_top(h))),
             space()
                 .size(Fixed(6.0), Fixed(thumb_h(vis, total)))
-                .bg(DIM, 3.0),
+                .bg(t().dim, 3.0),
         ])
         .align(Align::Center)
         .size(Fixed(12.0), Fixed(vis as f32 * ROW_H))
-        .bg(FIELD, 0.0)
+        .bg(t().field, 0.0)
         .id(SCROLL)
         .cursor(Cursor::Pointer)
     } else {
@@ -588,9 +629,9 @@ fn waveform(w: u32, clip: &Clip, pos: usize) -> Node {
         .enumerate()
         .map(|(i, peak)| {
             if i == cursor {
-                space().size(Fixed(1.0), Fill(1)).bg(PLAYHEAD, 0.0)
+                space().size(Fixed(1.0), Fill(1)).bg(t().playhead, 0.0)
             } else {
-                let c = if i < cursor { PINK } else { WAVE_OFF };
+                let c = if i < cursor { t().pink } else { t().wave_off };
                 space()
                     .size(Fill(1), Fixed((peak * 78.0).clamp(1.0, 78.0)))
                     .bg(c, 0.0)
@@ -612,7 +653,7 @@ fn player(w: u32, ui: &Ui) -> Node {
     let note = |s: &str| {
         row(vec![
             space().w(Fill(1)),
-            text(s, 12.0, DIM),
+            text(s, 12.0, t().dim),
             space().w(Fill(1)),
         ])
         .align(Align::Center)
@@ -620,15 +661,15 @@ fn player(w: u32, ui: &Ui) -> Node {
     };
     let (head, wave, now, total) = match &ui.current {
         None => (
-            vec![text("No sample selected", 13.0, DIM)],
+            vec![text("No sample selected", 13.0, t().dim)],
             note("Click a sample to play it"),
             0.0,
             0.0,
         ),
         Some(l) => {
             let head = vec![
-                icon(icons::HEART, 14.0, DIM),
-                text(l.name.as_str(), 13.0, TEXT),
+                icon(icons::HEART, 14.0, t().dim),
+                text(l.name.as_str(), 13.0, t().text),
                 chip(&l.ext),
             ];
             match &l.clip {
@@ -650,10 +691,14 @@ fn player(w: u32, ui: &Ui) -> Node {
     } else {
         icons::PAUSE
     };
-    let mut button = row(vec![icon(glyph, 18.0, if live { PINK_TEXT } else { DIM })])
-        .pad_xy(14.0, 8.0)
-        .bg(FIELD, 10.0)
-        .border(LINE, 1.0);
+    let mut button = row(vec![icon(
+        glyph,
+        18.0,
+        if live { t().pink_text } else { t().dim },
+    )])
+    .pad_xy(14.0, 8.0)
+    .bg(t().field, 10.0)
+    .border(t().line, 1.0);
     if live {
         button = button.id(PLAY).cursor(Cursor::Pointer);
     }
@@ -667,9 +712,9 @@ fn player(w: u32, ui: &Ui) -> Node {
         wave,
         row(vec![
             space().w(Fill(1)),
-            text(clock(now), 12.0, TEXT),
+            text(clock(now), 12.0, t().text),
             button,
-            text(clock(total), 12.0, TEXT),
+            text(clock(total), 12.0, t().text),
             space().w(Fill(1)),
         ])
         .spacing(16.0)
@@ -681,15 +726,15 @@ fn player(w: u32, ui: &Ui) -> Node {
 fn status(ui: &Ui) -> Node {
     row(vec![
         space().w(Fixed(16.0)),
-        space().size(Fixed(6.0), Fixed(6.0)).bg(PINK, 3.0),
-        text(ui.files.len().to_string(), 10.0, TEXT),
-        text("samples", 10.0, DIM),
+        space().size(Fixed(6.0), Fixed(6.0)).bg(t().pink, 3.0),
+        text(ui.files.len().to_string(), 10.0, t().text),
+        text("samples", 10.0, t().dim),
         space().size(Fixed(8.0), Fixed(1.0)),
         vline().h(Fixed(12.0)),
         space().size(Fixed(8.0), Fixed(1.0)),
         // a click switches between one shot and loop
         row(vec![
-            text("Playback mode:", 10.0, DIM),
+            text("Playback mode:", 10.0, t().dim),
             text(
                 if ui.player.looping() {
                     "Loop"
@@ -697,21 +742,24 @@ fn status(ui: &Ui) -> Node {
                     "One shot"
                 },
                 10.0,
-                TEXT,
+                t().text,
             ),
         ])
         .spacing(5.0)
         .align(Align::Center)
         .pad_xy(6.0, 3.0)
-        .bg(BG, 5.0)
-        .hover(FIELD)
+        .bg(t().bg, 5.0)
+        .hover(t().field)
         .cursor(Cursor::Pointer)
         .id(PLAYMODE),
         space().w(Fill(1)),
         // flush in the corner: this square is where the window takes the resize drag (`in_grip`)
-        col(vec![space().h(Fill(1)), icon(icons::GRIP_ICON, GRIP, DIM)])
-            .size(Fixed(GRIP), Fill(1))
-            .cursor(Cursor::Resize),
+        col(vec![
+            space().h(Fill(1)),
+            icon(icons::GRIP_ICON, GRIP / ui.scale(), t().dim),
+        ])
+        .size(Fixed(GRIP / ui.scale()), Fill(1))
+        .cursor(Cursor::Resize),
     ])
     .spacing(5.0)
     .align(Align::Center)
@@ -719,32 +767,46 @@ fn status(ui: &Ui) -> Node {
 }
 
 pub fn view(w: u32, h: u32, ui: &Ui) -> Node {
+    use_scheme(ui.settings.scheme);
     let search = row(vec![
-        icon(icons::SEARCH, 14.0, DIM),
-        ui.search.node("Search samples", 13.0, TEXT, DIM),
+        icon(icons::SEARCH, 14.0, t().dim),
+        ui.search.node("Search samples", 13.0, t().text, t().dim),
     ])
     .spacing(10.0)
     .align(Align::Center)
     .pad_xy(14.0, 0.0)
     .size(Fixed(420.0), Fixed(30.0))
-    .bg(FIELD, 15.0)
-    .border(if ui.search.focused { PINK } else { LINE }, 1.0)
+    .bg(t().field, 15.0)
+    .border(
+        if ui.search.focused {
+            t().pink
+        } else {
+            t().line
+        },
+        1.0,
+    )
     .id(SEARCH)
     .cursor(Cursor::Text);
     let settings = row(vec![
-        icon(icons::SETTINGS, 14.0, TEXT),
-        text("Settings", 12.0, TEXT),
+        icon(icons::SETTINGS, 14.0, t().text),
+        text("Settings", 12.0, t().text),
     ])
     .spacing(6.0)
     .align(Align::Center)
     .pad_xy(12.0, 0.0)
     .size(Shrink, Fixed(28.0))
-    .bg(FIELD, 14.0)
-    .border(LINE, 1.0);
+    .bg(t().field, 14.0)
+    .border(t().line, 1.0)
+    .hover(t().hover)
+    .cursor(Cursor::Pointer)
+    .id(SETTINGS_BTN);
     let header = row(vec![
-        row(vec![text("S", 14.0, PINK), text("AMPLEVAULT", 11.0, DIM)])
-            .spacing(1.0)
-            .align(Align::Center),
+        row(vec![
+            text("S", 14.0, t().pink),
+            text("AMPLEVAULT", 11.0, t().dim),
+        ])
+        .spacing(1.0)
+        .align(Align::Center),
         space().w(Fill(1)),
         search,
         space().w(Fill(1)),
@@ -762,7 +824,7 @@ pub fn view(w: u32, h: u32, ui: &Ui) -> Node {
         status(ui),
     ])
     .fill()
-    .bg(BG, 0.0)
+    .bg(t().bg, 0.0)
 }
 
 #[cfg(test)]
@@ -835,7 +897,7 @@ pub(crate) mod tests {
         let tinted = |l: &Layout, r: Rect| {
             l.base
                 .iter()
-                .any(|p| matches!(p, Prim::Quad(q, c, _) if *q == r && *c == ROW_HOVER))
+                .any(|p| matches!(p, Prim::Quad(q, c, _) if *q == r && *c == t().row_hover))
         };
         let l = lay(&ui, [f32::NAN; 2]);
         let row1 = l.rects.iter().find(|r| r.0 == ROW0 + 1).unwrap().1;

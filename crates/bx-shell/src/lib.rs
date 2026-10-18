@@ -7,6 +7,7 @@
 #[cfg(not(any(windows, all(unix, not(target_os = "macos")))))]
 compile_error!("the platform layer exists for Windows and X11 only");
 
+pub mod dialog;
 mod dnd;
 pub mod font;
 pub mod gpu;
