@@ -16,8 +16,10 @@ pub const FOLDER_OPEN: usize = 10;
 pub const CHEVRON_DOWN: usize = 11;
 pub const PLAY: usize = 12;
 pub const X: usize = 13;
+/// The heart with its inside: a favorite.
+pub const HEART_FILL: usize = 14;
 
-pub const ICONS: [Mesh; 14] = icons![
+pub const ICONS: [Mesh; 15] = icons![
     "search",
     "settings",
     "house",
@@ -32,6 +34,7 @@ pub const ICONS: [Mesh; 14] = icons![
     "chevron-down",
     "play",
     "x",
+    "heart:fill",
 ];
 
 /// The resize handle is the bottom-right `GRIP` x `GRIP` px square of the window (the view draws
@@ -51,6 +54,11 @@ mod tests {
         for (v, i) in super::ICONS {
             assert!(!v.is_empty() && i.len() % 3 == 0 && i.iter().all(|&i| (i as usize) < v.len()));
         }
+    }
+
+    #[test]
+    fn the_filled_heart_has_more_triangles_than_the_outline() {
+        assert!(super::ICONS[super::HEART_FILL].1.len() > super::ICONS[super::HEART].1.len());
     }
 
     #[test]

@@ -4,10 +4,12 @@
 use crate::audio::Player;
 use crate::icons::ICONS;
 use crate::scan::{Tree, scan};
-use crate::state::{add_dir, remove_dir, save_settings, settings, tracked_dirs};
+use crate::state::{
+    add_dir, favorites, remove_dir, save_favorites, save_settings, settings, tracked_dirs,
+};
 use crate::view::{
-    ADD, FOLDER0, Job, PLAY, PLAYMODE, ROW0, SCROLL, SEARCH, SETTINGS_BTN, TRACK0, TREE,
-    TREE_SCROLL, Ui, WAVE, view,
+    ADD, FOLDER0, HEART0, Job, NAV_FAVORITES, NAV_LIBRARY, PLAY, PLAYER_HEART, PLAYMODE, ROW0,
+    SCROLL, SEARCH, SETTINGS_BTN, TRACK0, TREE, TREE_SCROLL, Tab, Ui, WAVE, view,
 };
 use bx_app::bx_shell::font;
 use bx_app::bx_shell::gpu::{self, Content, Scene, Target};
@@ -64,6 +66,27 @@ impl App for Ui {
                 let hit: Vec<u32> = self.rects.at(at).collect();
                 if hit.contains(&SETTINGS_BTN) {
                     return self.open_settings();
+                }
+                // hearts and tabs sit on top of rows: they take the click alone
+                if let Some(&id) = hit.iter().find(|&&id| (HEART0..PLAYER_HEART).contains(&id)) {
+                    if let Some(p) = self.row_path((id - HEART0) as usize) {
+                        self.toggle_favorite(&p);
+                    }
+                    return;
+                }
+                if hit.contains(&PLAYER_HEART) {
+                    if let Some(p) = self.current.as_ref().map(|l| l.path.clone()) {
+                        self.toggle_favorite(&p);
+                    }
+                    return;
+                }
+                if hit.contains(&NAV_LIBRARY) || hit.contains(&NAV_FAVORITES) {
+                    self.tab = if hit.contains(&NAV_FAVORITES) {
+                        Tab::Favorites
+                    } else {
+                        Tab::Library
+                    };
+                    return;
                 }
                 self.search.focused = hit.contains(&SEARCH);
                 if let Some(&id) = hit.iter().find(|&&id| (ROW0..FOLDER0).contains(&id)) {
@@ -155,7 +178,10 @@ pub fn run(
     let atlas = font::atlas();
     let tree = Tree::default();
     let ui = Mutex::new(Ui::new(tree.clone(), player.clone()));
-    ui.lock().unwrap().settings = settings();
+    {
+        let mut u = ui.lock().unwrap();
+        (u.settings, u.favorites) = (settings(), favorites());
+    }
     let jobs = ui.lock().unwrap().jobs.clone();
     let (tree, ui) = (&tree, &ui); // so the `move` closure below copies the references
     std::thread::scope(|s| {
@@ -190,9 +216,15 @@ pub fn run(
                     events.wake();
                     rescan();
                 }
-                let save = ui.lock().unwrap().settings_to_save.take();
+                let (save, favs) = {
+                    let mut u = ui.lock().unwrap();
+                    (u.settings_to_save.take(), u.fav_to_save.take())
+                };
                 if let Some(s) = save {
                     save_settings(&s);
+                }
+                if let Some(f) = favs {
+                    save_favorites(&f);
                 }
             }
         });
@@ -378,5 +410,49 @@ mod tests {
         scene(W, H, none, &mut ui, vec![]);
         scene(W, H, none, &mut ui, vec![Event::Click(1, 1)]); // outside the card
         assert!(!ui.settings_open);
+    }
+
+    #[test]
+    fn hearts_favor_files_and_the_favorites_tab_searches_only_those() {
+        use crate::scan::{Sample, Scan};
+        let mk = |n: &str| Sample {
+            name: n.into(),
+            path: n.into(),
+        };
+        let mut ui = Ui::new(Tree::default(), Arc::default());
+        let all = vec![mk("kick.wav"), mk("snare.wav"), mk("kick2.wav")];
+        *ui.tree.lock().unwrap() = Some(Scan {
+            roots: vec![],
+            files: Arc::new(all),
+        });
+        let none = [f32::NAN; 2];
+        let click = |ui: &Ui, id| {
+            let r = ui.rects.rect(id).unwrap();
+            Event::Click((r[0] + 5.0) as i32, (r[1] + 5.0) as i32)
+        };
+        scene(W, H, none, &mut ui, vec![]);
+        assert_eq!(ui.results.len(), 3);
+        let heart = click(&ui, HEART0 + 2); // kick2.wav
+        scene(W, H, none, &mut ui, vec![heart]);
+        assert!(ui.is_favorite("kick2.wav".as_ref()) && ui.current.is_none()); // not played
+        assert_eq!(ui.fav_to_save.as_ref().map(|f| f.len()), Some(1));
+        let tab = click(&ui, NAV_FAVORITES);
+        scene(W, H, none, &mut ui, vec![tab]);
+        assert_eq!(ui.results, vec![2]);
+        ui.search.text = "kick".into(); // "kick" matches both files, the tab keeps one
+        scene(W, H, none, &mut ui, vec![]);
+        assert_eq!(ui.results, vec![2]);
+        ui.search.text = "snare".into();
+        scene(W, H, none, &mut ui, vec![]);
+        assert!(ui.results.is_empty());
+        ui.search.text.clear();
+        scene(W, H, none, &mut ui, vec![]);
+        let heart = click(&ui, HEART0); // un-favor it: it leaves the tab
+        scene(W, H, none, &mut ui, vec![heart]);
+        scene(W, H, none, &mut ui, vec![]);
+        assert!(ui.results.is_empty());
+        let tab = click(&ui, NAV_LIBRARY);
+        scene(W, H, none, &mut ui, vec![tab]);
+        assert_eq!(ui.results.len(), 3);
     }
 }

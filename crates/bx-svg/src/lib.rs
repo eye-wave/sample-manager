@@ -1,10 +1,11 @@
 //! `icon!("path/to/icon.svg")` -> `(&'static [[f32; 2]], &'static [u32])`: vertices and triangle
 //! indices of the icon's stroke, tessellated at compile time. Coordinates are normalised to the
 //! SVG's size: x and y both in 0..1, y pointing down. The path is relative to the calling crate.
-// stroke only (what lucide uses): no fills, no transforms/groups/opacity, one color.
+// stroke only (what lucide uses), plus the inside with a `:fill` suffix ("heart:fill"): no
+// transforms/groups/opacity, one color.
 use lyon_tessellation::{
-    BuffersBuilder, StrokeOptions, StrokeTessellator, StrokeVertex, VertexBuffers, math::point,
-    path::Path,
+    BuffersBuilder, FillOptions, FillTessellator, FillVertex, StrokeOptions, StrokeTessellator,
+    StrokeVertex, VertexBuffers, math::point, path::Path,
 };
 use proc_macro::TokenStream;
 use quote::quote;
@@ -14,6 +15,10 @@ use usvg::tiny_skia_path::PathSegment::*;
 #[proc_macro]
 pub fn icon(input: TokenStream) -> TokenStream {
     let rel = parse_macro_input!(input as LitStr).value();
+    let (rel, fill) = match rel.strip_suffix(":fill") {
+        Some(r) => (r.to_string(), true),
+        None => (rel, false),
+    };
     // a bare name ("heart") is a lucide icon from `npm install lucide-static`
     let rel = if rel.contains('/') {
         rel
@@ -71,9 +76,22 @@ pub fn icon(input: TokenStream) -> TokenStream {
             usvg::LineJoin::Bevel => lyon_tessellation::LineJoin::Bevel,
             _ => lyon_tessellation::LineJoin::Miter,
         };
+        let outline = b.build();
+        if fill {
+            FillTessellator::new()
+                .tessellate_path(
+                    &outline,
+                    &FillOptions::tolerance(0.01),
+                    &mut BuffersBuilder::new(&mut mesh, |v: FillVertex| {
+                        let p = v.position();
+                        [p.x / w, p.y / h]
+                    }),
+                )
+                .unwrap();
+        }
         StrokeTessellator::new()
             .tessellate_path(
-                &b.build(),
+                &outline,
                 &StrokeOptions::tolerance(0.01)
                     .with_line_width(s.width().get())
                     .with_line_cap(cap)

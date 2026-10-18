@@ -8,6 +8,7 @@ use crate::state::Settings;
 use crate::theme::{t, use_scheme};
 use bx_app::bx_ui::*;
 use std::collections::HashSet;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
 use std::sync::{Arc, Mutex};
@@ -28,6 +29,12 @@ pub const PLAYMODE: u32 = 8;
 /// `Layout::rects` ids of the settings button (it is above `TRACK0`, so `Ui::event` looks for it
 /// first) and, in `settings.rs`, of what the dialog holds.
 pub const SETTINGS_BTN: u32 = 1 << 24;
+/// `Layout::rects` ids of the heart of the table row `k` (`HEART0 + k`), of the player's heart and
+/// of the two tabs; all above `TRACK0`, `Ui::event` looks for them before the rows.
+pub const HEART0: u32 = 1 << 25;
+pub const PLAYER_HEART: u32 = 1 << 26;
+pub const NAV_LIBRARY: u32 = PLAYER_HEART + 1;
+pub const NAV_FAVORITES: u32 = PLAYER_HEART + 2;
 /// `Layout::rects` id of the "Add Folder" button.
 pub const ADD: u32 = 9;
 /// `Layout::rects` id of the file tree's area and of the table rows' area (`TREE_RESERVED` and
@@ -124,11 +131,20 @@ fn fit_from_end(rows: &[Row], avail: f32) -> usize {
 
 /// The sample in the player.
 pub struct Loaded {
+    pub path: PathBuf,
     pub name: String,
     pub ext: String,
     /// `None`: still decoding (`loading`) or it could not be decoded.
     pub clip: Option<Arc<Clip>>,
     pub loading: bool,
+}
+
+/// What the table lists: everything scanned, or only the favorites.
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
+pub enum Tab {
+    #[default]
+    Library,
+    Favorites,
 }
 
 /// Work for the worker thread: both block (a dialog, a scan).
@@ -177,6 +193,13 @@ pub struct Ui {
     pub settings: Settings,
     pub settings_open: bool,
     pub settings_to_save: Option<Settings>,
+    /// The favorite files, the tab shown, and what `results` was last computed for (the tab and,
+    /// in the favorites tab, `fav_version`); `fav_to_save` is taken by the worker.
+    pub favorites: HashSet<PathBuf>,
+    pub tab: Tab,
+    fav_version: u64,
+    results_key: (Tab, u64),
+    pub fav_to_save: Option<HashSet<PathBuf>>,
     /// The first folder shown in the dialog's list.
     pub dlg_first: usize,
     incoming: Arc<Mutex<Decoded>>,
@@ -205,6 +228,11 @@ impl Ui {
             settings_open: false,
             settings_to_save: None,
             dlg_first: 0,
+            favorites: HashSet::new(),
+            tab: Tab::Library,
+            fav_version: 0,
+            results_key: (Tab::Library, 0),
+            fav_to_save: None,
             incoming: Arc::default(),
             load_id: 0,
         }
@@ -258,6 +286,7 @@ impl Ui {
         self.load_id += 1;
         self.player.stop();
         self.current = Some(Loaded {
+            path: f.path.clone(),
             name: f.name.clone(),
             ext: f.ext(),
             clip: None,
@@ -313,6 +342,24 @@ impl Ui {
             .seek(((f * c.frames.len() as f32) as usize).min(c.frames.len() - 1));
     }
 
+    pub fn is_favorite(&self, p: &Path) -> bool {
+        self.favorites.contains(p)
+    }
+
+    /// The heart: adds `p` to the favorites or takes it out.
+    pub fn toggle_favorite(&mut self, p: &Path) {
+        if !self.favorites.remove(p) {
+            self.favorites.insert(p.to_path_buf());
+        }
+        self.fav_version += 1;
+        self.fav_to_save = Some(self.favorites.clone());
+    }
+
+    /// The path of the file in table row `k` (the k-th shown).
+    pub fn row_path(&self, k: usize) -> Option<PathBuf> {
+        Some(self.files[*self.results.get(self.first + k)?].path.clone())
+    }
+
     /// The UI scale as a factor (1.0 = 100 %).
     pub fn scale(&self) -> f32 {
         self.settings.scale as f32 / 100.0
@@ -325,12 +372,40 @@ impl Ui {
             Some(s) => s.files.clone(),
             None => return,
         };
-        if Arc::ptr_eq(&files, &self.files) && self.search.text == self.query {
+        // the favorites tab depends on the favorites, the library does not
+        let key = (
+            self.tab,
+            if self.tab == Tab::Favorites {
+                self.fav_version
+            } else {
+                0
+            },
+        );
+        if Arc::ptr_eq(&files, &self.files)
+            && self.search.text == self.query
+            && key == self.results_key
+        {
             return;
         }
-        self.results = search(&files, &self.search.text);
+        self.results = match self.tab {
+            Tab::Library => search(&files, &self.search.text),
+            // the search sees the favorites only: look in them, then map back to `files`
+            Tab::Favorites => {
+                let (at, favs): (Vec<usize>, Vec<Sample>) = files
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, f)| self.favorites.contains(&f.path))
+                    .map(|(i, f)| (i, f.clone()))
+                    .unzip();
+                search(&favs, &self.search.text)
+                    .into_iter()
+                    .map(|j| at[j])
+                    .collect()
+            }
+        };
         self.files = files;
         self.query = self.search.text.clone();
+        self.results_key = key;
         self.first = 0;
     }
 
@@ -437,13 +512,28 @@ fn chip(s: &str) -> Node {
         .pad_xy(7.0, 3.0)
         .bg(t().pink, 4.0)
 }
-fn nav(icon_id: usize, label: &str, selected: bool) -> Node {
+/// The heart, pink when `on`; a click toggles (`Ui::event` looks for `id`).
+fn heart(on: bool, id: u32) -> Node {
+    let c = if on { t().pink } else { t().dim };
+    row(vec![icon(
+        if on { icons::HEART_FILL } else { icons::HEART },
+        14.0,
+        c,
+    )])
+    .pad_xy(4.0, 4.0)
+    .cursor(Cursor::Pointer)
+    .id(id)
+}
+fn nav(icon_id: usize, label: &str, selected: bool, id: u32) -> Node {
     let c = if selected { t().pink_text } else { t().dim };
     let n = row(vec![icon(icon_id, 16.0, c), text(label, 13.0, c)])
         .spacing(10.0)
         .align(Align::Center)
         .pad_xy(12.0, 0.0)
-        .size(Fill(1), Fixed(34.0));
+        .size(Fill(1), Fixed(34.0))
+        .hover(t().hover)
+        .cursor(Cursor::Pointer)
+        .id(id);
     if selected { n.bg(t().nav_sel, 10.0) } else { n }
 }
 /// A file in the tree: in the sidebar it ends in "...", on hover the whole name is a bar that
@@ -522,8 +612,13 @@ fn sidebar(h: u32, ui: &Ui) -> Node {
     }
     col(vec![
         col(vec![
-            nav(icons::HOUSE, "Library", true),
-            nav(icons::HEART, "Favorites", false),
+            nav(icons::HOUSE, "Library", ui.tab == Tab::Library, NAV_LIBRARY),
+            nav(
+                icons::HEART,
+                "Favorites",
+                ui.tab == Tab::Favorites,
+                NAV_FAVORITES,
+            ),
         ])
         .spacing(2.0)
         .pad(8.0)
@@ -566,7 +661,7 @@ fn table(h: u32, ui: &Ui) -> Node {
         rows.push(
             row(vec![
                 row(vec![
-                    icon(icons::HEART, 14.0, t().dim),
+                    heart(ui.is_favorite(&f.path), HEART0 + k as u32),
                     text(f.name.as_str(), 13.0, t().text).w(Fill(1)).truncate(),
                 ])
                 .spacing(12.0)
@@ -585,7 +680,12 @@ fn table(h: u32, ui: &Ui) -> Node {
         rows.push(line());
     }
     if total == 0 {
-        rows.push(text("No samples", 12.0, t().dim).pad(16.0));
+        let none = if ui.tab == Tab::Favorites {
+            "No favorites"
+        } else {
+            "No samples"
+        };
+        rows.push(text(none, 12.0, t().dim).pad(16.0));
     }
     let bar = if total > vis {
         col(vec![
@@ -668,7 +768,7 @@ fn player(w: u32, ui: &Ui) -> Node {
         ),
         Some(l) => {
             let head = vec![
-                icon(icons::HEART, 14.0, t().dim),
+                heart(ui.is_favorite(&l.path), PLAYER_HEART),
                 text(l.name.as_str(), 13.0, t().text),
                 chip(&l.ext),
             ];

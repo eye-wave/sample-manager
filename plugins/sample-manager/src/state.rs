@@ -1,5 +1,6 @@
 //! What survives a restart: the tracked directories, one path per line in
 //! `<config dir>/sample-manager/dirs.txt`. Standalone and plugin share it.
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 fn file() -> Option<PathBuf> {
@@ -113,9 +114,52 @@ pub fn save_settings(s: &Settings) {
     }
 }
 
+/// The favorite files, one path per line in `<cache dir>/sample-manager/favorites.txt`.
+fn favorites_file() -> Option<PathBuf> {
+    Some(
+        dirs::cache_dir()?
+            .join("sample-manager")
+            .join("favorites.txt"),
+    )
+}
+
+fn paths_from(text: &str) -> HashSet<PathBuf> {
+    text.lines()
+        .filter(|l| !l.is_empty())
+        .map(PathBuf::from)
+        .collect()
+}
+
+fn paths_text(set: &HashSet<PathBuf>) -> String {
+    let mut v: Vec<_> = set.iter().map(|p| p.to_string_lossy()).collect();
+    v.sort(); // the same set, the same file
+    v.join("\n")
+}
+
+pub fn favorites() -> HashSet<PathBuf> {
+    favorites_file()
+        .and_then(|f| std::fs::read_to_string(f).ok())
+        .map_or_else(HashSet::new, |t| paths_from(&t))
+}
+
+pub fn save_favorites(set: &HashSet<PathBuf>) {
+    if let Some(f) = favorites_file() {
+        let _ = f.parent().map(std::fs::create_dir_all);
+        let _ = std::fs::write(f, paths_text(set));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn favorites_round_trip_sorted() {
+        let set: HashSet<PathBuf> = ["/b/2.wav", "/a/1.wav"].map(PathBuf::from).into();
+        assert_eq!(paths_text(&set), "/a/1.wav\n/b/2.wav");
+        assert_eq!(paths_from(&paths_text(&set)), set);
+        assert!(paths_from("").is_empty());
+    }
 
     #[test]
     fn settings_round_trip_and_garbage_stays_in_range() {
