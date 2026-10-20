@@ -4,6 +4,11 @@ A search plugin is a WebAssembly component built for `wasm32-wasip2`. Every `*.w
 `<config dir>/sample-manager/plugins` (Linux: `~/.config/sample-manager/plugins`) gets its own entry
 in the sidebar; the folder is created on the first run and plugins load at startup.
 
+**Settings -> Plugins** has a card for every file: its icon, name, description and the hosts it may
+call. The tick loads / unloads it (an unloaded file stays in the folder), the trash can deletes the
+file, **Add Plugin** opens the system's file picker (`.wasm`) and copies the file into the folder.
+Each of these loads all the plugins again.
+
 Select a plugin's entry, type in the search box and press **Enter**. Results are not favorites.
 
 ## The cache
@@ -51,12 +56,18 @@ In Rust:
 ```rust
 wit_bindgen::generate!({ path: "../../wit", world: "plugin" });
 use bx::search::host;
-use exports::bx::search::search::{Guest, Hit, Info};
+use bx_plugin::icon;
+use exports::bx::search::search::{Guest, Hit, Icon, Info};
 
 struct Mine;
 impl Guest for Mine {
     fn describe() -> Info {
-        Info { name: "My source".into(), description: "what it is".into() }
+        Info {
+            name: "My source".into(),
+            description: "what it is".into(),
+            icon: icon!("../icon.rgba", 32), // raw RGBA, see below
+            hosts: vec!["example.com".into()], // the only host `http_get` may call
+        }
     }
     fn unpack(_url: String, data: Vec<u8>) -> Result<Vec<u8>, String> {
         Ok(data)
@@ -70,9 +81,11 @@ impl Guest for Mine {
 export!(Mine);
 ```
 
-`Cargo.toml`: `crate-type = ["cdylib"]`, `wit-bindgen = "0.63"`. `search` returns up to 200 hits;
+`Cargo.toml`: `crate-type = ["cdylib"]`, `wit-bindgen = "0.63"`, and `bx-plugin` (`plugins-src/bx-plugin`)
+for `icon!`. `search` returns up to 200 hits;
 `url` must be http(s); `ext` falls back to the url's extension. An `Err(message)` is shown in the
-table when the cache has nothing for the query either. The interface is `bx:search@0.2.0`: version
+table when the cache has nothing for the query either. The interface is `bx:search@0.3.0`: version
+0.2 had no icon and no `hosts` (a 0.2 plugin has to add them and be rebuilt); version
 0.1 had a SQLite database (`db-exec`, `db-script`, `db-query`); those are gone, the host's cache
 does that job, so a 0.1 plugin that used them has to drop them and be rebuilt.
 
@@ -81,6 +94,22 @@ does that job, so a 0.1 plugin that used them has to drop them and be rebuilt.
 | `log(message)`                                         | a line in the app's stderr                                                       |
 | `http-get(url, headers) -> response`                   | blocking GET; `status` and `body` (a status of 400 or more is a normal response) |
 | `http-request(method, url, headers, body) -> response` | the same with `GET` or `POST` (a body of up to 1 MB)                             |
+
+## Name, icon, permissions
+
+`describe` returns:
+
+- `name`, `description`: shown in the sidebar and on the plugin's card.
+- `icon`: raw pixels, no image format: `width`, `height` and `rgba` (`width * height * 4` bytes, sRGB,
+  straight alpha, rows top to bottom). It has to be square, 32 to 128 px a side, or the plugin does not
+  load. `icon!("icon.rgba", 32)` (crate `bx-plugin`) embeds such a file next to the source file and
+  checks its size when the plugin is compiled (the number is both sides, so it cannot be wrong
+  shaped).
+- `hosts`: the network hosts the plugin may call, names only (`example.com`: exact match, no
+  wildcards, no port). `http-get` / `http-request` to any other host fail, and so does a redirect
+  that leaves the list (the 3xx answer is returned instead). Empty: no network. While `describe`
+  runs the list is still empty. The host's own downloads of the hits' urls are not the plugin's and
+  go anywhere.
 
 ## Limits
 

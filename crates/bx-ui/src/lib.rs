@@ -128,6 +128,8 @@ enum Kind {
     Flow(usize),
     Text(String, f32, Color),
     Icon(usize, Color),
+    /// A cell of the app's image sheet, tinted.
+    Image(usize, Color),
 }
 
 pub struct Node {
@@ -168,6 +170,8 @@ pub enum Prim {
         s: String,
     },
     Icon(usize, Rect, Color),
+    /// The image in this cell of the sheet, stretched over the rect, times the colour.
+    Image(usize, Rect, Color),
 }
 
 fn node(kind: Kind, kids: Vec<Node>) -> Node {
@@ -200,6 +204,10 @@ pub fn text(s: impl Into<String>, size: f32, color: Color) -> Node {
 /// An icon (an index the app understands) of `size` x `size` px.
 pub fn icon(id: usize, size: f32, color: Color) -> Node {
     node(Kind::Icon(id, color), vec![]).size(Fixed(size), Fixed(size))
+}
+/// A raw pixel image (a cell of the app's `bx_app::bx_shell::images::Images`) of `w` x `h` px.
+pub fn image(cell: usize, w: f32, h: f32) -> Node {
+    node(Kind::Image(cell, [1.0; 4]), vec![]).size(Fixed(w), Fixed(h))
 }
 /// Empty; give it a size (`.w(Fill(1))` pushes its siblings apart).
 pub fn space() -> Node {
@@ -305,7 +313,7 @@ impl Node {
         let pad = [self.lo[0] + self.hi[0], self.lo[1] + self.hi[1]];
         match &self.kind {
             Kind::Text(s, size, _) => [m(s, *size) + pad[0], size * LINE + pad[1]],
-            Kind::Icon(..) => [0.0; 2], // always Fixed
+            Kind::Icon(..) | Kind::Image(..) => [0.0; 2], // always Fixed
             Kind::Flow(a) => {
                 let sizes: Vec<_> = self.kids.iter().map(|k| k.resolved(m)).collect();
                 let n = sizes.len().saturating_sub(1) as f32;
@@ -508,6 +516,7 @@ fn place(n: &Node, r: Rect, m: &dyn Fn(&str, f32) -> f32, mouse: [f32; 2], l: &m
             });
         }
         Kind::Icon(id, c) => l.base.push(Prim::Icon(*id, inner, *c)),
+        Kind::Image(id, c) => l.base.push(Prim::Image(*id, inner, *c)),
         Kind::Flow(a) => {
             let (a, c) = (*a, 1 - *a);
             // main axis: Fixed / Shrink first, Fill kids split what is left by weight

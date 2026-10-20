@@ -8,5 +8,6 @@ edition = "2024"
 crate-type = ["cdylib"]
 
 [dependencies]
+bx-plugin = { workspace = true }
 serde_json = { workspace = true }
 wit-bindgen = { workspace = true }

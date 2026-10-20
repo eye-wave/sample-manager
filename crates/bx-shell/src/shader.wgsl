@@ -1,6 +1,7 @@
 // Two fragment entry points over one vertex layout (position in NDC, uv):
 //   fs_flat  solid vertex colour: rects, icons
 //   fs_text  MSDF glyphs: the median of the three channels is the signed distance to the edge
+//   fs_image raw pixels from the image sheet (set 1), times the vertex colour
 struct V {
     @builtin(position) p: vec4<f32>,
     @location(0) uv: vec2<f32>,
@@ -15,6 +16,7 @@ fn vs(@location(0) p: vec2<f32>, @location(1) uv: vec2<f32>, @location(2) c: vec
 
 @group(0) @binding(0) var atlas: texture_2d<f32>;
 @group(0) @binding(1) var samp: sampler;
+@group(1) @binding(0) var sheet: texture_2d<f32>;
 
 // distance range of the atlas in atlas px; keep equal to PX_RANGE in tools/msdf
 const PX_RANGE: f32 = 4.0;
@@ -32,4 +34,9 @@ fn fs_text(v: V) -> @location(0) vec4<f32> {
     let atlas_px = vec2<f32>(textureDimensions(atlas));
     let screen_range = max(0.5 * dot(vec2(PX_RANGE) / atlas_px, 1.0 / fwidth(v.uv)), 1.0);
     return vec4(v.c.rgb, v.c.a * clamp(sd * screen_range + 0.5, 0.0, 1.0));
+}
+
+@fragment
+fn fs_image(v: V) -> @location(0) vec4<f32> {
+    return textureSample(sheet, samp, v.uv) * v.c;
 }

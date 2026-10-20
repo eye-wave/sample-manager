@@ -53,6 +53,37 @@ pub fn remove_dir(p: &std::path::Path) {
     }
 }
 
+/// The plugin files (names in the plugins folder) that are unloaded, one per line in
+/// `<config dir>/sample-manager/disabled-plugins.txt`.
+pub fn disabled_plugins() -> HashSet<String> {
+    dirs::config_dir()
+        .and_then(|d| {
+            std::fs::read_to_string(d.join("sample-manager").join("disabled-plugins.txt")).ok()
+        })
+        .map_or_else(HashSet::new, |t| {
+            t.lines()
+                .filter(|l| !l.is_empty())
+                .map(String::from)
+                .collect()
+        })
+}
+
+/// Loads (`true`) or unloads the plugin file `file` from the next load on.
+pub fn set_plugin_enabled(file: &str, enabled: bool) {
+    let mut set = disabled_plugins();
+    if enabled {
+        set.remove(file);
+    } else {
+        set.insert(file.into());
+    }
+    if let Some(d) = dirs::config_dir().map(|d| d.join("sample-manager")) {
+        let mut v: Vec<_> = set.into_iter().collect();
+        v.sort();
+        let _ = std::fs::create_dir_all(&d);
+        let _ = std::fs::write(d.join("disabled-plugins.txt"), v.join("\n"));
+    }
+}
+
 /// What the settings dialog changes, in `<config dir>/sample-manager/settings.txt`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Settings {

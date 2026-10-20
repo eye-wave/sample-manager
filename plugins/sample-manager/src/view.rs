@@ -4,9 +4,10 @@ use crate::audio::{Clip, Player, decode};
 use crate::icons::{self, GRIP};
 use crate::scan::{Dir, Sample, Tree};
 use crate::search::search;
-use crate::sources::{self, Source};
+use crate::sources::{self, Plugins, Source};
 use crate::state::Settings;
 use crate::theme::{t, use_scheme};
+use bx_app::bx_shell::images::Images;
 use bx_app::bx_ui::*;
 use std::collections::HashSet;
 use std::path::Path;
@@ -161,6 +162,20 @@ pub enum Tab {
 pub enum Job {
     AddFolder,
     Remove(PathBuf),
+    /// Asks for a `.wasm` file and adds it to the plugins.
+    AddPlugin,
+    /// Deletes a plugin file (by name).
+    RemovePlugin(String),
+    /// Loads or unloads a plugin file (by name).
+    EnablePlugin(String, bool),
+}
+
+/// The tabs of the settings dialog.
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
+pub enum SettingsTab {
+    #[default]
+    General,
+    Plugins,
 }
 
 /// What a decode thread hands over: the load it was for, and the clip (`None`: it failed).
@@ -214,11 +229,16 @@ pub struct Ui {
     fav_version: u64,
     results_key: (Tab, u64),
     pub fav_to_save: Option<HashSet<PathBuf>>,
-    /// The first folder shown in the dialog's list.
+    /// The tab of the settings dialog, and the first row shown in its list (folders or plugins).
+    pub settings_tab: SettingsTab,
     pub dlg_first: usize,
     /// The search plugins (the sidebar lists them) and where the thread that loads them leaves them.
     pub sources: Vec<Source>,
-    pub sources_slot: Arc<Mutex<Option<Vec<Source>>>>,
+    pub sources_slot: Arc<Mutex<Option<Plugins>>>,
+    /// Every plugin file and whether it is loaded (the dialog's cards).
+    pub plugin_files: Vec<(String, bool)>,
+    /// The pixels of the plugins' icons (`Source::slot`), drawn by the renderer.
+    pub images: Arc<Mutex<Images>>,
     incoming: Arc<Mutex<Decoded>>,
     load_id: u64,
 }
@@ -245,7 +265,10 @@ impl Ui {
             settings: Settings::default(),
             settings_open: false,
             settings_to_save: None,
+            settings_tab: SettingsTab::General,
             dlg_first: 0,
+            plugin_files: vec![],
+            images: Arc::default(),
             favorites: HashSet::new(),
             tab: Tab::Library,
             fav_version: 0,
@@ -429,8 +452,23 @@ impl Ui {
     /// Searches again if the scan has finished or the search text changed.
     pub fn refresh(&mut self) {
         self.take_decoded();
-        if let Some(v) = self.sources_slot.lock().unwrap().take() {
-            self.sources = v;
+        if let Some(p) = self.sources_slot.lock().unwrap().take() {
+            // the plugins were loaded again: their indices (in the tabs, in the lists) are new
+            let mut images = self.images.lock().unwrap();
+            self.sources
+                .iter()
+                .filter_map(|s| s.slot)
+                .for_each(|c| images.remove(c));
+            self.sources = p.sources;
+            for s in &mut self.sources {
+                let icon = s.icon.take();
+                s.slot = icon.and_then(|i| images.add(i.w, i.h, &i.rgba).ok());
+            }
+            self.plugin_files = p.files;
+            if matches!(self.tab, Tab::Plugin(_)) {
+                self.tab = Tab::Library;
+            }
+            self.results_key = (Tab::Library, u64::MAX);
         }
         self.sources.iter_mut().for_each(Source::poll);
         if matches!(self.tab, Tab::Plugin(i) if i >= self.sources.len()) {

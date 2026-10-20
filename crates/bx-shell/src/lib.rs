@@ -4,6 +4,7 @@
 //!   native  a child window inside somebody else's window (a plugin editor)
 //!   gpu     draws a `Scene` (two vertex lists + a texture atlas) on either, see `gpu::Target`
 //!   font    MSDF text for the textured half of a `Scene`
+//!   images  raw RGBA pixels for the images of a `Scene`
 #[cfg(not(any(windows, all(unix, not(target_os = "macos")))))]
 compile_error!("the platform layer exists for Windows and X11 only");
 
@@ -11,6 +12,7 @@ pub mod dialog;
 mod dnd;
 pub mod font;
 pub mod gpu;
+pub mod images;
 pub mod input;
 pub mod native;
 pub mod window;

@@ -1,9 +1,12 @@
-//! The settings dialog: colour scheme, UI scale and the tracked folders. `dialog` is the tree
+//! The settings dialog, in tabs: General (colour scheme, UI scale, the tracked folders) and Plugins
+//! (a card for each plugin file: a tick to load it, a trash can to delete it, and a button that
+//! adds one). `dialog` is the tree
 //! (`App::overlay`), `Ui::dialog_event` what a click in it does.
 use crate::icons;
+use crate::sources::Status;
 use crate::state::{SCALES, Settings};
 use crate::theme::{schemes, swatch, t, use_scheme};
-use crate::view::{ADD, Job, SETTINGS_BTN, Ui};
+use crate::view::{ADD, Job, SETTINGS_BTN, SettingsTab, Ui};
 use bx_app::bx_shell::input::{Event, Key};
 use bx_app::bx_ui::*;
 
@@ -13,8 +16,15 @@ pub(crate) const CARD: u32 = SETTINGS_BTN + 2;
 pub(crate) const SCHEME0: u32 = SETTINGS_BTN + 100;
 pub(crate) const SCALE0: u32 = SETTINGS_BTN + 200;
 const REMOVE0: u32 = SETTINGS_BTN + 300;
-/// Folders shown at a time; the wheel scrolls the rest.
+pub(crate) const TAB_GENERAL: u32 = SETTINGS_BTN + 10;
+pub(crate) const TAB_PLUGINS: u32 = SETTINGS_BTN + 11;
+pub(crate) const ADD_PLUGIN: u32 = SETTINGS_BTN + 20;
+/// The tick and the trash can of the plugin card `i` are `TOGGLE0 + i` and `TRASH0 + i`.
+pub(crate) const TOGGLE0: u32 = SETTINGS_BTN + 10_000;
+pub(crate) const TRASH0: u32 = SETTINGS_BTN + 20_000;
+/// Folders and plugin cards shown at a time; the wheel scrolls the rest.
 const SHOWN: usize = 6;
+const SHOWN_PLUGINS: usize = 4;
 
 fn section(title: &str, body: Node) -> Node {
     col(vec![text(title, 10.0, t().dim), body]).spacing(8.0)
@@ -44,6 +54,29 @@ impl Ui {
     pub fn open_settings(&mut self) {
         self.settings_open = true;
         self.search.focused = false;
+        self.set_settings_tab(SettingsTab::General); // opens on the first tab
+    }
+
+    fn set_settings_tab(&mut self, tab: SettingsTab) {
+        (self.settings_tab, self.dlg_first) = (tab, 0);
+    }
+
+    /// Ticks or unticks the plugin card `i`: loads or unloads the plugin (the tick follows the
+    /// click at once, the plugins are loaded again behind it).
+    fn toggle_plugin(&mut self, i: usize) {
+        if let Some((file, on)) = self.plugin_files.get_mut(i) {
+            *on = !*on;
+            let job = Job::EnablePlugin(file.clone(), *on);
+            self.jobs.lock().unwrap().push(job);
+        }
+    }
+
+    /// Deletes the plugin of the card `i`.
+    fn delete_plugin(&mut self, i: usize) {
+        if i < self.plugin_files.len() {
+            let (file, _) = self.plugin_files.remove(i);
+            self.jobs.lock().unwrap().push(Job::RemovePlugin(file));
+        }
     }
 
     fn change(&mut self, f: impl FnOnce(&mut Settings)) {
@@ -51,10 +84,13 @@ impl Ui {
         self.settings_to_save = Some(self.settings.clone());
     }
 
-    /// Keeps the folder list's first row inside the list.
+    /// Keeps the first row of the tab's list (folders or plugins) inside the list.
     pub fn clamp_dialog(&mut self) {
-        let n = self.folders().map_or(0, |f| f.len());
-        self.dlg_first = self.dlg_first.min(n.saturating_sub(SHOWN));
+        let (n, shown) = match self.settings_tab {
+            SettingsTab::General => (self.folders().map_or(0, |f| f.len()), SHOWN),
+            SettingsTab::Plugins => (self.plugin_files.len(), SHOWN_PLUGINS),
+        };
+        self.dlg_first = self.dlg_first.min(n.saturating_sub(shown));
     }
 
     /// An event while the dialog is open: everything below it is out of reach.
@@ -68,7 +104,10 @@ impl Ui {
                 }
                 for id in hit {
                     match id {
+                        TAB_GENERAL => self.set_settings_tab(SettingsTab::General),
+                        TAB_PLUGINS => self.set_settings_tab(SettingsTab::Plugins),
                         ADD => self.jobs.lock().unwrap().push(Job::AddFolder),
+                        ADD_PLUGIN => self.jobs.lock().unwrap().push(Job::AddPlugin),
                         i if (SCHEME0..SCALE0).contains(&i) => {
                             self.change(|s| s.scheme = (i - SCHEME0) as usize)
                         }
@@ -77,6 +116,10 @@ impl Ui {
                                 self.change(|s| s.scale = p);
                             }
                         }
+                        i if (TOGGLE0..TRASH0).contains(&i) => {
+                            self.toggle_plugin((i - TOGGLE0) as usize)
+                        }
+                        i if i >= TRASH0 => self.delete_plugin((i - TRASH0) as usize),
                         i if i >= REMOVE0 => {
                             let path = self
                                 .folders()
@@ -100,9 +143,8 @@ impl Ui {
     }
 }
 
-/// The dialog over a dimmed window.
-pub fn dialog(ui: &Ui) -> Node {
-    use_scheme(ui.settings.scheme);
+/// The General tab: colour scheme, UI scale, folders.
+fn general(ui: &Ui) -> Node {
     let p = t();
     let schemes = row(schemes()
         .iter()
@@ -182,6 +224,135 @@ pub fn dialog(ui: &Ui) -> Node {
         false,
         ADD,
     );
+    col(vec![
+        section("COLOR SCHEME", schemes),
+        section("UI SCALE", scales),
+        section(
+            "FOLDERS",
+            col(vec![col(list).spacing(4.0), row(vec![add])]).spacing(8.0),
+        ),
+    ])
+    .spacing(18.0)
+}
+
+/// What the plugin card `i` says: its name and description, the hosts it may call, why it did not
+/// load; an unloaded plugin is only a file name.
+fn plugin_card(ui: &Ui, i: usize, file: &str, on: bool) -> Node {
+    let p = t();
+    let src = ui.sources.iter().find(|s| s.file == file).filter(|_| on);
+    let stem = std::path::Path::new(file)
+        .file_stem()
+        .map_or_else(|| file.to_string(), |s| s.to_string_lossy().into_owned());
+    let name = src.map_or(stem, |s| s.name.clone());
+    let about = match src {
+        None if !on => "Unloaded".to_string(),
+        Some(s) if !s.description.is_empty() => s.description.clone(),
+        Some(s) => match &s.status {
+            Status::Failed(e) => e.clone(),
+            _ => String::new(),
+        },
+        None => String::new(),
+    };
+    let network = match src {
+        Some(s) if s.hosts.is_empty() => "No network access".to_string(),
+        Some(s) => format!("Network: {}", s.hosts.join(", ")),
+        None => String::new(),
+    };
+    let thumb = match src.and_then(|s| s.slot) {
+        Some(cell) => image(cell, 44.0, 44.0),
+        // no icon: it is not loaded, or it did not load
+        None => row(vec![icon(icons::GLOBE, 20.0, p.dim)])
+            .align(Align::Center)
+            .pad_xy(12.0, 0.0)
+            .size(Fixed(44.0), Fixed(44.0))
+            .bg(p.panel, 8.0),
+    };
+    let tick = row(if on {
+        vec![icon(icons::CHECK, 12.0, p.pink)]
+    } else {
+        vec![]
+    })
+    .align(Align::Center)
+    .pad_xy(5.0, 0.0)
+    .size(Fixed(22.0), Fixed(22.0))
+    .bg(p.panel, 5.0)
+    .border(if on { p.pink } else { p.line }, 1.0)
+    .hover(p.hover)
+    .cursor(Cursor::Pointer)
+    .id(TOGGLE0 + i as u32);
+    let trash = row(vec![icon(icons::TRASH, 12.0, p.dim)])
+        .align(Align::Center)
+        .pad_xy(8.0, 0.0)
+        .size(Fixed(28.0), Fixed(28.0))
+        .bg(p.panel, 6.0)
+        .hover(p.hover)
+        .cursor(Cursor::Pointer)
+        .id(TRASH0 + i as u32);
+    row(vec![
+        tick,
+        thumb,
+        col(vec![
+            text(name, 13.0, if on { p.text } else { p.dim })
+                .w(Fill(1))
+                .truncate(),
+            text(about, 11.0, p.dim).w(Fill(1)).truncate(),
+            text(network, 10.0, p.dim).w(Fill(1)).truncate(),
+        ])
+        .spacing(2.0)
+        .w(Fill(1)),
+        trash,
+    ])
+    .spacing(12.0)
+    .align(Align::Center)
+    .pad_xy(12.0, 0.0)
+    .size(Fill(1), Fixed(64.0))
+    .bg(p.field, 8.0)
+}
+
+/// The Plugins tab: the cards and the button that adds a plugin.
+fn plugins(ui: &Ui) -> Node {
+    let p = t();
+    let n = ui.plugin_files.len();
+    let mut list: Vec<Node> = ui
+        .plugin_files
+        .iter()
+        .enumerate()
+        .skip(ui.dlg_first)
+        .take(SHOWN_PLUGINS)
+        .map(|(i, (file, on))| plugin_card(ui, i, file, *on))
+        .collect();
+    if n == 0 {
+        list.push(text("No plugins", 11.0, p.dim).pad_xy(10.0, 6.0));
+    } else if n > SHOWN_PLUGINS {
+        let last = (ui.dlg_first + SHOWN_PLUGINS).min(n);
+        list.push(
+            text(
+                format!("{}-{} of {}", ui.dlg_first + 1, last, n),
+                10.0,
+                p.dim,
+            )
+            .pad_xy(10.0, 2.0),
+        );
+    }
+    let add = chip(
+        vec![
+            icon(icons::PLUS, 11.0, p.dim),
+            text("Add Plugin", 11.0, p.text),
+        ],
+        false,
+        ADD_PLUGIN,
+    );
+    col(vec![
+        section("PLUGINS", col(list).spacing(6.0)),
+        row(vec![add]),
+    ])
+    .spacing(12.0)
+}
+
+/// The dialog over a dimmed window.
+pub fn dialog(ui: &Ui) -> Node {
+    use_scheme(ui.settings.scheme);
+    let p = t();
     let close = row(vec![icon(icons::X, 12.0, p.dim)])
         .align(Align::Center)
         .pad_xy(8.0, 0.0)
@@ -198,12 +369,23 @@ pub fn dialog(ui: &Ui) -> Node {
         ])
         .align(Align::Center)
         .size(Fill(1), Fixed(28.0)),
-        section("COLOR SCHEME", schemes),
-        section("UI SCALE", scales),
-        section(
-            "FOLDERS",
-            col(vec![col(list).spacing(4.0), row(vec![add])]).spacing(8.0),
-        ),
+        row(vec![
+            chip(
+                vec![text("General", 11.0, p.text)],
+                ui.settings_tab == SettingsTab::General,
+                TAB_GENERAL,
+            ),
+            chip(
+                vec![text("Plugins", 11.0, p.text)],
+                ui.settings_tab == SettingsTab::Plugins,
+                TAB_PLUGINS,
+            ),
+        ])
+        .spacing(8.0),
+        match ui.settings_tab {
+            SettingsTab::General => general(ui),
+            SettingsTab::Plugins => plugins(ui),
+        },
     ])
     .spacing(18.0)
     .pad(20.0)

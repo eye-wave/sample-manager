@@ -7,9 +7,11 @@ mod scramble;
 wit_bindgen::generate!({ path: "../../wit", world: "plugin" });
 
 use bx::search::host;
-use exports::bx::search::search::{Guest, Hit, Info};
+use bx_plugin::icon;
+use exports::bx::search::search::{Guest, Hit, Icon, Info};
 use serde_json::Value as Json;
 
+const ENDPOINT_HOST: &str = "surfaces-graphql.splice.com";
 const ENDPOINT: &str = "https://surfaces-graphql.splice.com/graphql";
 
 /// The body of the POST that searches `query`.
@@ -130,6 +132,8 @@ impl Guest for Splice {
         Info {
             name: "Splice".into(),
             description: "Samples from splice.com".into(),
+            icon: icon!("../icon.rgba", 32), // a placeholder
+            hosts: vec![ENDPOINT_HOST.into()],
         }
     }
 

@@ -1,4 +1,4 @@
-//! A folder picker from a helper program: `zenity` (GTK, most desktops) or `kdialog` (KDE).
+//! The pickers from a helper program: `zenity` (GTK, most desktops) or `kdialog` (KDE).
 use std::io::Read;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -14,17 +14,50 @@ fn parse(out: &str) -> Option<PathBuf> {
 /// Asks for a folder; `None` if cancelled, if `stop` was set (the dialog is closed then) or if no
 /// helper is installed.
 pub fn pick_folder(stop: &AtomicBool) -> Option<PathBuf> {
-    const HELPERS: [(&str, &[&str]); 2] = [
-        (
-            "zenity",
-            &["--file-selection", "--directory", "--title=Add folder"],
-        ),
-        (
-            "kdialog",
-            &["--getexistingdirectory", ".", "--title", "Add folder"],
-        ),
-    ];
-    for (cmd, args) in HELPERS {
+    pick(
+        [
+            (
+                "zenity",
+                &["--file-selection", "--directory", "--title=Add folder"],
+            ),
+            (
+                "kdialog",
+                &["--getexistingdirectory", ".", "--title", "Add folder"],
+            ),
+        ],
+        stop,
+    )
+}
+
+/// The same for one `.wasm` file.
+pub fn pick_wasm(stop: &AtomicBool) -> Option<PathBuf> {
+    pick(
+        [
+            (
+                "zenity",
+                &[
+                    "--file-selection",
+                    "--title=Add plugin",
+                    "--file-filter=WebAssembly | *.wasm",
+                ],
+            ),
+            (
+                "kdialog",
+                &[
+                    "--getopenfilename",
+                    ".",
+                    "*.wasm|WebAssembly",
+                    "--title",
+                    "Add plugin",
+                ],
+            ),
+        ],
+        stop,
+    )
+}
+
+fn pick(helpers: [(&str, &[&str]); 2], stop: &AtomicBool) -> Option<PathBuf> {
+    for (cmd, args) in helpers {
         let Ok(mut child) = Command::new(cmd)
             .args(args)
             .stdout(Stdio::piped())
@@ -51,7 +84,7 @@ pub fn pick_folder(stop: &AtomicBool) -> Option<PathBuf> {
         let _ = out.read_to_string(&mut text);
         return status.success().then(|| parse(&text)).flatten();
     }
-    eprintln!("no folder picker: install zenity or kdialog");
+    eprintln!("no file picker: install zenity or kdialog");
     None
 }
 

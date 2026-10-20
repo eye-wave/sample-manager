@@ -2,15 +2,18 @@
 //! `wit/search.wit`,
 //! run by wasmtime. A [`Sandbox`] is one plugin: it asks for `describe` and calls `search`.
 //!
-//! * A plugin can only do what the host functions allow: log and http(s) GET / POST. WASI is there (Rust's std needs it) but empty: no files, no sockets, no environment.
+//! * A plugin can only do what the host functions allow: log and http(s) GET / POST, and only to
+//!   the hosts it declares in `describe` (its permissions). WASI is there (Rust's std needs it) but
+//!   empty: no files, no sockets, no environment.
 //! * A call that runs too long is interrupted (epochs), memory is capped. After a trap the plugin
 //!   starts over (a fresh instance) on the next call.
 //! * [`download`] is for the host, not for plugins.
 use std::io::Read;
 use std::path::Path;
-use std::sync::OnceLock;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
+use reqwest::Url;
 use reqwest::blocking::{Client, Response as HttpResponse};
 use reqwest::redirect::Policy;
 use wasmtime::component::{Component, HasSelf, Linker, ResourceTable};
@@ -47,11 +50,36 @@ fn check_url(url: &str) -> Result<(), String> {
     }
 }
 
-fn agent(timeout: Duration) -> Client {
+/// A plugin's permissions: the hosts it may call.
+type Hosts = Arc<Mutex<Vec<String>>>;
+
+fn allowed(hosts: &Hosts, url: &Url) -> bool {
+    url.host_str().is_some_and(|h| {
+        hosts
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|a| a.eq_ignore_ascii_case(h))
+    })
+}
+
+/// `hosts`: the redirects of a plugin's requests stay inside its permissions; `None` (the host's
+/// own downloads) follows them anywhere.
+fn agent(timeout: Duration, hosts: Option<Hosts>) -> Client {
+    let policy = match hosts {
+        None => Policy::limited(10),
+        Some(h) => Policy::custom(move |a| {
+            if a.previous().len() < 10 && allowed(&h, a.url()) {
+                a.follow()
+            } else {
+                a.stop() // the 3xx answer itself goes back to the plugin
+            }
+        }),
+    };
     Client::builder()
         .timeout(timeout)
         .user_agent(USER_AGENT)
-        .redirect(Policy::limited(10))
+        .redirect(policy)
         .build()
         .expect("reqwest client")
 }
@@ -73,12 +101,20 @@ fn read_limited(response: &mut HttpResponse, max_bytes: u64) -> Result<Vec<u8>, 
 
 fn http_request(
     client: &Client,
+    hosts: &Hosts,
     method: &str,
     url: &str,
     headers: &[(String, String)],
     body: &[u8],
 ) -> Result<Response, String> {
     check_url(url)?;
+    let parsed = Url::parse(url).map_err(|e| format!("{url}: {e}"))?;
+    if !allowed(hosts, &parsed) {
+        return Err(format!(
+            "the plugin may not call {}: it is not in its hosts",
+            parsed.host_str().unwrap_or(url)
+        ));
+    }
 
     if body.len() > HTTP_MAX_REQUEST {
         return Err(format!(
@@ -125,7 +161,7 @@ fn http_request(
 pub fn download(url: &str, dest: &Path, max_bytes: u64) -> Result<(), String> {
     check_url(url)?;
 
-    let client = agent(Duration::from_secs(60));
+    let client = agent(Duration::from_secs(60), None);
 
     let resp = client
         .get(url)
@@ -175,6 +211,7 @@ struct State {
     limits: StoreLimits,
     name: String,
     http: Client,
+    hosts: Hosts,
 }
 
 impl WasiView for State {
@@ -196,7 +233,7 @@ impl host::Host for State {
         url: String,
         headers: Vec<(String, String)>,
     ) -> Result<Response, String> {
-        http_request(&self.http, "GET", &url, &headers, &[])
+        http_request(&self.http, &self.hosts, "GET", &url, &headers, &[])
     }
 
     fn http_request(
@@ -206,17 +243,43 @@ impl host::Host for State {
         headers: Vec<(String, String)>,
         body: Vec<u8>,
     ) -> Result<Response, String> {
-        http_request(&self.http, &method, &url, &headers, &body)
+        http_request(&self.http, &self.hosts, &method, &url, &headers, &body)
     }
 }
 
 // ---- the sandbox
+
+/// A plugin's icon: `w` x `h` px of RGBA, `w == h` in `ICON_MIN..=ICON_MAX`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Icon {
+    pub w: u32,
+    pub h: u32,
+    pub rgba: Vec<u8>,
+}
+
+pub const ICON_MIN: u32 = 32;
+pub const ICON_MAX: u32 = 128;
 
 /// What a plugin says about itself (`describe`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Meta {
     pub name: String,
     pub description: String,
+    pub icon: Icon,
+    /// The network hosts it may call, lower case.
+    pub hosts: Vec<String>,
+}
+
+/// The icon a plugin gave, if it is square, in range and has all its pixels.
+fn icon(i: bindings::exports::bx::search::search::Icon) -> Result<Icon, String> {
+    let (w, h) = (i.width, i.height);
+    if w != h || !(ICON_MIN..=ICON_MAX).contains(&w) || i.rgba.len() != (w * h * 4) as usize {
+        return Err(format!(
+            "the icon must be square, {ICON_MIN} to {ICON_MAX} px, 4 bytes a pixel (got {w}x{h}, {} bytes)",
+            i.rgba.len()
+        ));
+    }
+    Ok(Icon { w, h, rgba: i.rgba })
 }
 
 /// One result of `search`.
@@ -260,6 +323,8 @@ pub struct Sandbox {
     name: String,
     timeout: Duration,
     linker: Linker<State>,
+    /// The permissions: empty until `describe` has answered, and shared with every instance.
+    hosts: Hosts,
     component: Option<Component>,
     /// `None` until the first call and again after a trap.
     instance: Option<Instance>,
@@ -284,6 +349,7 @@ impl Sandbox {
             name: name.into(),
             timeout: CALL_TIMEOUT,
             linker,
+            hosts: Hosts::default(),
             component: None,
             instance: None,
         }
@@ -300,7 +366,8 @@ impl Sandbox {
                 .instances(8)
                 .build(),
             name: self.name.clone(),
-            http: agent(HTTP_TIMEOUT),
+            http: agent(HTTP_TIMEOUT, Some(self.hosts.clone())),
+            hosts: self.hosts.clone(),
         };
         let mut store = Store::new(engine(), state);
         store.limiter(|s| &mut s.limits);
@@ -328,8 +395,25 @@ impl Sandbox {
                 .bx_search_search()
                 .call_describe(&mut inst.store)
         })?;
-        let Info { name, description } = meta;
-        Ok(Meta { name, description })
+        let Info {
+            name,
+            description,
+            icon: i,
+            hosts,
+        } = meta;
+        let icon = icon(i)?;
+        let hosts: Vec<String> = hosts
+            .iter()
+            .map(|h| h.trim().to_ascii_lowercase())
+            .filter(|h| !h.is_empty())
+            .collect();
+        *self.hosts.lock().unwrap() = hosts.clone(); // from now on the plugin may call these
+        Ok(Meta {
+            name,
+            description,
+            icon,
+            hosts,
+        })
     }
 
     /// Runs `f` on the instance (made if there is none, with a fresh time budget); a trap throws
@@ -416,6 +500,28 @@ mod tests {
             }
         });
         (url, h)
+    }
+
+    #[test]
+    fn a_plugin_may_only_call_its_hosts_and_a_bad_icon_is_refused() {
+        let hosts: Hosts = Arc::new(Mutex::new(vec!["api.example.com".into()]));
+        let ok = |u: &str| allowed(&hosts, &Url::parse(u).unwrap());
+        assert!(ok("https://api.example.com/x?q=1") && ok("http://API.example.com:8080/"));
+        assert!(!ok("https://example.com/") && !ok("https://evil.com/api.example.com"));
+        assert!(!ok("https://api.example.com.evil.com/"));
+        let client = agent(HTTP_TIMEOUT, Some(hosts.clone()));
+        let err = http_request(&client, &hosts, "GET", "https://example.com/", &[], &[]);
+        assert!(err.unwrap_err().contains("not in its hosts"));
+        let px = |w: u32, h: u32, n: usize| bindings::exports::bx::search::search::Icon {
+            width: w,
+            height: h,
+            rgba: vec![0; n],
+        };
+        assert!(icon(px(32, 32, 32 * 32 * 4)).is_ok() && icon(px(128, 128, 128 * 128 * 4)).is_ok());
+        assert!(
+            icon(px(31, 31, 31 * 31 * 4)).is_err() && icon(px(129, 129, 129 * 129 * 4)).is_err()
+        );
+        assert!(icon(px(32, 64, 32 * 64 * 4)).is_err() && icon(px(32, 32, 10)).is_err());
     }
 
     #[test]

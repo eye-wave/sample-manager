@@ -8,11 +8,12 @@ pub use bx_ui;
 
 use bx_shell::font;
 use bx_shell::gpu::{self, Content, Scene, Vert};
+use bx_shell::images::Images;
 use bx_shell::input::{Event, Key};
 use bx_shell::window::Window;
 use bx_ui::{Cursor, Edit, Layout, Node, Prim, Rects, TextBox, layout, quad_tris};
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// An icon: vertices (0..1, y down) and triangle indices, what `icons!` makes.
@@ -48,6 +49,11 @@ pub trait App {
     /// A modal layer over the view (a dialog): while it is `Some` the view gets no mouse and
     /// `rects_mut` holds the rects of this tree alone, so clicks reach nothing under it.
     fn overlay(&self, _size: (u32, u32)) -> Option<Node> {
+        None
+    }
+    /// The pixels of the `bx_ui::image` nodes of the view (shared with the renderer, which uploads
+    /// them when they change).
+    fn images(&self) -> Option<Arc<Mutex<Images>>> {
         None
     }
     /// After the events, before the view: keep state valid for `size`, follow the mouse.
@@ -101,17 +107,22 @@ pub fn frame<A: App>(
         match p {
             Prim::Quad(r, _, radius) => (*r, *radius) = (r.map(|v| v * s), *radius * s),
             Prim::Fade(r, ..) => *r = r.map(|v| v * s),
-            Prim::Icon(_, r, _) => *r = r.map(|v| v * s),
+            Prim::Icon(_, r, _) | Prim::Image(_, r, _) => *r = r.map(|v| v * s),
             Prim::Text { x, y, size, .. } => (*x, *y, *size) = (*x * s, *y * s, *size * s),
         }
     }
-    let mut scene = to_scene(l, size, A::ICONS);
+    let images = app.images();
+    let mut scene = {
+        let sheet = images.as_ref().map(|m| m.lock().unwrap());
+        to_scene(l, size, A::ICONS, sheet.as_deref())
+    };
     app.paint(&mut scene, size, t);
     scene
 }
 
-/// The draw list of a layout as vertices (`icons` is `App::ICONS`).
-pub fn to_scene(l: Layout, (w, h): (u32, u32), icons: &[Mesh]) -> Scene {
+/// The draw list of a layout as vertices (`icons` is `App::ICONS`, `sheet` the pixels of its
+/// images; an image whose cell is empty is not drawn).
+pub fn to_scene(l: Layout, (w, h): (u32, u32), icons: &[Mesh], sheet: Option<&Images>) -> Scene {
     let (fw, fh) = (w as f32, h as f32);
     let ndc = |[x, y]: [f32; 2], c: [f32; 4]| -> Vert {
         [
@@ -128,7 +139,7 @@ pub fn to_scene(l: Layout, (w, h): (u32, u32), icons: &[Mesh]) -> Scene {
     // the prims of one layer, as flat and textured vertices
     let layer =
         |prims: Vec<Prim>| {
-            let (mut flat, mut textured) = (vec![], vec![]);
+            let (mut flat, mut textured, mut images) = (vec![], vec![], vec![]);
             for p in prims {
                 match p {
                     Prim::Quad(r, c, radius) => {
@@ -152,6 +163,21 @@ pub fn to_scene(l: Layout, (w, h): (u32, u32), icons: &[Mesh]) -> Scene {
                             ndc([x + v[i as usize][0] * iw, y + v[i as usize][1] * ih], c)
                         }));
                     }
+                    Prim::Image(id, r @ [x, y, iw, ih], c) => {
+                        let Some([u0, v0, u1, v1]) = sheet.and_then(|s| s.uv(id)) else {
+                            continue;
+                        };
+                        let mut t = vec![];
+                        quad_tris(&mut t, r, 0.0);
+                        images.extend(t.into_iter().map(|[px, py]| {
+                            let mut v = ndc([px, py], c);
+                            (v[2], v[3]) = (
+                                u0 + (px - x) / iw * (u1 - u0),
+                                v0 + (py - y) / ih * (v1 - v0),
+                            );
+                            v
+                        }));
+                    }
                     Prim::Text {
                         x,
                         y,
@@ -167,14 +193,17 @@ pub fn to_scene(l: Layout, (w, h): (u32, u32), icons: &[Mesh]) -> Scene {
                     }
                 }
             }
-            (flat, textured)
+            (flat, textured, images)
         };
-    let ((flat, textured), (over_flat, over_textured)) = (layer(l.base), layer(l.over));
+    let ((flat, textured, images), (over_flat, over_textured, over_images)) =
+        (layer(l.base), layer(l.over));
     Scene {
         flat,
         textured,
         over_flat,
         over_textured,
+        images,
+        over_images,
         cursor: match l.cursor {
             Cursor::Default => gpu::CURSOR_ARROW,
             Cursor::Pointer => gpu::CURSOR_HAND,
@@ -224,11 +253,17 @@ pub fn run_window<A: App + Send>(title: &str, size: (u32, u32), app: A) {
     let win = Window::new(title, size, size, |_, _, _, _| false);
     let stop = AtomicBool::new(false);
     let px = AtomicU64::new(gpu::pack_size(size.0, size.1));
-    let (atlas, app, start) = (font::atlas(), Mutex::new(app), Instant::now());
+    let (atlas, images, app, start) = (
+        font::atlas(),
+        app.images().unwrap_or_default(),
+        Mutex::new(app),
+        Instant::now(),
+    );
     std::thread::scope(|s| {
         s.spawn(|| {
             let content = Content {
                 atlas: &atlas,
+                images: &images,
                 scene: &|w, h, m| {
                     let t = start.elapsed().as_secs_f32();
                     frame(&mut *app.lock().unwrap(), (w, h), m, t, win.events().take())

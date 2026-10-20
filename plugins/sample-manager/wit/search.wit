@@ -1,7 +1,7 @@
 /// What a sample-manager search plugin exports and what the host gives it. A plugin is a
 /// WebAssembly component (`wasm32-wasip2`) of the world `plugin`; it has no files, no sockets and
 /// no environment, only what `host` offers.
-package bx:search@0.2.0;
+package bx:search@0.3.0;
 
 interface host {
   record response {
@@ -21,9 +21,21 @@ interface host {
 }
 
 interface search {
+  /// Raw pixels, no file format: `rgba` is `width * height * 4` bytes (sRGB, straight alpha, rows
+  /// top to bottom). Square, 32 to 128 px a side; anything else and the plugin does not load.
+  record icon {
+    width: u32,
+    height: u32,
+    rgba: list<u8>,
+  }
+
   record info {
     name: string,
     description: string,
+    icon: icon,
+    /// The only network hosts (names, no scheme, port or path: `example.com`) that `http-get` and
+    /// `http-request` may call, redirects included. Empty: no network.
+    hosts: list<string>,
   }
 
   record hit {

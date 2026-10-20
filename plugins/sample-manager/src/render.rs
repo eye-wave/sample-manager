@@ -4,8 +4,10 @@
 use crate::audio::Player;
 use crate::icons::ICONS;
 use crate::scan::{Tree, scan};
+use crate::sources::{add_plugin, remove_plugin};
 use crate::state::{
-    add_dir, favorites, remove_dir, save_favorites, save_settings, settings, tracked_dirs,
+    add_dir, favorites, remove_dir, save_favorites, save_settings, set_plugin_enabled, settings,
+    tracked_dirs,
 };
 use crate::view::{
     ADD, FOLDER0, HEART0, Job, NAV_FAVORITES, NAV_LIBRARY, NAV_PLUGIN0, PLAY, PLAYER_HEART,
@@ -13,6 +15,7 @@ use crate::view::{
 };
 use bx_app::bx_shell::font;
 use bx_app::bx_shell::gpu::{self, Content, Scene, Target};
+use bx_app::bx_shell::images::Images;
 use bx_app::bx_shell::input::{Event, Events, Key};
 use bx_app::bx_ui::{Layout, Node, RectExt, Rects};
 use bx_app::{App, Mesh, Typing, frame};
@@ -47,6 +50,10 @@ impl App for Ui {
 
     fn scale(&self) -> f32 {
         Ui::scale(self)
+    }
+
+    fn images(&self) -> Option<Arc<Mutex<Images>>> {
+        Some(self.images.clone())
     }
 
     fn overlay(&self, _: (u32, u32)) -> Option<Node> {
@@ -191,16 +198,18 @@ pub fn run(
     }
     let jobs = ui.lock().unwrap().jobs.clone();
     let (tree, ui) = (&tree, &ui); // so the `move` closure below copies the references
-    let (slot, busy) = {
+    let (slot, busy, images) = {
         let u = ui.lock().unwrap();
-        (u.sources_slot.clone(), u.busy.clone())
+        (u.sources_slot.clone(), u.busy.clone(), u.images.clone())
     };
+    // (re)loads the search plugins: compiling them takes a moment, so not on the renderer's thread
+    let load_plugins = || {
+        *slot.lock().unwrap() = Some(crate::sources::load_all(&busy));
+        events.wake();
+    };
+    let load_plugins = &load_plugins;
     std::thread::scope(|s| {
-        // the search plugins start on a thread of their own (compiling them takes a moment)
-        s.spawn(move || {
-            *slot.lock().unwrap() = Some(crate::sources::load_all(&busy));
-            events.wake();
-        });
+        s.spawn(load_plugins);
         // the scan runs beside the renderer and wakes it when done; `stop` cuts it short. Then it
         // does what the clicks ask (`Job`) and saves the settings: the folder picker blocks, so it
         // lives here and not in the renderer
@@ -212,7 +221,7 @@ pub fn run(
             rescan();
             while !stop.load(Relaxed) {
                 std::thread::sleep(std::time::Duration::from_millis(33));
-                let mut changed = false;
+                let (mut changed, mut plugins_changed) = (false, false);
                 for job in std::mem::take(&mut *jobs.lock().unwrap()) {
                     match job {
                         Job::AddFolder => {
@@ -225,7 +234,26 @@ pub fn run(
                             remove_dir(&dir);
                             changed = true;
                         }
+                        Job::AddPlugin => {
+                            if let Some(file) = bx_app::bx_shell::dialog::pick_wasm(stop) {
+                                match add_plugin(&file) {
+                                    Ok(()) => plugins_changed = true,
+                                    Err(e) => eprintln!("[plugin] {}: {e}", file.display()),
+                                }
+                            }
+                        }
+                        Job::RemovePlugin(file) => match remove_plugin(&file) {
+                            Ok(()) => plugins_changed = true,
+                            Err(e) => eprintln!("[plugin] {file}: {e}"),
+                        },
+                        Job::EnablePlugin(file, on) => {
+                            set_plugin_enabled(&file, on);
+                            plugins_changed = true;
+                        }
                     }
+                }
+                if plugins_changed {
+                    load_plugins();
                 }
                 if changed {
                     *tree.lock().unwrap() = None; // "Scanning..." until it is done
@@ -260,6 +288,7 @@ pub fn run(
         });
         let content = Content {
             atlas: &atlas,
+            images: &images,
             scene: &|w, h, m| {
                 let mut ui = ui.lock().unwrap();
                 let s = scene(w, h, m, &mut ui, events.take());
@@ -427,6 +456,67 @@ mod tests {
         scene(W, H, none, &mut ui, vec![]);
         scene(W, H, none, &mut ui, vec![Event::Click(1, 1)]); // outside the card
         assert!(!ui.settings_open);
+    }
+
+    #[test]
+    fn the_plugins_tab_has_cards_with_a_tick_a_trash_can_and_an_add_button() {
+        use crate::settings::{ADD_PLUGIN, TAB_PLUGINS, TOGGLE0, TRASH0};
+        let mut ui = Ui::new(Tree::default(), Arc::default());
+        ui.plugin_files = vec![("a.wasm".into(), true), ("b.wasm".into(), false)];
+        let none = [f32::NAN; 2];
+        let click = |ui: &Ui, id| {
+            let r = ui.rects.rect(id).unwrap();
+            Event::Click((r[0] + 5.0) as i32, (r[1] + 5.0) as i32)
+        };
+        ui.open_settings();
+        scene(W, H, none, &mut ui, vec![]);
+        assert!(ui.rects.rect(TOGGLE0).is_none()); // opens on the General tab
+        let tab = click(&ui, TAB_PLUGINS);
+        scene(W, H, none, &mut ui, vec![tab]);
+        scene(W, H, none, &mut ui, vec![]);
+        let (tick, add, trash) = (
+            click(&ui, TOGGLE0 + 1),
+            click(&ui, ADD_PLUGIN),
+            click(&ui, TRASH0),
+        );
+        scene(W, H, none, &mut ui, vec![tick, add, trash]);
+        let jobs = ui.jobs.lock().unwrap();
+        assert!(
+            matches!(&jobs[..], [Job::EnablePlugin(f, true), Job::AddPlugin, Job::RemovePlugin(g)]
+            if f == "b.wasm" && g == "a.wasm")
+        );
+        assert_eq!(ui.plugin_files, [("b.wasm".to_string(), true)]);
+    }
+
+    #[test]
+    fn a_plugins_icon_goes_on_the_image_sheet_and_is_drawn_in_its_card() {
+        use crate::sources::{Plugins, Source};
+        use crate::view::SettingsTab;
+        use crate::wasm::Icon;
+        let mut ui = Ui::new(Tree::default(), Arc::default());
+        let mut s = Source::fixed("P", vec![]);
+        s.file = "p.wasm".into();
+        s.icon = Some(Icon {
+            w: 32,
+            h: 32,
+            rgba: vec![255; 32 * 32 * 4],
+        });
+        *ui.sources_slot.lock().unwrap() = Some(Plugins {
+            sources: vec![s],
+            files: vec![("p.wasm".into(), true)],
+        });
+        ui.open_settings();
+        ui.settings_tab = SettingsTab::Plugins;
+        let sc = scene(W, H, [f32::NAN; 2], &mut ui, vec![]);
+        assert!(ui.sources[0].slot.is_some() && ui.sources[0].icon.is_none());
+        assert_eq!(sc.over_images.len(), 6); // one quad, in the dialog (over the page)
+        assert!(
+            ui.images
+                .lock()
+                .unwrap()
+                .uv(ui.sources[0].slot.unwrap())
+                .is_some()
+        );
     }
 
     #[test]

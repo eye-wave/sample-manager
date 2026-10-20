@@ -8,7 +8,7 @@
 //! tab searches all the caches too. A remote sample is a `Sample`
 //! whose `path` is its url; clicking it downloads it into the cache ([`fetch`]).
 use crate::scan::Sample;
-use crate::wasm::{Hit, Meta, Sandbox};
+use crate::wasm::{Hit, Icon, Meta, Sandbox};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
@@ -85,6 +85,13 @@ type Reply = Option<(u64, Result<Vec<Sample>, String>, Arc<Vec<Sample>>)>;
 pub struct Source {
     pub name: String,
     pub description: String,
+    /// The plugin's file name in the plugins folder.
+    pub file: String,
+    /// The network hosts the plugin may call (what it declared).
+    pub hosts: Vec<String>,
+    /// The icon's pixels until the UI has put them on its image sheet (`slot`).
+    pub icon: Option<Icon>,
+    pub slot: Option<usize>,
     pub status: Status,
     /// The last results; the `path` of each is its url.
     pub files: Arc<Vec<Sample>>,
@@ -107,6 +114,10 @@ impl Source {
         Self {
             name,
             description: String::new(),
+            file: String::new(),
+            hosts: vec![],
+            icon: None,
+            slot: None,
             status: Status::Idle,
             files: Arc::default(),
             cache: Arc::default(),
@@ -353,7 +364,7 @@ fn read_cache(file: &Path, source: usize) -> Vec<Sample> {
 }
 
 /// Writes the cache whole, and only when it is complete (a failure leaves the old file).
-// ponytail: the whole file per search, append-only if a cache ever grows to millions of hits
+// the whole file per search, append-only if a cache ever grows to millions of hits
 fn write_cache(file: &Path, files: &[Sample]) {
     let part = file.with_extension("part");
     let _ = file.parent().map(std::fs::create_dir_all);
@@ -522,6 +533,7 @@ fn start(
         .file_name()
         .map_or_else(|| stem.clone(), |s| s.to_string_lossy().into_owned());
     let mut source = Source::new(stem.clone(), busy.clone());
+    source.file = label.clone();
     let bytes = match read_plugin(path) {
         Ok(b) => b,
         Err(e) => {
@@ -567,9 +579,23 @@ fn start(
     (source, Some(ready_rx))
 }
 
-/// Every `*.wasm` in `dir`, by name. They start side by side (compiling takes a moment)
-/// and this waits for all of them; one that fails to load is a source that says why.
-pub fn load_from(dir: &Path, cache_dir: &Path, busy: &Arc<AtomicUsize>) -> Vec<Source> {
+/// What the plugins folder holds.
+pub struct Plugins {
+    /// The plugins that are loaded.
+    pub sources: Vec<Source>,
+    /// Every `*.wasm` of the folder, by name, and whether it is loaded (not unloaded by the user).
+    pub files: Vec<(String, bool)>,
+}
+
+/// Every `*.wasm` in `dir`, by name, except the `disabled` ones (they are only listed). They start
+/// side by side (compiling takes a moment) and this waits for all of them; one that fails to load
+/// is a source that says why.
+pub fn load_from(
+    dir: &Path,
+    cache_dir: &Path,
+    busy: &Arc<AtomicUsize>,
+    disabled: &HashSet<String>,
+) -> Plugins {
     let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)
         .into_iter()
         .flatten()
@@ -585,12 +611,21 @@ pub fn load_from(dir: &Path, cache_dir: &Path, busy: &Arc<AtomicUsize>) -> Vec<S
         })
         .collect();
     paths.sort();
+    let name = |p: &Path| {
+        p.file_name()
+            .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
+    };
+    let files = paths
+        .iter()
+        .map(|p| (name(p), !disabled.contains(&name(p))))
+        .collect();
+    paths.retain(|p| !disabled.contains(&name(p)));
     let starting: Vec<_> = paths
         .iter()
         .enumerate()
         .map(|(i, p)| start(i, p, cache_dir, busy))
         .collect();
-    starting
+    let sources = starting
         .into_iter()
         .map(|(mut source, ready)| {
             if let Some(ready) = ready {
@@ -600,6 +635,7 @@ pub fn load_from(dir: &Path, cache_dir: &Path, busy: &Arc<AtomicUsize>) -> Vec<S
                             source.name = meta.name.trim().to_string();
                         }
                         source.description = meta.description;
+                        (source.icon, source.hosts) = (Some(meta.icon), meta.hosts);
                     }
                     Ok(Err(e)) => source.fail(format!("Could not load {}: {e}", source.name)),
                     Err(_) => source.fail(format!("{} crashed while loading", source.name)),
@@ -607,16 +643,55 @@ pub fn load_from(dir: &Path, cache_dir: &Path, busy: &Arc<AtomicUsize>) -> Vec<S
             }
             source
         })
-        .collect()
+        .collect();
+    Plugins { sources, files }
 }
 
 /// The plugins of the plugins folder (made if it is not there, so there is a place to put them).
-pub fn load_all(busy: &Arc<AtomicUsize>) -> Vec<Source> {
+// every change of the folder loads everything again; keep the compiled components if
+// that gets slow
+pub fn load_all(busy: &Arc<AtomicUsize>) -> Plugins {
     let Some(dir) = plugins_dir() else {
-        return vec![];
+        return Plugins {
+            sources: vec![],
+            files: vec![],
+        };
     };
     let _ = std::fs::create_dir_all(&dir);
-    load_from(&dir, &data_dir(), busy)
+    load_from(&dir, &data_dir(), busy, &crate::state::disabled_plugins())
+}
+
+/// Copies the `.wasm` file `from` into the plugins folder (and loads it from now on, if an older
+/// one of that name was unloaded).
+pub fn add_plugin(from: &Path) -> Result<(), String> {
+    let dir = plugins_dir().ok_or("no config folder")?;
+    let name = from
+        .file_name()
+        .filter(|_| {
+            from.extension()
+                .is_some_and(|x| x.eq_ignore_ascii_case("wasm"))
+        })
+        .ok_or("not a .wasm file")?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let to = dir.join(name);
+    // copying a file onto itself would empty it
+    if std::fs::canonicalize(&to).ok() != std::fs::canonicalize(from).ok() {
+        std::fs::copy(from, &to).map_err(|e| e.to_string())?;
+    }
+    crate::state::set_plugin_enabled(&name.to_string_lossy(), true);
+    Ok(())
+}
+
+/// Deletes the plugin file `file` (a name from `Plugins::files`) from the plugins folder. Its
+/// cache of hits stays: delete the `.bin` to forget them.
+pub fn remove_plugin(file: &str) -> Result<(), String> {
+    if file.contains(['/', '\\']) || file.starts_with('.') {
+        return Err(format!("not a plugin name: {file}"));
+    }
+    let dir = plugins_dir().ok_or("no config folder")?;
+    std::fs::remove_file(dir.join(file)).map_err(|e| e.to_string())?;
+    crate::state::set_plugin_enabled(file, true); // forget the unload mark with the file
+    Ok(())
 }
 
 #[cfg(test)]

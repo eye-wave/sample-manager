@@ -5,9 +5,13 @@
 // panic only kills the render thread, never the host).
 #![allow(unsafe_op_in_unsafe_fn)] // the whole renderer is one unsafe block
 use ash::{Entry, Instance, khr, vk};
+use std::cell::Cell;
 use std::ffi::CStr;
 use std::io::Cursor;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
+
+use crate::images::{Images, SHEET};
 
 use bx_shader::include_shader;
 
@@ -79,6 +83,10 @@ pub struct Scene {
     /// Like `flat` and `textured` again, drawn on top of both (a tooltip).
     pub over_flat: Vec<Vert>,
     pub over_textured: Vec<Vert>,
+    /// Quads of the pixel images ([`Images`]): the uv is the cell, the colour tints the pixels
+    /// (white: as they are). Drawn after `textured`, and `over_images` after `over_textured`.
+    pub images: Vec<Vert>,
+    pub over_images: Vec<Vert>,
     /// The mouse cursor: one of `CURSOR_*`.
     pub cursor: u8,
 }
@@ -87,6 +95,8 @@ pub struct Scene {
 pub struct Content<'a> {
     /// For the `textured` vertices.
     pub atlas: &'a Atlas,
+    /// The pixels of the `images` vertices; uploaded again whenever `Images::version` changes.
+    pub images: &'a Mutex<Images>,
     /// Called (on the render thread) at the start, after every resize and whenever the mouse has
     /// moved, with the window size and the mouse in px from the top left (NaN when it is not on
     /// the window); it may return a different number of vertices each time, up to [`MAX_VERTS`]
@@ -270,101 +280,111 @@ unsafe fn run(
         height: atlas.h,
         depth: 1,
     };
-    let tex = dev
-        .create_image(
-            &vk::ImageCreateInfo::default()
-                .image_type(vk::ImageType::TYPE_2D)
-                .format(vk::Format::R8G8B8A8_UNORM)
-                .extent(extent3)
-                .mip_levels(1)
-                .array_layers(1)
-                .samples(vk::SampleCountFlags::TYPE_1)
-                .tiling(vk::ImageTiling::OPTIMAL)
-                .usage(vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED)
-                .sharing_mode(vk::SharingMode::EXCLUSIVE)
-                .initial_layout(vk::ImageLayout::UNDEFINED),
-            None,
-        )
-        .unwrap();
-    let req = dev.get_image_memory_requirements(tex);
-    let tmem = dev
-        .allocate_memory(
-            &vk::MemoryAllocateInfo::default()
-                .allocation_size(req.size)
-                .memory_type_index(mem_type(
-                    req.memory_type_bits,
-                    vk::MemoryPropertyFlags::DEVICE_LOCAL,
-                )),
-            None,
-        )
-        .unwrap();
-    dev.bind_image_memory(tex, tmem, 0).unwrap();
-    let cmd = dev
-        .allocate_command_buffers(
-            &vk::CommandBufferAllocateInfo::default()
-                .command_pool(pool)
-                .command_buffer_count(1),
-        )
-        .unwrap()[0];
-    let barrier = |old, new, src_access, dst_access, src_stage, dst_stage| {
-        dev.cmd_pipeline_barrier(
-            cmd,
-            src_stage,
-            dst_stage,
-            vk::DependencyFlags::empty(),
-            &[],
-            &[],
-            &[vk::ImageMemoryBarrier::default()
-                .old_layout(old)
-                .new_layout(new)
-                .src_access_mask(src_access)
-                .dst_access_mask(dst_access)
-                .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-                .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-                .image(tex)
-                .subresource_range(color_range())],
-        )
-    };
-    dev.begin_command_buffer(cmd, &vk::CommandBufferBeginInfo::default())
-        .unwrap();
-    barrier(
-        vk::ImageLayout::UNDEFINED,
-        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-        vk::AccessFlags::empty(),
-        vk::AccessFlags::TRANSFER_WRITE,
-        vk::PipelineStageFlags::TOP_OF_PIPE,
-        vk::PipelineStageFlags::TRANSFER,
-    );
-    dev.cmd_copy_buffer_to_image(
-        cmd,
-        stg,
-        tex,
-        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-        &[vk::BufferImageCopy::default()
-            .image_subresource(
-                vk::ImageSubresourceLayers::default()
-                    .aspect_mask(vk::ImageAspectFlags::COLOR)
-                    .layer_count(1),
+    // a device-local RGBA image the shaders sample
+    let texture = |e: vk::Extent3D| {
+        let img = dev
+            .create_image(
+                &vk::ImageCreateInfo::default()
+                    .image_type(vk::ImageType::TYPE_2D)
+                    .format(vk::Format::R8G8B8A8_UNORM)
+                    .extent(e)
+                    .mip_levels(1)
+                    .array_layers(1)
+                    .samples(vk::SampleCountFlags::TYPE_1)
+                    .tiling(vk::ImageTiling::OPTIMAL)
+                    .usage(vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED)
+                    .sharing_mode(vk::SharingMode::EXCLUSIVE)
+                    .initial_layout(vk::ImageLayout::UNDEFINED),
+                None,
             )
-            .image_extent(extent3)],
-    );
-    barrier(
-        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-        vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-        vk::AccessFlags::TRANSFER_WRITE,
-        vk::AccessFlags::SHADER_READ,
-        vk::PipelineStageFlags::TRANSFER,
-        vk::PipelineStageFlags::FRAGMENT_SHADER,
-    );
-    dev.end_command_buffer(cmd).unwrap();
-    dev.queue_submit(
-        queue,
-        &[vk::SubmitInfo::default().command_buffers(&[cmd])],
-        vk::Fence::null(),
-    )
-    .unwrap();
-    dev.queue_wait_idle(queue).unwrap();
-    dev.free_command_buffers(pool, &[cmd]);
+            .unwrap();
+        let req = dev.get_image_memory_requirements(img);
+        let mem = dev
+            .allocate_memory(
+                &vk::MemoryAllocateInfo::default()
+                    .allocation_size(req.size)
+                    .memory_type_index(mem_type(
+                        req.memory_type_bits,
+                        vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                    )),
+                None,
+            )
+            .unwrap();
+        dev.bind_image_memory(img, mem, 0).unwrap();
+        (img, mem)
+    };
+    // copies the whole of `stg` into `img` (what it held is dropped) and leaves it in
+    // SHADER_READ_ONLY_OPTIMAL; waits for the GPU
+    let upload = |img: vk::Image, stg: vk::Buffer, e: vk::Extent3D| {
+        let cmd = dev
+            .allocate_command_buffers(
+                &vk::CommandBufferAllocateInfo::default()
+                    .command_pool(pool)
+                    .command_buffer_count(1),
+            )
+            .unwrap()[0];
+        let barrier = |old, new, src_access, dst_access, src_stage, dst_stage| {
+            dev.cmd_pipeline_barrier(
+                cmd,
+                src_stage,
+                dst_stage,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[vk::ImageMemoryBarrier::default()
+                    .old_layout(old)
+                    .new_layout(new)
+                    .src_access_mask(src_access)
+                    .dst_access_mask(dst_access)
+                    .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                    .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                    .image(img)
+                    .subresource_range(color_range())],
+            )
+        };
+        dev.begin_command_buffer(cmd, &vk::CommandBufferBeginInfo::default())
+            .unwrap();
+        barrier(
+            vk::ImageLayout::UNDEFINED,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            vk::AccessFlags::empty(),
+            vk::AccessFlags::TRANSFER_WRITE,
+            vk::PipelineStageFlags::TOP_OF_PIPE,
+            vk::PipelineStageFlags::TRANSFER,
+        );
+        dev.cmd_copy_buffer_to_image(
+            cmd,
+            stg,
+            img,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            &[vk::BufferImageCopy::default()
+                .image_subresource(
+                    vk::ImageSubresourceLayers::default()
+                        .aspect_mask(vk::ImageAspectFlags::COLOR)
+                        .layer_count(1),
+                )
+                .image_extent(e)],
+        );
+        barrier(
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            vk::AccessFlags::TRANSFER_WRITE,
+            vk::AccessFlags::SHADER_READ,
+            vk::PipelineStageFlags::TRANSFER,
+            vk::PipelineStageFlags::FRAGMENT_SHADER,
+        );
+        dev.end_command_buffer(cmd).unwrap();
+        dev.queue_submit(
+            queue,
+            &[vk::SubmitInfo::default().command_buffers(&[cmd])],
+            vk::Fence::null(),
+        )
+        .unwrap();
+        dev.queue_wait_idle(queue).unwrap();
+        dev.free_command_buffers(pool, &[cmd]);
+    };
+    let (tex, tmem) = texture(extent3);
+    upload(tex, stg, extent3);
     dev.destroy_buffer(stg, None);
     dev.free_memory(stg_mem, None);
 
@@ -380,6 +400,21 @@ unsafe fn run(
         .unwrap()
     };
     let tview = view(tex, vk::Format::R8G8B8A8_UNORM);
+    // the image sheet: rewritten from `content.images` (staging buffer, kept mapped) whenever its
+    // version moved, see `record`
+    let sheet_bytes = (SHEET * SHEET * 4) as usize;
+    let sheet_ext = vk::Extent3D {
+        width: SHEET,
+        height: SHEET,
+        depth: 1,
+    };
+    let (simg, smem) = texture(sheet_ext);
+    let (sstg, sstg_mem) = buffer(sheet_bytes, vk::BufferUsageFlags::TRANSFER_SRC);
+    let sp = dev
+        .map_memory(sstg_mem, 0, vk::WHOLE_SIZE, vk::MemoryMapFlags::empty())
+        .unwrap() as *mut u8;
+    let sview = view(simg, vk::Format::R8G8B8A8_UNORM);
+    let sheet_version = Cell::new(u64::MAX); // nothing uploaded yet: the first `record` does
     let sampler = dev
         .create_sampler(
             &vk::SamplerCreateInfo::default()
@@ -391,7 +426,8 @@ unsafe fn run(
             None,
         )
         .unwrap();
-    // set 0: binding 0 the atlas, binding 1 its sampler (WGSL keeps them separate)
+    // sets 0 (the atlas) and 1 (the image sheet): binding 0 the texture, binding 1 a sampler (WGSL
+    // keeps them separate)
     let dsl = dev
         .create_descriptor_set_layout(
             &vk::DescriptorSetLayoutCreateInfo::default().bindings(&[
@@ -412,39 +448,54 @@ unsafe fn run(
     let dpool = dev
         .create_descriptor_pool(
             &vk::DescriptorPoolCreateInfo::default()
-                .max_sets(1)
+                .max_sets(2)
                 .pool_sizes(&[
                     vk::DescriptorPoolSize::default()
                         .ty(vk::DescriptorType::SAMPLED_IMAGE)
-                        .descriptor_count(1),
+                        .descriptor_count(2),
                     vk::DescriptorPoolSize::default()
                         .ty(vk::DescriptorType::SAMPLER)
-                        .descriptor_count(1),
+                        .descriptor_count(2),
                 ]),
             None,
         )
         .unwrap();
-    let set = dev
+    let sets = dev
         .allocate_descriptor_sets(
             &vk::DescriptorSetAllocateInfo::default()
                 .descriptor_pool(dpool)
-                .set_layouts(&[dsl]),
+                .set_layouts(&[dsl, dsl]),
         )
-        .unwrap()[0];
+        .unwrap();
+    fn write<'a>(
+        set: vk::DescriptorSet,
+        binding: u32,
+        ty: vk::DescriptorType,
+        info: &'a [vk::DescriptorImageInfo],
+    ) -> vk::WriteDescriptorSet<'a> {
+        vk::WriteDescriptorSet::default()
+            .dst_set(set)
+            .dst_binding(binding)
+            .descriptor_type(ty)
+            .image_info(info)
+    }
+    let read = |v| {
+        [vk::DescriptorImageInfo::default()
+            .image_view(v)
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)]
+    };
+    let (atlas_info, sheet_info) = (read(tview), read(sview));
+    let samp_info = [vk::DescriptorImageInfo::default().sampler(sampler)];
+    let (image, samp) = (
+        vk::DescriptorType::SAMPLED_IMAGE,
+        vk::DescriptorType::SAMPLER,
+    );
     dev.update_descriptor_sets(
         &[
-            vk::WriteDescriptorSet::default()
-                .dst_set(set)
-                .dst_binding(0)
-                .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
-                .image_info(&[vk::DescriptorImageInfo::default()
-                    .image_view(tview)
-                    .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)]),
-            vk::WriteDescriptorSet::default()
-                .dst_set(set)
-                .dst_binding(1)
-                .descriptor_type(vk::DescriptorType::SAMPLER)
-                .image_info(&[vk::DescriptorImageInfo::default().sampler(sampler)]),
+            write(sets[0], 0, image, &atlas_info),
+            write(sets[0], 1, samp, &samp_info),
+            write(sets[1], 0, image, &sheet_info),
+            write(sets[1], 1, samp, &samp_info),
         ],
         &[],
     );
@@ -492,7 +543,8 @@ unsafe fn run(
         )
         .unwrap();
 
-    // pipelines: the shaders live in one SPIR-V module (entry points "vs", "fs_flat", "fs_text").
+    // pipelines: the shaders live in one SPIR-V module (entry points "vs", "fs_flat", "fs_text",
+    // "fs_image").
     // Viewport and scissor are dynamic so a resize does not need new pipelines.
     let code = ash::util::read_spv(&mut Cursor::new(SPV)).unwrap();
     let module = dev
@@ -510,10 +562,11 @@ unsafe fn run(
                 .name(fs),
         ]
     };
-    let (flat_stages, text_stages) = (stages(c"fs_flat"), stages(c"fs_text"));
+    let (flat_stages, text_stages, image_stages) =
+        (stages(c"fs_flat"), stages(c"fs_text"), stages(c"fs_image"));
     let pl = dev
         .create_pipeline_layout(
-            &vk::PipelineLayoutCreateInfo::default().set_layouts(&[dsl]),
+            &vk::PipelineLayoutCreateInfo::default().set_layouts(&[dsl, dsl]),
             None,
         )
         .unwrap();
@@ -573,11 +626,15 @@ unsafe fn run(
     let pipes = dev
         .create_graphics_pipelines(
             vk::PipelineCache::null(),
-            &[base.stages(&flat_stages), base.stages(&text_stages)],
+            &[
+                base.stages(&flat_stages),
+                base.stages(&text_stages),
+                base.stages(&image_stages),
+            ],
             None,
         )
         .unwrap();
-    let (pipe_flat, pipe_text) = (pipes[0], pipes[1]);
+    let (pipe_flat, pipe_text, pipe_image) = (pipes[0], pipes[1], pipes[2]);
 
     let clear = vk::ClearValue {
         color: vk::ClearColorValue {
@@ -725,8 +782,25 @@ unsafe fn run(
         };
         let s = scene(f.extent.width, f.extent.height, mouse);
         target.set_cursor(s.cursor);
-        // flat, textured, over_flat, over_textured, one after the other (uv of the flat ones unused)
-        let parts = [&s.flat, &s.textured, &s.over_flat, &s.over_textured];
+        {
+            // the scene may have added or dropped images: upload the sheet again (the GPU is idle)
+            let im = content.images.lock().unwrap();
+            if im.version != sheet_version.get() {
+                sp.copy_from_nonoverlapping(im.rgba.as_ptr(), sheet_bytes);
+                upload(simg, sstg, sheet_ext);
+                sheet_version.set(im.version);
+            }
+        }
+        // flat, textured, images, then the same three over them, one after the other (uv of the
+        // flat ones unused)
+        let parts = [
+            &s.flat,
+            &s.textured,
+            &s.images,
+            &s.over_flat,
+            &s.over_textured,
+            &s.over_images,
+        ];
         // a scene past the buffer (a huge window) loses its tail, whole triangles only; the
         // alternative was a panic
         let mut room = MAX_VERTS;
@@ -771,12 +845,12 @@ unsafe fn run(
                 }],
             );
             dev.cmd_set_scissor(cmd, 0, &[area]);
-            dev.cmd_bind_descriptor_sets(cmd, vk::PipelineBindPoint::GRAPHICS, pl, 0, &[set], &[]);
+            dev.cmd_bind_descriptor_sets(cmd, vk::PipelineBindPoint::GRAPHICS, pl, 0, &sets, &[]);
             dev.cmd_bind_vertex_buffers(cmd, 0, &[vb], &[0]);
-            // the page: flat, text on top; then the same for what goes over it
+            // the page: flat, text, images; then the same for what goes over it
             let mut first = 0;
             for (i, &count) in n.iter().enumerate() {
-                let pipe = if i % 2 == 0 { pipe_flat } else { pipe_text };
+                let pipe = [pipe_flat, pipe_text, pipe_image][i % 3];
                 dev.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, pipe);
                 dev.cmd_draw(cmd, count as u32, 1, first as u32, 0);
                 first += count;
@@ -853,6 +927,7 @@ unsafe fn run(
     dev.free_memory(vmem, None); // also unmaps
     dev.destroy_pipeline(pipe_flat, None);
     dev.destroy_pipeline(pipe_text, None);
+    dev.destroy_pipeline(pipe_image, None);
     dev.destroy_pipeline_layout(pl, None);
     dev.destroy_shader_module(module, None);
     dev.destroy_render_pass(rp, None);
@@ -862,6 +937,11 @@ unsafe fn run(
     dev.destroy_image_view(tview, None);
     dev.destroy_image(tex, None);
     dev.free_memory(tmem, None);
+    dev.destroy_image_view(sview, None);
+    dev.destroy_image(simg, None);
+    dev.free_memory(smem, None);
+    dev.destroy_buffer(sstg, None);
+    dev.free_memory(sstg_mem, None); // also unmaps
     dev.destroy_device(None);
     surf_i.destroy_surface(surf, None);
     inst.destroy_instance(None);
