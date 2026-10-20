@@ -56,7 +56,7 @@ pub fn remove_dir(p: &std::path::Path) {
 /// What the settings dialog changes, in `<config dir>/sample-manager/settings.txt`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Settings {
-    /// An index of `theme::SCHEMES`.
+    /// An index of `theme::schemes()`.
     pub scheme: usize,
     /// The UI scale in percent.
     pub scale: u32,
@@ -80,7 +80,7 @@ impl Settings {
         let mut s = Self::default();
         for (k, v) in text.lines().filter_map(|l| l.split_once('=')) {
             match (k.trim(), v.trim().parse::<u32>()) {
-                ("scheme", Ok(v)) => s.scheme = (v as usize).min(crate::theme::SCHEMES.len() - 1),
+                ("scheme", Ok(v)) => s.scheme = (v as usize).min(crate::theme::schemes().len() - 1),
                 ("scale", Ok(v)) => s.scale = v.clamp(50, 200),
                 _ => {}
             }
@@ -169,7 +169,10 @@ mod tests {
         };
         assert_eq!(Settings::parse(&s.text()), s);
         let g = Settings::parse("scheme=99\nscale=100000\nnonsense\nscale=x");
-        assert_eq!((g.scheme, g.scale), (crate::theme::SCHEMES.len() - 1, 200));
+        assert_eq!(
+            (g.scheme, g.scale),
+            (crate::theme::schemes().len() - 1, 200)
+        );
         assert_eq!(Settings::parse(""), Settings::default());
     }
 }

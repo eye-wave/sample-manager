@@ -2,7 +2,7 @@
 //! (`App::overlay`), `Ui::dialog_event` what a click in it does.
 use crate::icons;
 use crate::state::{SCALES, Settings};
-use crate::theme::{SCHEMES, swatch, t, use_scheme};
+use crate::theme::{schemes, swatch, t, use_scheme};
 use crate::view::{ADD, Job, SETTINGS_BTN, Ui};
 use bx_app::bx_shell::input::{Event, Key};
 use bx_app::bx_ui::*;
@@ -104,15 +104,15 @@ impl Ui {
 pub fn dialog(ui: &Ui) -> Node {
     use_scheme(ui.settings.scheme);
     let p = t();
-    let schemes = row(SCHEMES
+    let schemes = row(schemes()
         .iter()
         .enumerate()
-        .map(|(i, name)| {
+        .map(|(i, s)| {
             let (accent, _) = swatch(i);
             chip(
                 vec![
                     space().size(Fixed(12.0), Fixed(12.0)).bg(accent, 6.0),
-                    text(*name, 11.0, p.text),
+                    text(s.name, 11.0, p.text),
                 ],
                 i == ui.settings.scheme,
                 SCHEME0 + i as u32,

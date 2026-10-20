@@ -15,10 +15,16 @@ pub struct Scan {
     pub files: Arc<Vec<Sample>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Sample {
     pub name: String,
     pub path: PathBuf,
+    /// The download goes through the plugin's `unpack` (a hit of a search plugin).
+    pub unpack: bool,
+    /// Frames at the start of the decoded file that are left out (what the plugin says).
+    pub skip_frames: usize,
+    /// The search plugin (index into `Ui::sources`) this is a hit of; `None` for a local file.
+    pub source: Option<usize>,
 }
 
 impl Sample {
@@ -62,6 +68,7 @@ fn walk(path: &Path, name: String, stop: &AtomicBool, all: &mut Vec<Sample>) -> 
             all.push(Sample {
                 name: n.clone(),
                 path: e.path(),
+                ..Default::default()
             });
             files.push(n);
         }

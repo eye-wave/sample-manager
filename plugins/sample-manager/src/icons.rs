@@ -18,8 +18,9 @@ pub const PLAY: usize = 12;
 pub const X: usize = 13;
 /// The heart with its inside: a favorite.
 pub const HEART_FILL: usize = 14;
+pub const GLOBE: usize = 15;
 
-pub const ICONS: [Mesh; 15] = icons![
+pub const ICONS: [Mesh; 16] = icons![
     "search",
     "settings",
     "house",
@@ -35,6 +36,7 @@ pub const ICONS: [Mesh; 15] = icons![
     "play",
     "x",
     "heart:fill",
+    "globe",
 ];
 
 /// The resize handle is the bottom-right `GRIP` x `GRIP` px square of the window (the view draws

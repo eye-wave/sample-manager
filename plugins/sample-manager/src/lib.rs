@@ -6,9 +6,11 @@ pub mod render;
 mod scan;
 mod search;
 mod settings;
+mod sources;
 mod state;
 mod theme;
 mod view;
+mod wasm;
 
 #[cfg(feature = "plugin")]
 mod plugin;

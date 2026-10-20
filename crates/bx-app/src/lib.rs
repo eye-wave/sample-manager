@@ -100,6 +100,7 @@ pub fn frame<A: App>(
     for p in l.base.iter_mut().chain(&mut l.over) {
         match p {
             Prim::Quad(r, _, radius) => (*r, *radius) = (r.map(|v| v * s), *radius * s),
+            Prim::Fade(r, ..) => *r = r.map(|v| v * s),
             Prim::Icon(_, r, _) => *r = r.map(|v| v * s),
             Prim::Text { x, y, size, .. } => (*x, *y, *size) = (*x * s, *y * s, *size * s),
         }
@@ -134,6 +135,16 @@ pub fn to_scene(l: Layout, (w, h): (u32, u32), icons: &[Mesh]) -> Scene {
                         let mut t = vec![];
                         quad_tris(&mut t, r, radius);
                         flat.extend(t.into_iter().map(|v| ndc(v, c)));
+                    }
+                    Prim::Fade(r, top, bottom) => {
+                        let mut t = vec![];
+                        quad_tris(&mut t, r, 0.0);
+                        // the colour is a linear function of y, so it needs no more than a colour
+                        // per vertex
+                        flat.extend(t.into_iter().map(|v| {
+                            let k = ((v[1] - r[1]) / r[3].max(f32::EPSILON)).clamp(0.0, 1.0);
+                            ndc(v, [0, 1, 2, 3].map(|i| top[i] + (bottom[i] - top[i]) * k))
+                        }));
                     }
                     Prim::Icon(id, [x, y, iw, ih], c) => {
                         let (v, idx) = icons[id];

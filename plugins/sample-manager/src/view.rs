@@ -4,6 +4,7 @@ use crate::audio::{Clip, Player, decode};
 use crate::icons::{self, GRIP};
 use crate::scan::{Dir, Sample, Tree};
 use crate::search::search;
+use crate::sources::{self, Source};
 use crate::state::Settings;
 use crate::theme::{t, use_scheme};
 use bx_app::bx_ui::*;
@@ -35,6 +36,8 @@ pub const HEART0: u32 = 1 << 25;
 pub const PLAYER_HEART: u32 = 1 << 26;
 pub const NAV_LIBRARY: u32 = PLAYER_HEART + 1;
 pub const NAV_FAVORITES: u32 = PLAYER_HEART + 2;
+/// The nav row of the search plugin `i` is `NAV_PLUGIN0 + i`.
+pub const NAV_PLUGIN0: u32 = PLAYER_HEART + 100;
 /// `Layout::rects` id of the "Add Folder" button.
 pub const ADD: u32 = 9;
 /// `Layout::rects` id of the file tree's area and of the table rows' area (`TREE_RESERVED` and
@@ -93,8 +96,9 @@ fn tree_rows<'a>(roots: &'a [Dir], toggled: &HashSet<u32>) -> Vec<Row<'a>> {
     out
 }
 /// The height the tree has in a window `h` px tall.
-fn tree_avail(h: u32) -> f32 {
-    (h as f32 - TREE_RESERVED).max(0.0)
+/// `n_sources` search plugins add a nav row (34 px and 2 px spacing) each above it.
+fn tree_avail(h: u32, n_sources: usize) -> f32 {
+    (h as f32 - TREE_RESERVED - 36.0 * n_sources as f32).max(0.0)
 }
 /// How many rows from `first` on fit in `avail` px.
 fn fit(rows: &[Row], first: usize, avail: f32) -> usize {
@@ -137,6 +141,10 @@ pub struct Loaded {
     /// `None`: still decoding (`loading`) or it could not be decoded.
     pub clip: Option<Arc<Clip>>,
     pub loading: bool,
+    /// Why it could not be played, if it could not.
+    pub error: Option<String>,
+    /// A search plugin's result: `path` is its url, there is no heart and nothing to drag out.
+    pub remote: bool,
 }
 
 /// What the table lists: everything scanned, or only the favorites.
@@ -145,6 +153,8 @@ pub enum Tab {
     #[default]
     Library,
     Favorites,
+    /// The results of the search plugin `i`.
+    Plugin(usize),
 }
 
 /// Work for the worker thread: both block (a dialog, a scan).
@@ -154,7 +164,7 @@ pub enum Job {
 }
 
 /// What a decode thread hands over: the load it was for, and the clip (`None`: it failed).
-type Decoded = Option<(u64, Option<Arc<Clip>>)>;
+type Decoded = Option<(u64, Result<Arc<Clip>, String>)>;
 
 /// What the screen remembers between frames.
 pub struct Ui {
@@ -165,8 +175,12 @@ pub struct Ui {
     pub tree: Tree,
     /// Folders (`Dir::id`) flipped from their default: roots start open, everything else closed.
     pub toggled: HashSet<u32>,
-    /// The scanned files and what the search box found in them (indices into `files`).
+    /// What the search box searches (`results` are indices into it): the Library and Favorites
+    /// tabs have the scanned files (`lib`) and then every plugin's cache; a plugin tab has its
+    /// results.
     pub files: Arc<Vec<Sample>>,
+    /// The scanned files `files` was last made from.
+    pub lib: Arc<Vec<Sample>>,
     pub query: String,
     pub results: Vec<usize>,
     /// The first table row shown (an index into `results`).
@@ -202,6 +216,9 @@ pub struct Ui {
     pub fav_to_save: Option<HashSet<PathBuf>>,
     /// The first folder shown in the dialog's list.
     pub dlg_first: usize,
+    /// The search plugins (the sidebar lists them) and where the thread that loads them leaves them.
+    pub sources: Vec<Source>,
+    pub sources_slot: Arc<Mutex<Option<Vec<Source>>>>,
     incoming: Arc<Mutex<Decoded>>,
     load_id: u64,
 }
@@ -213,6 +230,7 @@ impl Ui {
             tree,
             toggled: HashSet::new(),
             files: Arc::default(),
+            lib: Arc::default(),
             query: String::new(),
             results: vec![],
             first: 0,
@@ -233,6 +251,8 @@ impl Ui {
             fav_version: 0,
             results_key: (Tab::Library, 0),
             fav_to_save: None,
+            sources: vec![],
+            sources_slot: Arc::default(),
             incoming: Arc::default(),
             load_id: 0,
         }
@@ -241,17 +261,27 @@ impl Ui {
     /// A click on the `k`-th shown table row: that sample replaces the one in the player and the
     /// plugin plays it (one that does not decode silences the old one).
     pub fn select(&mut self, k: usize) {
-        let Some(&i) = self.results.get(self.first + k) else {
+        let Some(f) = self
+            .results
+            .get(self.first + k)
+            .and_then(|&i| self.files.get(i))
+            .cloned()
+        else {
             return;
         };
-        let f = self.files[i].clone();
-        self.load(&f);
+        // a hit of a plugin (in its tab or found in the Library) is downloaded, and unpacked by it
+        let unpacker = f
+            .source
+            .filter(|_| f.unpack)
+            .and_then(|i| self.sources.get(i))
+            .and_then(Source::unpacker);
+        self.load(&f, f.source.is_some(), unpacker);
     }
 
     /// A click on the tree's row `i` (see `TRACK0`): a file plays like a table row does.
     pub fn select_track(&mut self, i: usize) {
         if let Some(f) = self.track_sample(i) {
-            self.load(&f);
+            self.load(&f, false, None);
         }
     }
 
@@ -262,6 +292,7 @@ impl Ui {
             Some(&Row::Track(d, k, _)) => Some(Sample {
                 name: d.files[k].clone(),
                 path: d.path.join(&d.files[k]),
+                ..Default::default()
             }),
             _ => None,
         }
@@ -271,8 +302,13 @@ impl Ui {
     /// file in the tree (see `ROW0`, `TRACK0`).
     pub fn source_of(&self, id: u32) -> Option<std::path::PathBuf> {
         if (ROW0..FOLDER0).contains(&id) {
-            let i = *self.results.get(self.first + (id - ROW0) as usize)?;
-            Some(self.files[i].path.clone())
+            let k = (id - ROW0) as usize;
+            // a downloaded sample of a plugin can be dragged into a DAW; one not downloaded yet is
+            // downloaded by the click that starts the press, the next press drags it
+            self.row_path(k).or_else(|| {
+                let f = self.files.get(*self.results.get(self.first + k)?)?;
+                sources::cached(&f.path.to_string_lossy(), &f.name)
+            })
         } else if id >= TRACK0 {
             self.track_sample((id - TRACK0) as usize).map(|f| f.path)
         } else {
@@ -282,7 +318,7 @@ impl Ui {
 
     /// Starts decoding `f`; the old sample goes quiet now and the new one plays once it is ready
     /// (`refresh` picks it up). A load that is no longer the last one is dropped when it finishes.
-    fn load(&mut self, f: &Sample) {
+    fn load(&mut self, f: &Sample, remote: bool, unpacker: Option<sources::Unpacker>) {
         self.load_id += 1;
         self.player.stop();
         self.current = Some(Loaded {
@@ -291,16 +327,31 @@ impl Ui {
             ext: f.ext(),
             clip: None,
             loading: true,
+            error: None,
+            remote,
         });
-        let (id, path) = (self.load_id, f.path.clone());
+        let (id, path, name, skip) = (self.load_id, f.path.clone(), f.name.clone(), f.skip_frames);
         let (busy, slot) = (self.busy.clone(), self.incoming.clone());
         busy.fetch_add(1, SeqCst);
         std::thread::spawn(move || {
             // a malformed file can panic inside a decoder: that is "cannot decode", not a stuck `busy`
-            let clip = std::panic::catch_unwind(|| decode(&path))
-                .ok()
-                .and_then(Result::ok)
-                .map(Arc::new);
+            let clip = std::panic::catch_unwind(|| {
+                // a remote sample is downloaded first (once: it stays in the cache)
+                let file = if remote {
+                    sources::fetch(&path.to_string_lossy(), &name, unpacker.as_ref())?
+                } else {
+                    path.clone()
+                };
+                decode(&file)
+                    .map(|c| Arc::new(if skip > 0 { c.skip(skip) } else { c }))
+                    .map_err(|e| {
+                        if remote {
+                            let _ = std::fs::remove_file(&file); // do not keep what is not audio
+                        }
+                        format!("Cannot decode this file ({e})")
+                    })
+            })
+            .unwrap_or_else(|_| Err("Cannot decode this file".into()));
             // a slower, older load must not replace the newer result that is waiting
             let mut s = slot.lock().unwrap();
             if s.as_ref().is_none_or(|(i, _)| *i < id) {
@@ -317,8 +368,17 @@ impl Ui {
             return;
         };
         if let (true, Some(l)) = (id == self.load_id, self.current.as_mut()) {
-            self.player.play(clip.clone().unwrap_or_default());
-            (l.clip, l.loading) = (clip, false);
+            match clip {
+                Ok(c) => {
+                    self.player.play(c.clone());
+                    (l.clip, l.error) = (Some(c), None);
+                }
+                Err(e) => {
+                    self.player.play(Default::default());
+                    (l.clip, l.error) = (None, Some(e));
+                }
+            }
+            l.loading = false;
         }
     }
 
@@ -357,7 +417,8 @@ impl Ui {
 
     /// The path of the file in table row `k` (the k-th shown).
     pub fn row_path(&self, k: usize) -> Option<PathBuf> {
-        Some(self.files[*self.results.get(self.first + k)?].path.clone())
+        let f = self.files.get(*self.results.get(self.first + k)?)?;
+        f.source.is_none().then(|| f.path.clone()) // urls: no heart, no drag
     }
 
     /// The UI scale as a factor (1.0 = 100 %).
@@ -368,45 +429,102 @@ impl Ui {
     /// Searches again if the scan has finished or the search text changed.
     pub fn refresh(&mut self) {
         self.take_decoded();
-        let files = match &*self.tree.lock().unwrap() {
+        if let Some(v) = self.sources_slot.lock().unwrap().take() {
+            self.sources = v;
+        }
+        self.sources.iter_mut().for_each(Source::poll);
+        if matches!(self.tab, Tab::Plugin(i) if i >= self.sources.len()) {
+            self.tab = Tab::Library;
+        }
+        if let Tab::Plugin(i) = self.tab {
+            // a plugin's results are what its search found: `files` is that list, all of it shown
+            let s = &self.sources[i];
+            let key = (self.tab, s.version);
+            if key != self.results_key || !Arc::ptr_eq(&s.files, &self.files) {
+                self.files = s.files.clone();
+                self.results = (0..self.files.len()).collect();
+                self.query = self.search.text.clone();
+                self.results_key = key;
+                self.first = 0;
+            }
+            return;
+        }
+        let lib = match &*self.tree.lock().unwrap() {
             Some(s) => s.files.clone(),
             None => return,
         };
-        // the favorites tab depends on the favorites, the library does not
+        // the favorites tab depends on the favorites, both on the plugins' caches (their versions
+        // only go up)
         let key = (
             self.tab,
-            if self.tab == Tab::Favorites {
-                self.fav_version
-            } else {
-                0
-            },
+            self.sources.iter().map(|s| s.version).sum::<u64>()
+                + if self.tab == Tab::Favorites {
+                    self.fav_version
+                } else {
+                    0
+                },
         );
-        if Arc::ptr_eq(&files, &self.files)
-            && self.search.text == self.query
-            && key == self.results_key
-        {
+        let stale = !Arc::ptr_eq(&lib, &self.lib) || key != self.results_key;
+        if !stale && self.search.text == self.query {
             return;
         }
+        if stale {
+            // the scanned files, then every cache: one list for one search (and the scanned ones
+            // are its first `lib.len()`)
+            self.files = if self.sources.iter().all(|s| s.cache.is_empty()) {
+                lib.clone()
+            } else {
+                let caches = self.sources.iter().flat_map(|s| s.cache.iter());
+                Arc::new(lib.iter().chain(caches).cloned().collect())
+            };
+            self.lib = lib;
+        }
+        let text = self.search.text.trim();
         self.results = match self.tab {
-            Tab::Library => search(&files, &self.search.text),
             // the search sees the favorites only: look in them, then map back to `files`
             Tab::Favorites => {
-                let (at, favs): (Vec<usize>, Vec<Sample>) = files
+                let (at, favs): (Vec<usize>, Vec<Sample>) = self
+                    .lib
                     .iter()
                     .enumerate()
                     .filter(|(_, f)| self.favorites.contains(&f.path))
                     .map(|(i, f)| (i, f.clone()))
                     .unzip();
-                search(&favs, &self.search.text)
-                    .into_iter()
-                    .map(|j| at[j])
-                    .collect()
+                search(&favs, text).into_iter().map(|j| at[j]).collect()
             }
+            // no query lists the scanned files only, a query looks in the caches too
+            _ if text.is_empty() => search(&self.lib, text),
+            _ => search(&self.files, text),
         };
-        self.files = files;
         self.query = self.search.text.clone();
         self.results_key = key;
         self.first = 0;
+    }
+
+    /// Switches the tab. A search plugin shows what its last search found; the text already in the
+    /// box is searched at once if the plugin has not searched it yet.
+    pub fn set_tab(&mut self, tab: Tab) {
+        self.tab = tab;
+        if let Tab::Plugin(i) = tab {
+            let q = self.search.text.trim().to_string();
+            if let Some(s) = self.sources.get_mut(i)
+                && !q.is_empty()
+                && s.last_query.as_deref() != Some(q.as_str())
+            {
+                s.search(&q);
+            }
+        }
+        self.refresh();
+    }
+
+    /// Enter in the search box: a plugin tab sends the text to its plugin.
+    pub fn submit_search(&mut self) {
+        if let Tab::Plugin(i) = self.tab {
+            let q = self.search.text.trim().to_string();
+            if let Some(s) = self.sources.get_mut(i).filter(|_| !q.is_empty()) {
+                s.search(&q);
+            }
+        }
     }
 
     /// Keeps the table from scrolling past its last row (also after a resize).
@@ -417,7 +535,7 @@ impl Ui {
         let g = self.tree.lock().unwrap();
         if let Some(scan) = g.as_ref() {
             let rows = tree_rows(&scan.roots, &self.toggled);
-            let last = rows.len() - fit_from_end(&rows, tree_avail(h));
+            let last = rows.len() - fit_from_end(&rows, tree_avail(h, self.sources.len()));
             self.tree_first = self.tree_first.min(last);
         }
     }
@@ -425,7 +543,10 @@ impl Ui {
     /// The last row the tree can start at and its thumb's height, if it scrolls at all.
     fn tree_bar(&self, h: u32) -> Option<(usize, f32)> {
         let g = self.tree.lock().unwrap();
-        tree_bar(&tree_rows(&g.as_ref()?.roots, &self.toggled), tree_avail(h))
+        tree_bar(
+            &tree_rows(&g.as_ref()?.roots, &self.toggled),
+            tree_avail(h, self.sources.len()),
+        )
     }
 
     /// Like `grab`, for the tree's scrollbar.
@@ -433,7 +554,8 @@ impl Ui {
         let (Some(r), Some((last, th))) = (self.rect_of(TREE_SCROLL), self.tree_bar(h)) else {
             return;
         };
-        let top = r[1] + (tree_avail(h) - th) * self.tree_first as f32 / last as f32;
+        let top =
+            r[1] + (tree_avail(h, self.sources.len()) - th) * self.tree_first as f32 / last as f32;
         self.tree_drag = Some(if (top..top + th).contains(&y) {
             y - top
         } else {
@@ -448,7 +570,7 @@ impl Ui {
         let (Some(r), Some((last, th))) = (self.rect_of(TREE_SCROLL), self.tree_bar(h)) else {
             return;
         };
-        let span = tree_avail(h) - th;
+        let span = tree_avail(h, self.sources.len()) - th;
         if span > 0.0 {
             let frac = ((y - off - r[1]) / span).clamp(0.0, 1.0);
             self.tree_first = (frac * last as f32).round() as usize;
@@ -510,11 +632,11 @@ fn vline() -> Node {
 fn chip(s: &str) -> Node {
     text(s, 10.0, t().chip_text)
         .pad_xy(7.0, 3.0)
-        .bg(t().pink, 4.0)
+        .bg(t().tag_bg, 4.0)
 }
-/// The heart, pink when `on`; a click toggles (`Ui::event` looks for `id`).
+/// The heart, in the theme's love colour when `on`; a click toggles (`Ui::event` looks for `id`).
 fn heart(on: bool, id: u32) -> Node {
-    let c = if on { t().pink } else { t().dim };
+    let c = if on { t().love } else { t().dim };
     row(vec![icon(
         if on { icons::HEART_FILL } else { icons::HEART },
         14.0,
@@ -526,14 +648,17 @@ fn heart(on: bool, id: u32) -> Node {
 }
 fn nav(icon_id: usize, label: &str, selected: bool, id: u32) -> Node {
     let c = if selected { t().pink_text } else { t().dim };
-    let n = row(vec![icon(icon_id, 16.0, c), text(label, 13.0, c)])
-        .spacing(10.0)
-        .align(Align::Center)
-        .pad_xy(12.0, 0.0)
-        .size(Fill(1), Fixed(34.0))
-        .hover(t().hover)
-        .cursor(Cursor::Pointer)
-        .id(id);
+    let n = row(vec![
+        icon(icon_id, 16.0, c),
+        text(label, 13.0, c).w(Fill(1)).truncate(),
+    ])
+    .spacing(10.0)
+    .align(Align::Center)
+    .pad_xy(12.0, 0.0)
+    .size(Fill(1), Fixed(34.0))
+    .hover(t().hover)
+    .cursor(Cursor::Pointer)
+    .id(id);
     if selected { n.bg(t().nav_sel, 10.0) } else { n }
 }
 /// A file in the tree: in the sidebar it ends in "...", on hover the whole name is a bar that
@@ -588,7 +713,10 @@ fn sidebar(h: u32, ui: &Ui) -> Node {
     match &*ui.tree.lock().unwrap() {
         None => tree.push(text("Scanning...", 11.0, t().dim).pad_xy(14.0, 4.0)),
         Some(scan) => {
-            let (avail, rows) = (tree_avail(h), tree_rows(&scan.roots, &ui.toggled));
+            let (avail, rows) = (
+                tree_avail(h, ui.sources.len()),
+                tree_rows(&scan.roots, &ui.toggled),
+            );
             let n = fit(&rows, ui.tree_first, avail);
             for (i, r) in rows.iter().enumerate().skip(ui.tree_first).take(n) {
                 tree.push(match *r {
@@ -619,7 +747,17 @@ fn sidebar(h: u32, ui: &Ui) -> Node {
                 ui.tab == Tab::Favorites,
                 NAV_FAVORITES,
             ),
-        ])
+        ]
+        .into_iter()
+        .chain(ui.sources.iter().enumerate().map(|(i, s)| {
+            nav(
+                icons::GLOBE,
+                &s.name,
+                ui.tab == Tab::Plugin(i),
+                NAV_PLUGIN0 + i as u32,
+            )
+        }))
+        .collect())
         .spacing(2.0)
         .pad(8.0)
         .w(Fill(1)),
@@ -657,11 +795,16 @@ fn table(h: u32, ui: &Ui) -> Node {
     let (vis, total) = (visible_rows(h), ui.results.len());
     let mut rows = vec![];
     for (k, &i) in ui.results.iter().skip(ui.first).take(vis).enumerate() {
-        let f = &ui.files[i];
+        let Some(f) = ui.files.get(i) else { continue };
+        let lead = if f.source.is_some() {
+            space().w(Fixed(22.0)) // a url has no heart
+        } else {
+            heart(ui.is_favorite(&f.path), HEART0 + k as u32)
+        };
         rows.push(
             row(vec![
                 row(vec![
-                    heart(ui.is_favorite(&f.path), HEART0 + k as u32),
+                    lead,
                     text(f.name.as_str(), 13.0, t().text).w(Fill(1)).truncate(),
                 ])
                 .spacing(12.0)
@@ -680,12 +823,12 @@ fn table(h: u32, ui: &Ui) -> Node {
         rows.push(line());
     }
     if total == 0 {
-        let none = if ui.tab == Tab::Favorites {
-            "No favorites"
-        } else {
-            "No samples"
+        let none = match ui.tab {
+            Tab::Favorites => "No favorites".to_string(),
+            Tab::Plugin(i) => ui.sources.get(i).map_or_else(String::new, Source::message),
+            Tab::Library => "No samples".to_string(),
         };
-        rows.push(text(none, 12.0, t().dim).pad(16.0));
+        rows.push(text(none, 12.0, t().dim).w(Fill(1)).truncate().pad(16.0));
     }
     let bar = if total > vis {
         col(vec![
@@ -718,8 +861,12 @@ fn table(h: u32, ui: &Ui) -> Node {
     ])
     .size(Fill(1), Fill(1))
 }
+fn lerp(a: Color, b: Color, k: f32) -> Color {
+    [0, 1, 2, 3].map(|i| a[i] + (b[i] - a[i]) * k)
+}
 /// The decoded clip, one column per px of the window (up to `COLS_MAX`) as tall as its peak; the
-/// part before the playhead (`pos`, in frames) is pink.
+/// part before the playhead (`pos`, in frames) is a gradient from the theme's `wave_a` (top of the
+/// 82 px) to `wave_b` (bottom), the rest is `wave_off`.
 fn waveform(w: u32, clip: &Clip, pos: usize) -> Node {
     let n = (w as usize).min(COLS_MAX);
     let cursor = (pos as u64 * n as u64 / clip.frames.len().max(1) as u64) as usize;
@@ -731,10 +878,16 @@ fn waveform(w: u32, clip: &Clip, pos: usize) -> Node {
             if i == cursor {
                 space().size(Fixed(1.0), Fill(1)).bg(t().playhead, 0.0)
             } else {
-                let c = if i < cursor { t().pink } else { t().wave_off };
-                space()
-                    .size(Fill(1), Fixed((peak * 78.0).clamp(1.0, 78.0)))
-                    .bg(c, 0.0)
+                let h = (peak * 78.0).clamp(1.0, 78.0);
+                let bar = space().size(Fill(1), Fixed(h));
+                if i < cursor {
+                    // the bar is centred in the 82 px, so its ends sit at these shares of the
+                    // gradient, which then runs through all the bars as one
+                    let at = |y: f32| lerp(t().wave_a, t().wave_b, y / 82.0);
+                    bar.gradient(at((82.0 - h) / 2.0), at((82.0 + h) / 2.0))
+                } else {
+                    bar.bg(t().wave_off, 0.0)
+                }
             }
         })
         .collect();
@@ -767,11 +920,12 @@ fn player(w: u32, ui: &Ui) -> Node {
             0.0,
         ),
         Some(l) => {
-            let head = vec![
-                heart(ui.is_favorite(&l.path), PLAYER_HEART),
-                text(l.name.as_str(), 13.0, t().text),
-                chip(&l.ext),
-            ];
+            let lead = if l.remote {
+                space().w(Fixed(22.0))
+            } else {
+                heart(ui.is_favorite(&l.path), PLAYER_HEART)
+            };
+            let head = vec![lead, text(l.name.as_str(), 13.0, t().text), chip(&l.ext)];
             match &l.clip {
                 Some(c) => (
                     head,
@@ -779,8 +933,22 @@ fn player(w: u32, ui: &Ui) -> Node {
                     ui.player.pos() as f32 / c.rate as f32,
                     c.secs(),
                 ),
-                None if l.loading => (head, note("Loading..."), 0.0, 0.0),
-                None => (head, note("Cannot decode this file"), 0.0, 0.0),
+                None if l.loading => (
+                    head,
+                    note(if l.remote {
+                        "Downloading..."
+                    } else {
+                        "Loading..."
+                    }),
+                    0.0,
+                    0.0,
+                ),
+                None => (
+                    head,
+                    note(l.error.as_deref().unwrap_or("Cannot decode this file")),
+                    0.0,
+                    0.0,
+                ),
             }
         }
     };
@@ -824,10 +992,16 @@ fn player(w: u32, ui: &Ui) -> Node {
     .w(Fill(1))
 }
 fn status(ui: &Ui) -> Node {
+    // a plugin tab counts its results, the others the scanned files (not the caches after them)
+    let count = if matches!(ui.tab, Tab::Plugin(_)) {
+        ui.files.len()
+    } else {
+        ui.lib.len()
+    };
     row(vec![
         space().w(Fixed(16.0)),
         space().size(Fixed(6.0), Fixed(6.0)).bg(t().pink, 3.0),
-        text(ui.files.len().to_string(), 10.0, t().text),
+        text(count.to_string(), 10.0, t().text),
         text("samples", 10.0, t().dim),
         space().size(Fixed(8.0), Fixed(1.0)),
         vline().h(Fixed(12.0)),
@@ -868,9 +1042,15 @@ fn status(ui: &Ui) -> Node {
 
 pub fn view(w: u32, h: u32, ui: &Ui) -> Node {
     use_scheme(ui.settings.scheme);
+    let placeholder = match ui.tab {
+        Tab::Plugin(i) => ui.sources.get(i).map_or("Search samples".into(), |s| {
+            format!("Search {} (press Enter)", s.name)
+        }),
+        _ => "Search samples".into(),
+    };
     let search = row(vec![
         icon(icons::SEARCH, 14.0, t().dim),
-        ui.search.node("Search samples", 13.0, t().text, t().dim),
+        ui.search.node(&placeholder, 13.0, t().text, t().dim),
     ])
     .spacing(10.0)
     .align(Align::Center)
@@ -975,6 +1155,39 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn the_library_search_also_finds_what_the_plugins_cached() {
+        let mk = |name: &str, path: &str, source| Sample {
+            name: name.into(),
+            path: path.into(),
+            source,
+            ..Default::default()
+        };
+        let mut ui = Ui::new(Tree::default(), Arc::default());
+        *ui.tree.lock().unwrap() = Some(Scan {
+            roots: vec![],
+            files: Arc::new(vec![mk("kick.wav", "kick.wav", None)]),
+        });
+        let mut s = Source::fixed("p", vec![]);
+        s.cache = Arc::new(vec![mk("Kick_Far.mp3", "https://x/k.mp3", Some(0))]);
+        s.version = 1;
+        ui.sources = vec![s];
+        ui.search.text = "kick".into();
+        ui.refresh();
+        let mut both = ui.results.clone(); // the scanned file and the cached hit
+        both.sort();
+        assert_eq!(both, vec![0, 1]);
+        let mut hearts: Vec<_> = (0..2).map(|k| ui.row_path(k).is_some()).collect();
+        hearts.sort();
+        assert_eq!(hearts, [false, true]); // a url has no heart, no drag
+        ui.search.text = "far kick".into(); // words in any order
+        ui.refresh();
+        assert_eq!(ui.results, vec![1]);
+        ui.search.text.clear(); // no query: only the scanned files, as before
+        ui.refresh();
+        assert_eq!((ui.results.clone(), ui.lib.len()), (vec![0], 1));
+    }
+
+    #[test]
     fn rows_tint_on_hover_and_a_click_loads_them_into_the_player() {
         let dir = std::env::temp_dir().join(format!("sm-select-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -983,6 +1196,7 @@ pub(crate) mod tests {
             Sample {
                 name: name.into(),
                 path: dir.join(name),
+                ..Default::default()
             }
         };
         let pcm = crate::audio::tests::wav(8000, &[0, 16384, -32768, 8192]);

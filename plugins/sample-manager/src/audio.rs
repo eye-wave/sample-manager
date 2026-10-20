@@ -40,6 +40,12 @@ impl Clip {
         }
     }
 
+    /// The clip without its first `n` frames.
+    pub fn skip(self, n: usize) -> Clip {
+        let n = n.min(self.frames.len().saturating_sub(1)); // never empty
+        Clip::new(self.rate, self.frames[n..].to_vec())
+    }
+
     pub fn secs(&self) -> f32 {
         self.frames.len() as f32 / self.rate.max(1) as f32
     }

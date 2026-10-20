@@ -1,0 +1,58 @@
+/// What a sample-manager search plugin exports and what the host gives it. A plugin is a
+/// WebAssembly component (`wasm32-wasip2`) of the world `plugin`; it has no files, no sockets and
+/// no environment, only what `host` offers.
+package bx:search@0.2.0;
+
+interface host {
+  record response {
+    status: u16,
+    body: list<u8>,
+  }
+
+  /// A line in the host's log.
+  log: func(message: string);
+
+  /// A blocking GET (http or https only). A status of 400 or more is a response, not an error.
+  http-get: func(url: string, headers: list<tuple<string, string>>) -> result<response, string>;
+
+  /// A blocking GET or POST (`method`; the body is for a POST, at most 1 MB). Same rules as
+  /// `http-get`.
+  http-request: func(method: string, url: string, headers: list<tuple<string, string>>, body: list<u8>) -> result<response, string>;
+}
+
+interface search {
+  record info {
+    name: string,
+    description: string,
+  }
+
+  record hit {
+    title: string,
+    /// The audio file, http or https. It is downloaded when the result is clicked.
+    url: string,
+    /// "wav", "mp3"...: the file type if the url does not say.
+    ext: option<string>,
+    /// The downloaded file is not audio yet: the host passes it to `unpack` first.
+    unpack: bool,
+    /// Frames of silence at the start of the decoded file that the app leaves out when it shows
+    /// and plays it (an encoder delay, say). The file itself is not changed.
+    skip-frames: u32,
+  }
+
+  /// Called once after loading.
+  describe: func() -> info;
+  /// The audio file made of the bytes downloaded for a hit with `unpack` set (a plugin whose
+  /// files are stored in some other way undoes it here; the result is what is kept and dragged).
+  unpack: func(url: string, data: list<u8>) -> result<list<u8>, string>;
+
+  /// What `query` (the text of the search box) finds on the network. The host keeps every hit in a
+  /// cache of its own and fuzzy-matches `query` against it too, so a plugin does not remember
+  /// anything; when this fails the host still answers from the cache (the error is shown only if
+  /// the cache has nothing either).
+  search: func(query: string) -> result<list<hit>, string>;
+}
+
+world plugin {
+  import host;
+  export search;
+}

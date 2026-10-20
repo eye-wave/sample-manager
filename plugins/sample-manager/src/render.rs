@@ -8,12 +8,12 @@ use crate::state::{
     add_dir, favorites, remove_dir, save_favorites, save_settings, settings, tracked_dirs,
 };
 use crate::view::{
-    ADD, FOLDER0, HEART0, Job, NAV_FAVORITES, NAV_LIBRARY, PLAY, PLAYER_HEART, PLAYMODE, ROW0,
-    SCROLL, SEARCH, SETTINGS_BTN, TRACK0, TREE, TREE_SCROLL, Tab, Ui, WAVE, view,
+    ADD, FOLDER0, HEART0, Job, NAV_FAVORITES, NAV_LIBRARY, NAV_PLUGIN0, PLAY, PLAYER_HEART,
+    PLAYMODE, ROW0, SCROLL, SEARCH, SETTINGS_BTN, TRACK0, TREE, TREE_SCROLL, Tab, Ui, WAVE, view,
 };
 use bx_app::bx_shell::font;
 use bx_app::bx_shell::gpu::{self, Content, Scene, Target};
-use bx_app::bx_shell::input::{Event, Events};
+use bx_app::bx_shell::input::{Event, Events, Key};
 use bx_app::bx_ui::{Layout, Node, RectExt, Rects};
 use bx_app::{App, Mesh, Typing, frame};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
@@ -57,6 +57,9 @@ impl App for Ui {
         if self.settings_open {
             return self.dialog_event(e);
         }
+        if self.search.focused && e == Event::Key(Key::Enter) {
+            self.submit_search();
+        }
         if self.search.feed(&e) {
             return;
         }
@@ -80,13 +83,17 @@ impl App for Ui {
                     }
                     return;
                 }
-                if hit.contains(&NAV_LIBRARY) || hit.contains(&NAV_FAVORITES) {
-                    self.tab = if hit.contains(&NAV_FAVORITES) {
-                        Tab::Favorites
-                    } else {
-                        Tab::Library
-                    };
-                    return;
+                let tab = if hit.contains(&NAV_LIBRARY) {
+                    Some(Tab::Library)
+                } else if hit.contains(&NAV_FAVORITES) {
+                    Some(Tab::Favorites)
+                } else {
+                    hit.iter()
+                        .find(|&&id| (NAV_PLUGIN0..NAV_PLUGIN0 + 1000).contains(&id))
+                        .map(|&id| Tab::Plugin((id - NAV_PLUGIN0) as usize))
+                };
+                if let Some(tab) = tab {
+                    return self.set_tab(tab);
                 }
                 self.search.focused = hit.contains(&SEARCH);
                 if let Some(&id) = hit.iter().find(|&&id| (ROW0..FOLDER0).contains(&id)) {
@@ -184,7 +191,16 @@ pub fn run(
     }
     let jobs = ui.lock().unwrap().jobs.clone();
     let (tree, ui) = (&tree, &ui); // so the `move` closure below copies the references
+    let (slot, busy) = {
+        let u = ui.lock().unwrap();
+        (u.sources_slot.clone(), u.busy.clone())
+    };
     std::thread::scope(|s| {
+        // the search plugins start on a thread of their own (compiling them takes a moment)
+        s.spawn(move || {
+            *slot.lock().unwrap() = Some(crate::sources::load_all(&busy));
+            events.wake();
+        });
         // the scan runs beside the renderer and wakes it when done; `stop` cuts it short. Then it
         // does what the clicks ask (`Job`) and saves the settings: the folder picker blocks, so it
         // lives here and not in the renderer
@@ -277,6 +293,7 @@ mod tests {
         ui.files = Arc::new(vec![Sample {
             name: "a.wav".into(),
             path: path.clone(),
+            ..Default::default()
         }]);
         ui.results = vec![0];
         ui.select(0);
@@ -418,6 +435,7 @@ mod tests {
         let mk = |n: &str| Sample {
             name: n.into(),
             path: n.into(),
+            ..Default::default()
         };
         let mut ui = Ui::new(Tree::default(), Arc::default());
         let all = vec![mk("kick.wav"), mk("snare.wav"), mk("kick2.wav")];

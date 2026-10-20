@@ -118,6 +118,9 @@ pub struct Bg {
     pub border: Option<(Color, f32)>,
     /// Dashed instead of solid border.
     pub dashed: bool,
+    /// The colour at the bottom of a vertical gradient that starts with `color` at the top (no
+    /// radius, no border: `Node::gradient`).
+    pub fade: Option<Color>,
 }
 
 enum Kind {
@@ -154,6 +157,8 @@ pub struct Node {
 #[derive(Debug)]
 pub enum Prim {
     Quad(Rect, Color, f32),
+    /// A square quad whose colour goes from the first (top edge) to the second (bottom edge).
+    Fade(Rect, Color, Color),
     /// `x`, `y` is the baseline origin.
     Text {
         x: f32,
@@ -238,6 +243,18 @@ impl Node {
             radius,
             border: None,
             dashed: false,
+            fade: None,
+        });
+        self
+    }
+    /// A square fill that goes from `top` to `bottom`.
+    pub fn gradient(mut self, top: Color, bottom: Color) -> Self {
+        self.bg = Some(Bg {
+            color: top,
+            radius: 0.0,
+            border: None,
+            dashed: false,
+            fade: Some(bottom),
         });
         self
     }
@@ -423,6 +440,7 @@ fn place(n: &Node, r: Rect, m: &dyn Fn(&str, f32) -> f32, mouse: [f32; 2], l: &m
             radius: 0.0,
             border: None,
             dashed: false,
+            fade: None,
         }),
         (b, _) => b,
     };
@@ -439,7 +457,10 @@ fn place(n: &Node, r: Rect, m: &dyn Fn(&str, f32) -> f32, mouse: [f32; 2], l: &m
                         .push(Prim::Quad(inset, bg.color, (bg.radius - bw).max(0.0)));
                 }
             }
-            None => l.base.push(Prim::Quad(r, bg.color, bg.radius)),
+            None => l.base.push(match bg.fade {
+                Some(bottom) => Prim::Fade(r, bg.color, bottom),
+                None => Prim::Quad(r, bg.color, bg.radius),
+            }),
         }
     }
     if hot
@@ -618,6 +639,16 @@ mod tests {
             .w(Fixed(100.0));
         let p = layout(&ui, [0.0, 0.0, 100.0, 50.0], &m, NO_MOUSE).base;
         assert_eq!(quads(&p), [[40.0, 0.0, 20.0, 12.0]]); // 4 chars * 5 px, centred; line is 1.2 em
+    }
+
+    #[test]
+    fn a_gradient_node_is_one_fade_from_its_top_colour_to_its_bottom_one() {
+        let (a, b) = ([1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]);
+        let ui = space().size(Fixed(4.0), Fixed(10.0)).gradient(a, b);
+        let p = layout(&ui, [0.0, 0.0, 4.0, 10.0], &m, NO_MOUSE).base;
+        assert!(
+            matches!(&p[..], [Prim::Fade(r, t, u)] if *r == [0.0, 0.0, 4.0, 10.0] && *t == a && *u == b)
+        );
     }
 
     #[test]
